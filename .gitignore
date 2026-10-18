@@ -1,0 +1,17 @@
+# Aeon-derived content: never commit (regenerate with tools/aeon_extract.py into scratch)
+aeon_extract/
+*.aeon
+!tests/fixtures/ours/*.aeon
+
+# Continuity-kit runtime state
+docs/build/ACTIVE
+docs/build/.hookstate.json
+docs/build/.guard
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+docs/build/AUTO-SNAPSHOT.md
+docs/build/handoff-history/
+docs/build/baselines/**/*.raw
