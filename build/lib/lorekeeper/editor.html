@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="lore-token" content="__LORE_TOKEN__">
+  <meta name="lore-saga" content="__LORE_SAGA__">
+  <meta name="lore-calendars" content="__LORE_CALENDARS__">
+  <title>Lorekeeper · World editor</title>
+  <link rel="stylesheet" href="/editor.css">
+  <script type="module" src="/editor.js"></script>
+</head>
+<body>
+  <header><div><h1>Lorekeeper</h1><p>Your world, in time.</p></div><span id="mode"></span></header>
+  <div id="status" role="status" aria-live="polite">Loading your world…</div>
+  <pre id="error" role="alert" hidden></pre>
+  <nav role="tablist" aria-label="World views">
+    <button id="tab-timeline" role="tab" aria-selected="true" aria-controls="view">Timeline</button>
+    <button id="tab-subway" role="tab" aria-selected="false" aria-controls="view" tabindex="-1">Subway</button>
+    <button id="tab-relationships" role="tab" aria-selected="false" aria-controls="view" tabindex="-1">Relationships</button>
+    <button id="tab-spreadsheet" role="tab" aria-selected="false" aria-controls="view" tabindex="-1">Spreadsheet</button>
+    <button id="tab-narrative" role="tab" aria-selected="false" aria-controls="view" tabindex="-1">Narrative</button>
+  </nav>
+  <main>
+    <section class="workspace" aria-label="World">
+      <form id="create-form">
+        <label for="create-type">New item type</label><select id="create-type"></select>
+        <label for="create-name">New item name</label><input id="create-name" required autocomplete="off">
+        <button type="submit">Create</button>
+      </form>
+      <div id="view" role="tabpanel" aria-labelledby="tab-timeline"></div>
+    </section>
+    <aside aria-label="Inspector">
+      <h2>Inspector</h2>
+      <label for="item-select">Selected item</label><select id="item-select"><option value="">Select an item</option></select>
+      <div id="inspector"><p>Select an item to see its fields and connections.</p></div>
+    </aside>
+  </main>
+</body>
+</html>

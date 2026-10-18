@@ -18,13 +18,45 @@ def to_json(result):
 
 
 # ---- handlers: (project, **args) -> JSON-able dict ---------------------------
-def op_init(root, name=None):
+def op_init(root, name=None, template=None):
+    from .templates import TEMPLATES
+
     path = os.path.join(root, store.CONFIG)
     if os.path.exists(path):
         raise LoreError("CONFLICT", f"{store.CONFIG} already exists in {root}")
+    if template is not None and template not in TEMPLATES:
+        raise LoreError("INVALID", "template must be novel, series or campaign")
     config = {"lorekeeper": 1, "name": name or os.path.basename(os.path.abspath(root)),
               "types": {}, "roles": {}, "properties": {}}
+    starter = TEMPLATES.get(template)
+    if starter:
+        config.update(starter["config"])
+        p = Project(root, config)
+        # Check all destinations before creating lore.json; existing writing wins.
+        targets = [p.path_for(item["type"], item["name"]) for item in starter["items"]]
+        targets += [os.path.join(root, filename) for filename in starter["files"]]
+        for target in targets:
+            if not store.inside(root, target):
+                raise LoreError("INVALID", "template destination is outside the project folder")
+            folder = os.path.dirname(target)
+            if os.path.lexists(target) or (os.path.isdir(folder) and
+                    os.path.basename(target).lower() in {n.lower() for n in os.listdir(folder)}):
+                raise LoreError("CONFLICT", f"template file already exists: {p.rel(target)}")
+            while not os.path.exists(folder):
+                folder = os.path.dirname(folder) or "."
+            if not os.path.isdir(folder):
+                raise LoreError("CONFLICT", f"template folder is a file: {folder}")
+        for item in starter["items"]:
+            if p.resolve(item["name"]):
+                raise LoreError("CONFLICT", f"an item named {item['name']!r} already exists")
     store.atomic_write(path, to_json(config) + "\n", create=True)
+    if starter:
+        for item in starter["items"]:
+            created = p.create(item["type"], item["name"], item["fields"], item["body"])
+            p.items.append(created)
+            p._index()
+        for filename, text in starter["files"].items():
+            store.atomic_write(os.path.join(root, filename), text, create=True)
     return {"created": store.CONFIG, "root": os.path.abspath(root)}
 
 
@@ -298,8 +330,9 @@ def op_check(p):
 
 S, I, B, L, D = "str", "int", "bool", "list", "dict"
 OPS = [
-    Op("init", "Create lore.json (default schema) in the project folder.",
-       [Param("name", S, False, "project name")], True, op_init),
+    Op("init", "Create lore.json, optionally with a starter world, in the project folder.",
+       [Param("name", S, False, "project name"),
+        Param("template", S, False, "starter world: novel | series | campaign")], True, op_init),
     Op("schema", "Show the effective schema: types, roles, properties and settings.", [], False, op_schema),
     Op("query", "List items, optionally filtered by type, tag, text or a link target.",
        [Param("type", S, False, "item type, e.g. character"), Param("tag", S, False, "tag to match"),

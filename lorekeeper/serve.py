@@ -132,6 +132,13 @@ def make_server(root, port=0, saga=False, config=None, factory=None):
 
         def do_POST(self):
             try:
+                # Read the (bounded) body before any early error reply: answering first and leaving
+                # the body unread makes Windows reset the connection instead of delivering the error.
+                try:
+                    length = int(self.headers.get("Content-Length", "0") or 0)
+                except ValueError:
+                    length = -1
+                body = self.rfile.read(length) if 0 < length <= 1024 * 1024 else b""
                 # Require the token for every POST, including reads: one consistent client contract.
                 if not secrets.compare_digest(self.headers.get("X-Lore-Token", ""), token):
                     raise LoreError("FORBIDDEN", "Missing or invalid editor token")
@@ -147,10 +154,9 @@ def make_server(root, port=0, saga=False, config=None, factory=None):
                     raise LoreError("FORBIDDEN", "Saga edits must use change requests (request)")
                 if self.headers.get("Transfer-Encoding"):
                     raise LoreError("INVALID", "Use Content-Length, not Transfer-Encoding")
-                length = int(self.headers.get("Content-Length", "0"))
                 if not 0 < length <= 1024 * 1024:
                     raise LoreError("INVALID", "JSON body must be between 1 byte and 1 MiB")
-                args = json.loads(self.rfile.read(length).decode("utf-8"))
+                args = json.loads(body.decode("utf-8"))
                 if not isinstance(args, dict):
                     raise LoreError("INVALID", "Arguments must be a JSON object")
                 kinds = {"str": str, "int": int, "bool": bool, "list": list, "dict": dict}

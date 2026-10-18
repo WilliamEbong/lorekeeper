@@ -303,7 +303,7 @@ Paths are relative to each saga root and identical in all three repos.
 - [x] 004 saga integration — accept: baselines green; vendored + parity green in all 3; chrono.py gated (in-progress chapters byte-identical status/validate before/after); chrono-report for 500 cards ×3; Wiki templates/skills/PIPELINE updated; START_HERE intent; backfill of frozen-chapter Wiki pages; suites green; `system:` commits explicit paths only; landed by ff-only back to back
 - [x] 005 interactive editor — accept (Playwright): create event, link character, drag re-date, age updates, subway lanes, relationship grid, spreadsheet, narrative, live reload on agent edit, saga-mode edits land in change-request queue; keyboard-only flow; simultaneous CLI+browser edit merges or 409s; labels + contrast
 - [x] 006 interop (Aeon open-in-app UNVERIFIED: access declined twice) — accept: all 19 bundled Aeon template files import; exported v1 .aeon opens in Aeon desktop (computer-use screenshot); CSV in/out with Aeon column ids; Markdown export
-- [ ] 007 templates + onboarding + packaging — accept: Novel / Series / Worldbuilding-Campaign templates pass `lore check`; pyproject + `uv tool install .` works; README quickstart runs verbatim; user guide, agent skill; private GitHub repo created + pushed, visibility PRIVATE
+- [x] 007 templates + onboarding + packaging (private repo push pending) — accept: Novel / Series / Worldbuilding-Campaign templates pass `lore check`; pyproject + `uv tool install .` works; README quickstart runs verbatim; user guide, agent skill; private GitHub repo created + pushed, visibility PRIVATE
 
 ## Phase 9 — close-out
 - [ ] Final HANDOFF; ACTIVE removed; hooks unregistered; memory updated; final report to user
