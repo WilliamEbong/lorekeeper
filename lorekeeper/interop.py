@@ -22,9 +22,11 @@ DEPENDENCIES = {"FS": "after", "SS": "starts_after_start", "FF": "ends_after_end
 # Aeon has no "equal" dependency: Lorekeeper's stricter same_start/same_end export as SS/FF.
 DEPENDENCY_KINDS = {**{role: kind for kind, role in DEPENDENCIES.items()}, "same_start": "SS", "same_end": "FF"}
 # Declared in lore.json when an import uses them; checks.py does not check them yet.
-DEPENDENCY_ROLES = {
+# part_of carries Aeon nesting (a person in a group, a sub-event); a place in a place is located_in.
+IMPORT_ROLES = {
     "starts_after_start": {"label": "Starts after start of (start-to-start)", "inverse": "Starts before start of", "to": []},
-    "ends_after_end": {"label": "Ends after end of (finish-to-finish)", "inverse": "Ends before end of", "to": []}}
+    "ends_after_end": {"label": "Ends after end of (finish-to-finish)", "inverse": "Ends before end of", "to": []},
+    "part_of": {"label": "Part of", "inverse": "Includes", "to": []}}
 # Windows opens these as devices, even with an extension ("Con.Air.md").
 WINDOWS_DEVICES = {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"} | {
     port + n for port in ("COM", "LPT") for n in "0123456789\u00b9\u00b2\u00b3"}
@@ -200,7 +202,9 @@ def read_aeon(path):
             item = items[key]
             times = data.get("itemDatesById", {}).get(key, {})
             start, end = (_date_text(times.get(part), calendar) for part in ("startDate", "endDate"))
+            parent = tree.get(key, {}).get("super")
             result["items"].append({"id": key, "type": item["type"], "name": item["label"],
+                                    "parent": parent if parent in items and parent != key else None,
                                     "summary": item.get("summary", ""),
                                     "tags": [data.get("tags", {}).get(tag, tag) for tag in (item.get("tags") or [])],
                                     "fields": {pid: _option(result["properties"].get(pid), value)
@@ -274,6 +278,12 @@ def _collection(records):
     return {"byId": records, "sortOrder": {key: i for i, key in enumerate(records)}}
 
 
+def _ancestors(supers, key):
+    while key is not None:
+        yield key
+        key = supers.get(key)
+
+
 def write_aeon(project, path):
     """Write a minimal v14 core, leaving migration/UI defaults to Aeon."""
     schema = project.schema
@@ -281,7 +291,7 @@ def write_aeon(project, path):
     type_ids = {key: _token() for key in schema["types"]}
     role_ids = {key: _token() for key in schema["roles"] if key not in DEPENDENCY_KINDS}
     prop_ids = {key: _token() for key in schema["properties"]}
-    tag_ids = {}
+    tag_ids, supers = {}, {}
     chapter_label, scene_label = _token(), _token()
     definitions = {"calendar": _calendar(), "includeNarrative": True, "colors": _collection({}),
                    "autoAdjustLevel": 0, "autoAdjustBackwardsLimit": "Off", "storeRelativePaths": False,
@@ -336,7 +346,7 @@ def write_aeon(project, path):
         data["itemsById"][ident] = {"id": ident, "type": type_ids[item.type], "label": item.name,
             "summary": item.body, "displayId": item.id, "internalId": n + 1, "color": "",
             "tags": dict.fromkeys((tag_ids[tag] for tag in tags), True),
-            "propertyValues": {prop_ids[k]: v for k, v in item.fields.items() if k in prop_ids},
+            "propertyValues": {prop_ids[k]: _unfield(v) for k, v in item.fields.items() if k in prop_ids},
             "links": {}, "attachments": {}, "image": None, "narrativeLabel": "automatic", "initials": None,
             "shortLabel": None, "showAnniversary": False, "anniversaryIcon": "markerOther", "locationUri": None}
         data["itemOrderByType"].setdefault(type_ids[item.type], {})[ident] = n
@@ -371,6 +381,11 @@ def write_aeon(project, path):
                 # do not carry Lorekeeper lag text, so only their kind is exported.
                 if other is None:
                     continue
+                # One Aeon parent per item: part_of, or located_in between places, unless it closes a loop.
+                if (ident not in supers and (role == "part_of" or role == "located_in" and item.type == other.type == "location")
+                        and ident not in _ancestors(supers, ids[id(other)])):
+                    supers[ident] = ids[id(other)]
+                    continue
                 rid = _token()
                 record = {"id": rid, "subject": ident, "object": ids[id(other)]}
                 if role in DEPENDENCY_KINDS:
@@ -380,6 +395,12 @@ def write_aeon(project, path):
                 elif role in role_ids:
                     record["reference"] = role_ids[role]
                     data["relationshipsById"][rid] = record
+    nodes, items = data["superAndChildOrderById"], data["itemsById"]
+    for child, parent in supers.items():
+        nodes[child]["super"] = parent
+        nodes[parent]["childOrder"][child] = len(nodes[parent]["childOrder"])
+        # Aeon nests an item only under the types its own type lists in superTypes.
+        definitions["types"]["byId"][items[child]["type"]]["superTypes"][items[parent]["type"]] = True
     tree = data["narrative"]["sacOrderById"]
     for n, item in enumerate(_narrative(project)):
         ident = ids[id(item)]
@@ -422,6 +443,18 @@ def _field(value):
     return json.dumps(text, ensure_ascii=False) if "\n" in text or "\r" in text else text
 
 
+def _unfield(value):
+    """Undo _field for export: a multiline text kept as one JSON line goes back as that text."""
+    if isinstance(value, str) and value.startswith('"'):
+        try:
+            text = json.loads(value)
+        except ValueError:
+            return value
+        if isinstance(text, str) and ("\n" in text or "\r" in text):
+            return text
+    return value
+
+
 def _suffixed(base, n):
     """'Name (n)'. Windows reads "Con.Air.md" as the CON device, so a device stem takes the suffix."""
     if n == 1:
@@ -452,11 +485,13 @@ def import_into(project, data, into=None):
         mapped = mapped or next((t for t, words in (("character", {"character", "person", "people", "defaultperson"}),
                                                    ("location", {"place", "location", "defaultlocation"}))
                                  if names & words), None)
-        mapped = mapped or ("event" if spec.get("canHaveDate") else _key(spec.get("label", key)))
+        # Any other type keeps its own name ("Backstory" is backstory, "Event" is event); dated ones are events.
+        mapped = mapped or _key(spec.get("label", key))
         mapped_types[key] = mapped
         if mapped not in schema["types"]:
             schema["types"][mapped] = {"label": spec.get("label", mapped), "plural": mapped,
-                                       "category": "thing", "id_prefix": mapped.upper()}
+                                       "category": "event" if spec.get("canHaveDate") else "thing",
+                                       "id_prefix": mapped.upper()}
             config.setdefault("types", {})[mapped] = schema["types"][mapped]
     for section, mapping in (("roles", mapped_roles), ("properties", mapped_props)):
         used = set()
@@ -556,7 +591,12 @@ def import_into(project, data, into=None):
                 fields[key] = value
         pending.append((ident, type_, name, fields, record.get("summary") or ""))
     by_id = {row[0]: row for row in pending}
-    for link in data.get("relationships", []) + data.get("dependencies", []):
+    types_of = {record["id"]: mapped_types.get(record["type"], record["type"]) for record in data.get("items", [])}
+    # Aeon nesting becomes a link on the child: located_in for a place in a place, otherwise part_of.
+    nesting = [{"subject": r["id"], "object": r["parent"],
+                "nest": "located_in" if types_of[r["id"]] == types_of.get(r["parent"]) == "location" else "part_of"}
+               for r in data.get("items", []) if r.get("parent")]
+    for link in data.get("relationships", []) + data.get("dependencies", []) + nesting:
         dependency = "kind" in link
         # A dependency's object is the successor: it carries `after: [[subject]]`.
         carrier, other = (link["object"], link["subject"]) if dependency else (link["subject"], link["object"])
@@ -564,12 +604,13 @@ def import_into(project, data, into=None):
         if subject is None:
             continue
         target = targets.get(other)
-        role = DEPENDENCIES.get(link.get("kind")) if dependency else mapped_roles.get(link["role"], link["role"])
+        role = (DEPENDENCIES.get(link.get("kind")) if dependency else link["nest"] if "nest" in link
+                else mapped_roles.get(link["role"], link["role"]))
         if target is None or not role:
             warnings.append(f"WARN skipped unresolved link from {subject[2]}")
             continue
-        if role in DEPENDENCY_ROLES and role not in schema["roles"]:
-            schema["roles"][role] = config.setdefault("roles", {})[role] = dict(DEPENDENCY_ROLES[role])
+        if role in IMPORT_ROLES and role not in schema["roles"]:
+            schema["roles"][role] = config.setdefault("roles", {})[role] = dict(IMPORT_ROLES[role])
         values = subject[3].setdefault(role, [])
         if not isinstance(values, list):
             values = subject[3][role] = [values]

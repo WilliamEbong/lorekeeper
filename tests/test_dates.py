@@ -29,6 +29,16 @@ class Decades(unittest.TestCase):
                                                 "African Collapse Wars"))
         self.assertIsNone(dates.parse("Wars, sometime", cals))
 
+    def test_hundreds_are_centuries_other_tens_are_decades(self):
+        cal = dates.Calendar({})
+        for text, first, last in (("1800s", 1800, 1900), ("200s", 200, 300), ("1900s", 1900, 2000),
+                                  ("2000s", 2000, 2100), ("100s", 100, 200), ("1840s", 1840, 1850),
+                                  ("2040s", 2040, 2050), ("210s", 210, 220),
+                                  ("~1800s", 1799, 1901), ("circa 2040s", 2039, 2051)):
+            with self.subTest(text=text):
+                w = cal.parse(text)
+                self.assertEqual((w.lo, w.hi, w.precision), (cal.to_axis(first, 1, 1), cal.to_axis(last, 1, 1), "year"))
+
 
 class CivilTests(unittest.TestCase):
     def test_every_day_minus_1000_through_3000(self):
@@ -212,9 +222,31 @@ class GregorianTests(unittest.TestCase):
         n = self.cal.to_axis(2036, 11, 20, 21, 28)
         for precision, expected in zip(dates.UNITS, ("2036", "2036-11", "2036-11-20", "2036-11-20 21:00", "2036-11-20 21:28")):
             self.assertEqual(self.cal.format(n, precision), expected)
-        self.assertEqual(self.cal.format(self.cal.to_axis(-43, 3, 15), "year"), "44 BC")
-        self.assertEqual(self.cal.format(self.cal.to_axis(-43, 3, 15), "day"), "-0043-03-15")
-        self.assertEqual(self.cal.format(-1), "0000-12-31 23:59")
+        n = self.cal.to_axis(-43, 3, 15, 9, 30)
+        for precision, expected in zip(dates.UNITS, ("44 BC", "0044-03 BC", "0044-03-15 BC",
+                                                     "0044-03-15 09:00 BC", "0044-03-15 09:30 BC")):
+            self.assertEqual(self.cal.format(n, precision), expected)
+        self.assertEqual(self.cal.format(-1), "0001-12-31 23:59 BC")   # year 0 is 1 BC
+        self.assertEqual(self.cal.format(self.cal.to_axis(-12344, 1, 1), "day"), "12345-01-01 BC")
+        self.assertEqual(self.cal.format(0), "0001-01-01 00:00")
+
+    def test_bc_formats_read_back(self):
+        # Old files may hold astronomical years; they still read.
+        self.assertEqual(self.cal.parse("-0043-03-15").lo, self.cal.to_axis(-43, 3, 15))
+        self.assertEqual(self.cal.parse("~0044-03-15 09:30 BC, Senate").note, "Senate")
+        cuts = {"year": lambda p: (p["year"], 1, 1), "month": lambda p: (p["year"], p["month"], 1),
+                "day": lambda p: (p["year"], p["month"], p["day"]),
+                "hour": lambda p: (p["year"], p["month"], p["day"], p["hour"]),
+                "minute": lambda p: (p["year"], p["month"], p["day"], p["hour"], p["minute"])}
+        samples = [-(k * 7919 * 1440 + k * 613) for k in range(1, 400)] + [-1, self.cal.to_axis(0, 1, 1)]
+        for m in samples:
+            for precision in dates.UNITS:
+                text = self.cal.format(m, precision)
+                with self.subTest(minute=m, precision=precision, text=text):
+                    w = self.cal.parse(text)
+                    self.assertEqual(w.lo, self.cal.to_axis(*cuts[precision](self.cal.from_axis(m))))
+                    # No grammar reads an hour without its minutes ("09:00" is minute precision), as in AD.
+                    self.assertEqual(w.precision, "minute" if precision == "hour" else precision)
 
     def test_unparseable(self):
         for text in (None, "", " ", "nonsense", "2045 garbage", "2045/01/01", "2000-13-01",

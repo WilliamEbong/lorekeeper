@@ -58,6 +58,8 @@ class TimeOps(unittest.TestCase):
 
     def test_convert_and_unparsed_dates(self):
         self.assertEqual(run("convert", date="November 2, 2019")["calendars"]["gregorian"]["from"], "2019-11-02")
+        self.assertEqual(run("convert", date="March 15, 44 BC, 9:30")["calendars"]["gregorian"],
+                         {"from": "0044-03-15 09:30 BC", "to": "0044-03-15 09:30 BC"})
         with tempfile.TemporaryDirectory() as tmp:
             root = os.path.join(tmp, "w")
             shutil.copytree(FIXTURE, root)
