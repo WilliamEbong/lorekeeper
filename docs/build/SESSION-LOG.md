@@ -150,3 +150,4 @@ Append-only. Newest entries at the bottom. Each entry gives: date/time (UTC if k
 - Decision: card items get their own type `card` (category narrative), with path `<architecture>#CHnnn`, so card findings point at the architecture.
 - Decision: the Wiki templates gain the optional keys as `#` comment lines, like the existing `voice:` comment, so no parser sees an empty key.
 - Decision: START_HERE is per-saga, not shared. The new intent is inserted before "## 2." and "These are the six intents" becomes "These are the intents".
+- Codex fixed checks.py items 2, 3, 5, 6 and 7. The shared-person two-places benchmark went from 10.4 s to 0.16 s. Stray check clean. **Feature 003 done.**

@@ -2,11 +2,12 @@
 import math
 import os
 import re
+from heapq import heappop, heappush
 from itertools import groupby
 
 from . import dates
 from .store import finding, link_parts
-from .timeinfo import START_KEYS, calendar_of, item_dates, show_when
+from .timeinfo import START_KEYS, calendar_of, item_dates, shift, show_when
 
 
 def possible(x):
@@ -46,15 +47,20 @@ def same_place(project, a, b):
     return reaches(a, b) or reaches(b, a)
 
 
-def _shift(w, duration, cal):
-    candidates = [w.lo, w.hi - 1]
-    # Month-end clamping can reverse clock times on adjacent source days.
-    # Include their midnight edges, so a range cannot turn into an empty interval.
-    if duration[0]:
-        candidates += [n for n in ((w.lo // 1440 + 1) * 1440, (w.hi - 1) // 1440 * 1440 - 1)
-                       if w.lo <= n < w.hi]
-    shifted = [dates.add(n, duration, cal) for n in candidates]
-    return w._replace(lo=min(shifted), hi=max(shifted) + 1)
+def _compare_shifted_eq(x, y, duration, cal):
+    target = shift(y, duration, cal)
+    # Bound exact month-shift work to two days of source minutes; wider
+    # intervals use the hull. Within each source day the shift is continuous.
+    if duration[0] and y.hi - y.lo <= 2 * 1440:
+        lo = y.lo
+        while lo < y.hi:
+            hi = min(y.hi, (lo // 1440 + 1) * 1440)
+            segment = shift(y._replace(lo=lo, hi=hi), duration, cal)
+            if x.lo < segment.hi and segment.lo < x.hi:
+                return compare_eq(x, target)
+            lo = hi
+        return "FAIL"
+    return compare_eq(x, target)
 
 
 def _date_key(item):
@@ -74,14 +80,14 @@ def run(project):
     times = {item: item_dates(p, item)[:2] for item in p.items}
     people = {item for item in p.items if p.schema["types"].get(item.type, {}).get("category") == "person"}
     appearances = {}
+    provisional = {i for i in p.items if i.fields.get("status") == "provisional" or
+                   any(w and w.provisional for w in times[i])}
 
     def emit(severity, code, item, key, other, x, y, detail, rule=None, extra=()):
         if not severity:
             return
         involved = (item, other, *extra)
-        provisional = any(i and (i.fields.get("status") == "provisional" or
-                          any(w and w.provisional for w in times[i])) for i in involved)
-        if provisional or (rule or {}).get("severity", "").lower() == "warn":
+        if any(i in provisional for i in involved) or (rule or {}).get("severity", "").lower() == "warn":
             severity = "WARN"
         shown = lambda w: show_when(p, w)["from"] if w else "undated"
         text = f"{item.name} ({shown(x)}): {detail}; {other.name} ({shown(y)})"
@@ -101,7 +107,9 @@ def run(project):
                     continue
                 duration = dates.parse_duration(lag) if lag else (0, 0)
                 # A malformed lag must never silently become a satisfied zero-lag link.
-                severity = compare(x, _shift(y, duration, calendar_of(p, start or end))) if duration else "WARN"
+                cal = calendar_of(p, start or end)
+                severity = (_compare_shifted_eq(x, y, duration, cal) if compare is compare_eq else
+                            compare(x, shift(y, duration, cal))) if duration else "WARN"
                 emit(severity, "DEPENDENCY", item, role, other, x, y, f"{role} {lag}".strip())
 
         for role in ("participants", "learns"):
@@ -119,57 +127,86 @@ def run(project):
                 if role == "participants":
                     appearances.setdefault(person, set()).add(item)
                     if start and birth:
-                        limit = (12 * int(settings.get("max_age", 130)), 0)
-                        emit(compare_ge(_shift(birth, limit, calendar_of(p, birth)), start),
+                        cal = calendar_of(p, birth)
+                        count = len(cal.months) if cal.type == "months" else 12
+                        limit = (count * int(settings.get("max_age", 130)), 0)
+                        emit(compare_ge(shift(birth, limit, cal), start),
                              "AGE_LIMIT", item, role, person, start, birth, "exceeds maximum age")
         if item in people and start:
             for _, parent, _ in links.get("parent", []):
                 if parent in people and times[parent][0]:
                     birth = times[parent][0]
-                    minimum = (12 * int(settings.get("min_parent_age", 12)), 0)
-                    emit(compare_ge(start, _shift(birth, minimum, calendar_of(p, start))),
+                    cal = calendar_of(p, start)
+                    count = len(cal.months) if cal.type == "months" else 12
+                    minimum = (count * int(settings.get("min_parent_age", 12)), 0)
+                    emit(compare_ge(start, shift(birth, minimum, cal)),
                          "PARENT_AGE", item, "parent", parent, start, birth, "parent too young")
 
     if settings.get("two_places", "on") != "off":
-        places = {i: [o for _, o, _ in p.links(i).get("location", []) if o] for i in p.items}
+        places = {i: frozenset(o for _, o, _ in p.links(i).get("location", []) if o) for i in p.items}
+        place_cache = {}
+
+        def compatible(xs, ys):
+            if xs & ys:
+                return True
+            for x in xs:
+                for y in ys:
+                    pair = frozenset((x, y))
+                    if pair not in place_cache:
+                        place_cache[pair] = same_place(p, x, y)
+                    if place_cache[pair]:
+                        return True
+            return False
+
         for person, events in appearances.items():
             events = sorted((i for i in events if all(times[i]) and places[i]),
                             key=lambda i: (times[i][0].lo, i.path))
-            active = []
-            for item in events:
+            active, expiry = {}, []
+            for index, item in enumerate(events):
                 start, end = times[item]
-                active = [a for a in active if times[a][1].hi > start.lo]
-                for other in active:
-                    a, b = times[other]
-                    if any(same_place(p, x, y) for x in places[item] for y in places[other]):
+                while expiry and expiry[0][0] <= start.lo:
+                    _, _, expired = heappop(expiry)
+                    bucket = active[places[expired]]
+                    del bucket[expired]
+                    if not bucket:
+                        del active[places[expired]]
+                for locations, bucket in active.items():
+                    if compatible(places[item], locations):
                         continue
-                    core = max(start.hi - 1, a.hi - 1) <= min(end.lo, b.lo)
-                    hull = max(start.lo, a.lo) < min(end.hi, b.hi)
-                    fine = all(w.precision in ("hour", "minute") for w in (start, end, a, b))
-                    severity = "FAIL" if core else "WARN" if hull and fine else None
-                    emit(severity, "TWO_PLACES", item, "participants", other, start, a,
-                         f"{person.name} in different places", extra=(person,))
-                active.append(item)
+                    for other in bucket:
+                        a, b = times[other]
+                        core = max(start.hi - 1, a.hi - 1) <= min(end.lo, b.lo)
+                        hull = max(start.lo, a.lo) < min(end.hi, b.hi)
+                        fine = all(w.precision in ("hour", "minute") for w in (start, end, a, b))
+                        severity = "FAIL" if core else "WARN" if hull and fine else None
+                        emit(severity, "TWO_PLACES", item, "participants", other, start, a,
+                             f"{person.name} in different places", extra=(person,))
+                active.setdefault(places[item], {})[item] = None
+                heappush(expiry, (end.hi, index, item))
 
     def ordered(items, code, rule=None, definite_only=False):
         # Extremal prior bounds catch regressions hidden by an uncertain neighbour.
-        high_lo = high_hi = None
+        prior, committed = [None, None], [None, None]
         for batch in items:
             for item in batch:
                 start = times[item][0]
-                other = high_lo
-                severity = compare_ge(start, times[other][0]) if other else None
-                if severity != "FAIL" and high_hi:
-                    other = high_hi
-                    severity = compare_ge(start, times[other][0])
+                severity, other = None, None
+                # Prefer committed evidence for FAIL before applying severity caps.
+                for candidate in (committed[0], prior[0], committed[1], prior[1]):
+                    if candidate:
+                        other = candidate
+                        severity = compare_ge(start, times[other][0])
+                        if severity == "FAIL":
+                            break
                 if severity and (not definite_only or severity == "FAIL"):
                     emit("WARN" if definite_only else severity, code, item, _date_key(item),
                          other, start, times[other][0], "chronology runs backwards", rule)
             for item in batch:
-                if high_lo is None or times[item][0].lo > times[high_lo][0].lo:
-                    high_lo = item
-                if high_hi is None or times[item][0].hi > times[high_hi][0].hi:
-                    high_hi = item
+                for extrema in (prior,) if item in provisional else (prior, committed):
+                    if extrema[0] is None or times[item][0].lo > times[extrema[0]][0].lo:
+                        extrema[0] = item
+                    if extrema[1] is None or times[item][0].hi > times[extrema[1]][0].hi:
+                        extrema[1] = item
 
     for rule in p.config.get("rules", []):
         selected = [i for i in p.items if _selected(i, rule.get("select", {}))]
@@ -201,8 +238,9 @@ def run(project):
                 if start and end:
                     cal = calendar_of(p, start)
                     # Use the spec's literal core/hull lengths, including hull's exclusive end.
-                    severity = ("FAIL" if end.lo > dates.add(start.hi - 1, duration, cal) else
-                                "WARN" if end.hi > dates.add(start.lo, duration, cal) else None)
+                    limit = shift(start, duration, cal)
+                    severity = ("FAIL" if end.lo > limit.hi - 1 else
+                                "WARN" if end.hi > limit.lo else None)
                     key = "end" if item.fields.get("end") else "duration" if item.fields.get("duration") else _date_key(item)
                     emit(severity, "MAX_DURATION", item, key, item, start, end,
                          f"span exceeds {rule['max']}", rule)
@@ -220,8 +258,9 @@ def run(project):
                         duration = dates.parse_duration(rule.get(bound))
                         if duration is None:
                             continue
-                        target = _shift(origin, duration, calendar_of(p, start))
-                        severity = (compare_eq(start, target) if bound == "exactly" else
+                        cal = calendar_of(p, start)
+                        target = shift(origin, duration, cal)
+                        severity = (_compare_shifted_eq(start, origin, duration, cal) if bound == "exactly" else
                                     compare_ge(start, target) if bound == "min" else compare_ge(target, start))
                         emit(severity, "GAP", item, rule["role"], other, start, origin,
                              f"gap {bound} {rule[bound]}", rule)

@@ -113,6 +113,27 @@ class Checks(unittest.TestCase):
         x = item("X", date="2023-03-01 00:00", same_start="[[Y]] +1mo")
         self.assertSeverity(project(x, y), "DEPENDENCY", "FAIL")
 
+    def test_month_equality_preserves_disconnected_shifted_days(self):
+        source = "2023-02-28 23:59..2023-03-01 00:00"
+        for role in ("same_start", "same_end", "gap_start", "gap_end"):
+            for value, expected in (("2023-03-30 00:00", "FAIL"),
+                                    ("2023-03-28 23:59", "WARN"),
+                                    ("2023-04-01 00:00", "WARN")):
+                with self.subTest(role=role, value=value):
+                    y = item("Y", date=source, end=source)
+                    if role.startswith("gap_"):
+                        x = item("X", date=value, paired="[[Y]]")
+                        rules = [{"rule": "gap", "role": "paired", "exactly": "1mo",
+                                  "from": role.removeprefix("gap_")}]
+                        self.assertSeverity(project(x, y, rules=rules), "GAP", expected)
+                    else:
+                        x = item("X", date=value, end=value, **{role: "[[Y]] +1mo"})
+                        self.assertSeverity(project(x, y), "DEPENDENCY", expected)
+        # Clamping can also leave holes within a single target day.
+        y = item("Y", date="2023-01-30 23:00..2023-01-31 01:00")
+        x = item("X", date="2023-02-28 12:00", same_start="[[Y]] +1mo")
+        self.assertSeverity(project(x, y), "DEPENDENCY", "FAIL")
+
     def test_provisional_caps_either_item_or_date(self):
         for side in ("X", "Y"):
             for mode in ("status", "date", "other_date"):
@@ -162,6 +183,23 @@ class Checks(unittest.TestCase):
         self.assertSeverity(p, "PARENT_AGE", None)
         self.assertSeverity(p, "AGE_LIMIT", "FAIL")
 
+    def test_age_limits_use_native_month_count(self):
+        config = {"type": "months", "epoch": "2000-01-01",
+                  "months": [{"name": f"M{n}", "days": 30} for n in range(10)],
+                  "formats": [r"Y(?P<year>\d+) M(?P<month>\d+) D(?P<day>\d+) (?P<hour>\d+):(?P<minute>\d+)"]}
+        parent = item("Parent", "character", born="Y1 M1 D1 00:00")
+        child = item("Child", "character", born="Y13 M1 D1 00:00", parent="[[Parent]]")
+        event = item("Event", date="Y132 M1 D1 00:00", participants="[[Parent]]")
+        p = project(parent, child, event, calendars=[config])
+        with self.subTest(code="PARENT_AGE"):
+            self.assertSeverity(p, "PARENT_AGE", None)
+        with self.subTest(code="AGE_LIMIT"):
+            self.assertSeverity(p, "AGE_LIMIT", "FAIL")
+        p = project(parent, child, event, calendars=[config],
+                    checks={"min_parent_age": 13, "max_age": 131})
+        self.assertSeverity(p, "PARENT_AGE", "FAIL")
+        self.assertSeverity(p, "AGE_LIMIT", None)
+
     def test_two_places_certainty_locations_and_switch(self):
         person, a, b = item("P", "character"), item("A", "location"), item("B", "location")
         for start, end, expected in (("2020-01-01 10:30", "2020-01-01 12:00", "FAIL"),
@@ -196,6 +234,15 @@ class Checks(unittest.TestCase):
             event = item("E", date="2020-01-01", end="2020-02-01", **fields)
             self.assertEqual(checks.run(project(event, rules=[rule])), [])
 
+    def test_month_max_duration_uses_shifted_start_extrema(self):
+        for end, expected in (("2023-02-28 12:00", "WARN"),
+                              ("2023-03-01 00:00", "FAIL"),
+                              ("2023-02-27 23:59", None)):
+            with self.subTest(end=end):
+                event = item("E", date="2023-01-30 23:00..2023-01-31 01:00", end=end)
+                self.assertSeverity(project(event, rules=[{"rule": "max_duration", "max": "1mo"}]),
+                                    "MAX_DURATION", expected)
+
     def test_gap_exact_min_max_from_start_and_end(self):
         y = item("Y", date="2020-01-01 00:00", end="2020-01-03 00:00")
         for origin, target in (("start", 8), ("end", 10)):
@@ -227,6 +274,19 @@ class Checks(unittest.TestCase):
         self.assertEqual([(f["path"], f["severity"]) for f in found], [("B.md", "WARN"), ("C.md", "FAIL")])
         c = item("C", date="1900", chapter="1.0")
         self.assertEqual(checks.run(project(a, c, rules=[rule])), [])
+
+    def test_monotonic_provisional_predecessor_keeps_committed_evidence(self):
+        rule = {"rule": "monotonic", "order": "chapter"}
+        for fields in ({"date": "2030", "status": "provisional"},
+                       {"date": "2030 (provisional)"},
+                       {"date": "2030", "end": "2031 (provisional)"}):
+            with self.subTest(fields=fields):
+                a = item("A", date="2020", chapter="1")
+                b = item("B", chapter="2", **fields)
+                c = item("C", date="2010", chapter="3")
+                found = self.assertSeverity(project(a, b, c, rules=[rule]), "ORDER_REGRESSION", "FAIL")
+                self.assertEqual(found[0]["path"], "C.md")
+                self.assertIn("; A (", found[0]["detail"])
 
     def test_custom_codes_and_rule_severity_caps(self):
         a = item("A", date="2020", chapter="1")
@@ -274,12 +334,18 @@ class Checks(unittest.TestCase):
             items.extend((item(f"P{n}", "character", born="1900"), item(f"L{n}", "location"),
                           item(f"E{n}", date=f"2020-{1 + n % 12:02}-{1 + n % 28:02} 12:00",
                                duration="1h", participants=f"[[P{n}]]", location=f"[[L{n}]]")))
-        p = project(*items)
-        start = time.perf_counter()
-        found = checks.run(p)
-        elapsed = time.perf_counter() - start
-        self.assertEqual(found, [])
-        self.assertLess(elapsed, 2, f"3,000 items checked in {elapsed:.3f}s")
+        shared = [item("P", "character"), item("L", "location")]
+        shared.extend(item(f"E{n}", date="2020-01-01", participants="[[P]]", location="[[L]]")
+                      for n in range(2998))
+        for name, case in (("separate people", items), ("shared person", shared)):
+            with self.subTest(case=name):
+                self.assertEqual(len(case), 3000)
+                p = project(*case)
+                start = time.perf_counter()
+                found = checks.run(p)
+                elapsed = time.perf_counter() - start
+                self.assertEqual(found, [])
+                self.assertLess(elapsed, 2, f"3,000 items ({name}) checked in {elapsed:.3f}s")
 
     def test_fixture_world(self):
         # Keep even the disposable fixture copy inside the authorized repository.
