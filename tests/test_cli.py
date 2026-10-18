@@ -10,10 +10,10 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FIXTURE = os.path.join(REPO, "tests", "fixtures", "world")
 
 
-def lore(*args, cwd):
+def lore(*args, cwd, **kw):
     env = dict(os.environ, PYTHONPATH=REPO)
     return subprocess.run([sys.executable, "-m", "lorekeeper", *args], cwd=cwd, env=env,
-                          capture_output=True, encoding="utf-8")
+                          capture_output=True, encoding="utf-8", stdin=subprocess.DEVNULL, **kw)
 
 
 class CliFlows(unittest.TestCase):
@@ -80,6 +80,45 @@ class CliFlows(unittest.TestCase):
         self.assertEqual(lore("show", "x", cwd=self.root).returncode, 2)          # no lore.json
         self.assertIn("ERROR NOT_FOUND", lore("show", "x", cwd=self.root).stderr)
         self.assertEqual(lore("bogus", cwd=self.root).returncode, 2)
+
+    def test_root_must_lead_to_a_project(self):
+        root = os.path.join(self.root, "w")
+        shutil.copytree(FIXTURE, root)
+        missing = os.path.join(self.root, "Mistyped")
+        for args in (["check"], ["--json", "check"], ["mcp"], ["serve"]):   # no false all-clear, no idle server
+            with self.subTest(args=args):
+                r = lore("--root", missing, *args, cwd=root, timeout=30)
+                self.assertEqual(r.returncode, 2, r.stdout)
+                self.assertIn(f"no lore.json in {missing}", r.stderr)
+        self.assertEqual(json.loads(lore("--json", "--root", missing, "check", cwd=root).stdout)["error"]["code"],
+                         "NOT_FOUND")
+        r = lore("--root", os.path.join(root, "Characters"), "create", "character", "Ghost", cwd=self.root)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue(os.path.isfile(os.path.join(root, "Characters", "Ghost.md")))
+        self.assertFalse(os.path.exists(os.path.join(root, "Characters", "Characters")))
+
+    def test_human_output_reads_as_text(self):
+        root = os.path.join(self.root, "w")
+        shutil.copytree(FIXTURE, root)
+        out = lore("timeline", cwd=root).stdout.splitlines()
+        self.assertEqual(out[0], "~1951 to 2019-11-03                   character     Ivo Brandt")
+        self.assertEqual(out[3], "2019-11-02 21:00 to 2019-11-03 06:00  event         The flood at Saltmarsh")
+        self.assertEqual(out[4], "2020-03                               event         Crossing Harrow Pass")
+        self.assertEqual(lore("age", "Mara Quell", "Crossing Harrow Pass", cwd=root).stdout,
+                         "Mara Quell at Crossing Harrow Pass: 31 years, 10 months\n")
+        self.assertEqual(lore("when", "Ivo Brandt", cwd=root).stdout,
+                         "Ivo Brandt\nstart: ~1951 (1950 to 1952)\nend: 2019-11-03\n")
+        self.assertEqual(lore("where", "Mara Quell", "2021", cwd=root).stdout,
+                         "By 2021, Mara Quell was last at Harrow Pass (Crossing Harrow Pass, 2020-03).\n")
+        self.assertEqual(lore("where", "Mara Quell", "1990", cwd=root).stdout,
+                         "By 1990, Mara Quell has no recorded location.\n")
+        self.assertEqual(lore("knows", "Mara Quell", "2021", cwd=root).stdout,
+                         "By 2021, Mara Quell knows Ivo Brandt (from Crossing Harrow Pass).\n")
+        self.assertEqual(lore("knows", "Tess Varga", "2020-03-15", cwd=root).stdout,
+                         "By 2020-03-15, Tess Varga may know Ivo Brandt (from Crossing Harrow Pass).\n")
+        self.assertEqual(lore("knows", "Tess Varga", "2000", cwd=root).stdout,
+                         "By 2000, Tess Varga has learned nothing on record.\n")
+        self.assertEqual(json.loads(lore("show", "Mara Quell", cwd=root).stdout)["name"], "Mara Quell")   # still JSON
 
 
 if __name__ == "__main__":

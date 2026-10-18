@@ -84,9 +84,12 @@ def handle(message: dict, root: str) -> dict | None:
         name = params.get("name")
         if not isinstance(name, str) or name not in ops.BY_NAME:
             return _error(id_, -32602, f"Unknown tool: {name}")
+        arguments = params.get("arguments")
+        if arguments is not None and not isinstance(arguments, dict):
+            return _error(id_, -32602, "Invalid params: arguments must be an object")
         is_error = False
-        try:
-            value = ops.run(name, params.get("arguments") or {}, root=root)
+        try:   # bad argument values come back from ops.run as INVALID tool errors
+            value = ops.run(name, arguments, root=root)
         except LoreError as exc:
             value, is_error = exc.as_dict(), True
         except Exception as exc:

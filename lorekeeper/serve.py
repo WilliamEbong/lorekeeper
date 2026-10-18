@@ -133,6 +133,8 @@ def make_server(root, port=0, saga=False, config=None, factory=None):
                 self.fail(exc)
             except OSError as exc:
                 self.fail(LoreError("IO_ERROR", str(exc)))
+            except Exception as exc:
+                self.fail(LoreError("INTERNAL", str(exc)))
 
         def do_POST(self):
             try:
@@ -163,14 +165,7 @@ def make_server(root, port=0, saga=False, config=None, factory=None):
                 args = json.loads(body.decode("utf-8"))
                 if not isinstance(args, dict):
                     raise LoreError("INVALID", "Arguments must be a JSON object")
-                kinds = {"str": str, "int": int, "bool": bool, "list": list, "dict": dict}
-                for param in op.params:
-                    value = args.get(param.name)
-                    if value is not None and type(value) is not kinds[param.kind]:
-                        raise LoreError("INVALID", f"{param.name} must be {param.kind}")
-                if "unset" in args and args["unset"] is not None and not all(isinstance(k, str) for k in args["unset"]):
-                    raise LoreError("INVALID", "unset must contain field names")
-                result = ops.run(name, args, root=root, config=config,
+                result = ops.run(name, args, root=root, config=config,   # ops.run checks parameter types
                                  **({"project": factory()} if factory else {}))
                 self.send(200, ops.to_json(result))
             except LoreError as exc:
@@ -179,6 +174,8 @@ def make_server(root, port=0, saga=False, config=None, factory=None):
                 self.fail(LoreError("INVALID", str(exc)))
             except OSError as exc:
                 self.fail(LoreError("IO_ERROR", str(exc)))
+            except Exception as exc:   # a reply, never a dropped connection
+                self.fail(LoreError("INTERNAL", str(exc)))
 
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     return server, f"http://127.0.0.1:{server.server_port}/", token

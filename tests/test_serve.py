@@ -113,6 +113,16 @@ class ServeTests(unittest.TestCase):
                 self.assertEqual(result["error"]["code"], "INVALID")
         self.assertEqual(self.request("/api/set", {"item": "Mara Quell", "unset": [{}]})[0], 400)
 
+    def test_unexpected_errors_still_answer_with_json(self):
+        # e.g. an odd .aeon whose type entry is a string raised AttributeError deep in interop
+        with patch.object(ops, "run", side_effect=AttributeError("'str' object has no attribute 'get'")):
+            status, result, _ = self.request("/api/import", {"file": "odd.aeon"})
+        self.assertEqual((status, result), (500, {"error": {"code": "INTERNAL",
+                                                             "message": "'str' object has no attribute 'get'"}}))
+        with patch.object(serve, "stamp", side_effect=RuntimeError("boom")):
+            status, result, _ = self.request("/api/stamp")
+        self.assertEqual((status, result), (500, {"error": {"code": "INTERNAL", "message": "boom"}}))
+
     def test_not_found_and_no_arbitrary_assets(self):
         for path, args in (("/api/nope", {}), ("/api/show", {"item": "Nobody"}),
                            ("/../lore.json", None), ("/lore.json", None), ("/api/set", None)):

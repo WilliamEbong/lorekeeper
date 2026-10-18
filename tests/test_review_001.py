@@ -119,6 +119,46 @@ class Review(unittest.TestCase):
             p.create("character", "Escapee")
         self.assertFalse(os.path.exists(os.path.join(self.tmp.name, "outside")))
 
+    def test_parameter_types_are_checked_for_every_face(self):
+        for name, args in (("set", {"item": "Mara Quell", "unset": "born"}),
+                           ("set", {"item": "Mara Quell", "field": "born=1990"}),
+                           ("set", {"item": "Mara Quell", "unset": [{}]}),
+                           ("query", {"text": []}), ("show", {"item": 5})):
+            with self.subTest(name=name, args=args):
+                with self.assertRaises(LoreError) as cm:
+                    self.run_op(name, **args)
+                self.assertEqual(cm.exception.code, "INVALID")
+
+    def test_plain_text_single_link_can_be_unlinked(self):
+        ops.run("create", {"type": "location", "name": "Lantern Harbour"}, root=self.root)
+        ops.run("create", {"type": "event", "name": "Arrival", "field": {"location": "Lantern Harbour"}}, root=self.root)
+        with self.assertRaises(LoreError) as cm:
+            self.run_op("link", item="Arrival", role="location", target="Saltmarsh")
+        self.assertIn("unlink it first", cm.exception.message)
+        self.run_op("unlink", item="Arrival", role="location", target="lantern harbour")
+        self.assertNotIn("location", Project(self.root).find("Arrival").fields)
+        # plain text naming no item at all
+        ops.run("create", {"type": "event", "name": "Rumour", "field": {"location": "Nowhere Bay"}}, root=self.root)
+        self.run_op("unlink", item="Rumour", role="location", target="Nowhere Bay")
+        self.assertNotIn("location", Project(self.root).find("Rumour").fields)
+
+    def test_backlinks_sharing_an_inverse_label_are_all_shown(self):
+        roles = {"rescued": {"label": "Rescued", "inverse": "Saved by"},
+                 "healed": {"label": "Healed", "inverse": "Saved by"}}
+        with open(os.path.join(self.root, "lore.json"), "w", encoding="utf-8") as fh:
+            json.dump({"lorekeeper": 1, "roles": roles}, fh)
+        ops.run("create", {"type": "event", "name": "Storm", "field": {"rescued": "[[Mara Quell]]"}}, root=self.root)
+        ops.run("create", {"type": "event", "name": "Fever", "field": {"healed": "[[Mara Quell]]"}}, root=self.root)
+        shown = self.run_op("show", item="Mara Quell")
+        self.assertEqual(sorted(shown["backlinks"]["Saved by"]), ["Fever", "Storm"])
+
+    def test_empty_expectation_matches_a_missing_field(self):
+        made = self.run_op("request", item="Mara Quell", note="Record a death", field={"died": "2040"},
+                           expect={"died": ""})
+        queued = self.run_op("requests")["requests"]
+        self.assertEqual([r["id"] for r in queued], [made["request"]])
+        self.assertNotIn("stale", queued[0])
+
     def test_mcp_survives_lone_surrogates_and_rejects_bad_envelopes(self):
         out = io.BytesIO()
         lines = b'{"jsonrpc":"2.0","id":"\\ud800","method":"ping"}\n{"jsonrpc":"1.0","id":2,"method":"ping"}\n'

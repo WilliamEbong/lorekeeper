@@ -46,7 +46,42 @@ def build_parser():
     return ap
 
 
-def human(result):
+def span(start, end):
+    return start["text"] + (f" to {end['text']}" if end and end["text"] != start["text"] else "")
+
+
+def interval(when):
+    """The written date, plus the range it was read as when that is wider."""
+    if when is None:
+        return "none"
+    return when["text"] + (f" ({when['from']} to {when['to']})" if when["from"] != when["to"] else "")
+
+
+def human(op, args, result):
+    """Plain text for people; --json prints the data unchanged."""
+    at = args.get("at")
+    if op == "timeline":
+        rows = [(span(i["start"], i["end"]), i) for i in result["items"]]
+        width = max((len(d) for d, _ in rows), default=0)
+        return "\n".join(f"{d:<{width}}  {i['type']:<13} {i['name']}" for d, i in rows) or "(no items)"
+    if op == "age":
+        return f"{result['item']} at {at}: {result['text']}"
+    if op == "when":
+        lines = [result["name"], f"start: {interval(result['start'])}", f"end: {interval(result['end'])}"]
+        return "\n".join(lines + [f"unreadable {u['key']}: {u['value']}" for u in result["unparsed"]])
+    if op == "where":
+        if not result["location"]:
+            return f"By {at}, {result['item']} has no recorded location."
+        doubt = " Some dates overlap, so this may not be the latest." if result["uncertain"] else ""
+        return (f"By {at}, {result['item']} was last at {result['location']} "
+                f"({result['event']}, {result['since']['text']}).{doubt}")
+    if op == "knows":
+        def names(rows):
+            return ", ".join(f"{k['item']} (from {k['learned_in']})" for k in rows)
+        parts = [f"knows {names(result['knows'])}"] if result["knows"] else []
+        if result["may_know"]:
+            parts.append(f"may know {names(result['may_know'])}")
+        return f"By {at}, {result['item']} " + ("; ".join(parts) or "has learned nothing on record") + "."
     if "findings" in result:
         lines = [f"{f['severity']} {f['code']} {f['detail']} {f['path']}:{f['line']}" for f in result["findings"]]
         return "\n".join(lines + [f"{result['fail']} FAIL, {result['warn']} WARN"])
@@ -60,23 +95,24 @@ def main(argv=None):
         stream.reconfigure(encoding="utf-8")
     ns = build_parser().parse_args(argv)
     try:
-        root = ns.root
+        # --root names the project or a folder inside it; a mistyped one must not read as an empty world
+        root = (ns.root or ".") if ns.op == "init" else store.find_root(ns.root or ".")
         if ns.op == "mcp":
             from . import mcp
-            return mcp.serve(root or store.find_root("."))
+            return mcp.serve(root)
         if ns.op == "serve":
             from . import serve
-            return serve.serve(root or store.find_root("."), port=ns.port, saga=ns.saga)
+            return serve.serve(root, port=ns.port, saga=ns.saga)
         op = ops.BY_NAME[ns.op]
         args = {p.name: getattr(ns, p.name, None) for p in op.params}
         for p in op.params:
             if p.kind == "dict" and args[p.name] is not None:
                 args[p.name] = dict(args[p.name])
-        result = ops.run(ns.op, args, root=root or ("." if ns.op == "init" else store.find_root(".")))
+        result = ops.run(ns.op, args, root=root)
     except LoreError as exc:
         if ns.json:
             print(ops.to_json(exc.as_dict()))
         print(f"ERROR {exc.code} {exc.message}", file=sys.stderr)
         return 2
-    print(ops.to_json(result) if ns.json else human(result))
+    print(ops.to_json(result) if ns.json else human(ns.op, args, result))
     return 1 if result.get("fail") else 0
