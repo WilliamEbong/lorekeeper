@@ -96,7 +96,7 @@ def parse_value(raw: str) -> str | list[str]:
             in_link = True
             i += 2
             continue
-        elif char in "\"'":
+        elif char in "\"'" and not inside[start:i].strip():   # quotes open a token, never mid-word
             quote = char
         elif char == ",":
             items.append(_unquote(inside[start:i].strip()))
@@ -112,7 +112,7 @@ def _format_string(value, in_list=False):
         value.startswith(tuple('[{\"\'#&*!|>%@`,'))
         or ": " in value or " #" in value
         or value != value.strip()
-        or (in_list and (not value or "," in value or "]" in value))
+        or (in_list and (not value or any(c in value for c in ",[]\"'")))
     )
     if needs_quotes:
         return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'

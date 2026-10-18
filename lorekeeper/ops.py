@@ -14,10 +14,6 @@ def to_json(result):
     return json.dumps(result, ensure_ascii=False, indent=2)
 
 
-def names(items):
-    return [i.name if isinstance(i, store.Item) else i for i in items]
-
-
 # ---- handlers: (project, **args) -> JSON-able dict ---------------------------
 def op_init(root, name=None):
     path = os.path.join(root, store.CONFIG)
@@ -25,7 +21,7 @@ def op_init(root, name=None):
         raise LoreError("CONFLICT", f"{store.CONFIG} already exists in {root}")
     config = {"lorekeeper": 1, "name": name or os.path.basename(os.path.abspath(root)),
               "types": {}, "roles": {}, "properties": {}}
-    store.atomic_write(path, to_json(config) + "\n")
+    store.atomic_write(path, to_json(config) + "\n", create=True)
     return {"created": store.CONFIG, "root": os.path.abspath(root)}
 
 
@@ -55,7 +51,8 @@ def op_show(p, item):
     it = p.find(item)
     roles = p.schema["roles"]
     links = {role: [o.name if o else t for t, o, _ in ls] for role, ls in p.links(it).items()}
-    back = {roles.get(role, {}).get("inverse", f"{role} (from)"): names(src) for role, src in p.backlinks(it).items()}
+    back = {roles.get(role, {}).get("inverse", f"{role} (from)"): [i.name for i in src]
+            for role, src in p.backlinks(it).items()}
     return {**it.summary(), "version": it.version, "fields": it.fields, "links": links,
             "backlinks": back, "body": it.body}
 
@@ -91,18 +88,25 @@ def op_link(p, item, role, target):
     if other in _targets(p, current):
         return {"path": it.path, "version": it.version, "merged": False}
     link = f"[[{other.name}]]"
+    if p.resolve(other.name) is not other:
+        raise LoreError("INVALID", f"[[{other.name}]] would not resolve to {other.path}; rename one of them")
     single = p.schema["roles"].get(role, {}).get("single")
+    if single and current:
+        raise LoreError("CONFLICT", f"{it.name} already has {role} {current[0]}; unlink it first")
     value = link if single else current + [link]
     version, merged = p.update(it, {role: value}, (), None, it.version, {role: it.fields.get(role)})
     return {"path": it.path, "version": version, "merged": merged}
 
 
 def op_unlink(p, item, role, target):
-    it, other = p.find(item), p.find(target)
+    it = p.find(item)
+    other = p.resolve(store.fm.link_target(target) or target)   # None: the link may point nowhere
     current = _role_values(it, role)
-    keep = [v for v, t in zip(current, _targets(p, current)) if t is not other]
+    wanted = (store.fm.link_target(target) or target).strip().lower()
+    keep = [v for v, t in zip(current, _targets(p, current))
+            if not (t is other if other else (store.link_parts(v) or ("",))[0].lower() == wanted)]
     if len(keep) == len(current):
-        raise LoreError("NOT_FOUND", f"{it.name} has no {role} link to {other.name}")
+        raise LoreError("NOT_FOUND", f"{it.name} has no {role} link to {target}")
     single = p.schema["roles"].get(role, {}).get("single") or not isinstance(it.fields.get(role), list)
     sets, unsets = ({}, [role]) if not keep else ({role: keep[0] if single and len(keep) == 1 else keep}, [])
     version, merged = p.update(it, sets, unsets, None, it.version, {role: it.fields.get(role)})
@@ -160,8 +164,13 @@ def run(name, args=None, root=None, config=None, project=None):
     missing = [p.name for p in op.params if p.required and p.name not in args]
     if missing:
         raise LoreError("INVALID", f"missing parameter(s) for {name}: {', '.join(missing)}")
-    if name == "init":
-        return op.handler(root or ".", **args)
-    if project is None:
-        project = Project(root, config) if root else Project.open(".")
-    return op.handler(project, **args)
+    try:
+        if name == "init":
+            return op.handler(root or ".", **args)
+        if project is None:
+            project = Project(root, config) if root else Project.open(".")
+        return op.handler(project, **args)
+    except ValueError as exc:          # bad input caught deep down (e.g. the frontmatter writer)
+        raise LoreError("INVALID", str(exc)) from exc
+    except OSError as exc:
+        raise LoreError("IO_ERROR", str(exc)) from exc

@@ -50,6 +50,10 @@ def handle(message: dict, root: str) -> dict | None:
     if "id" not in message:
         return None
     id_ = message["id"]
+    if message.get("jsonrpc") != "2.0" or isinstance(id_, bool) or not isinstance(id_, (str, int)) \
+            or not isinstance(message.get("method"), str):
+        return _error(id_ if isinstance(id_, (str, int)) and not isinstance(id_, bool) else None,
+                      -32600, "Invalid Request")
     method = message.get("method")
     params = message.get("params", {})
     if not isinstance(params, dict):
@@ -58,6 +62,8 @@ def handle(message: dict, root: str) -> dict | None:
     if not isinstance(meta, dict):
         return _error(id_, -32602, "Invalid params")
     modern = VERSION_KEY in meta
+    if modern and meta[VERSION_KEY] in SUPPORTED and "io.modelcontextprotocol/clientCapabilities" not in meta:
+        return _error(id_, -32602, "Invalid params: _meta needs io.modelcontextprotocol/clientCapabilities")
     if modern and meta[VERSION_KEY] not in SUPPORTED:
         return _error(id_, -32022, "Unsupported protocol version",
                       {"supported": list(SUPPORTED), "requested": meta[VERSION_KEY]})
@@ -109,6 +115,7 @@ def serve(root, inp=None, out=None) -> int:
         else:
             response = handle(message, root)
         if response is not None:
-            out.write((json.dumps(response, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8"))
+            # ASCII escapes keep lone surrogates and any other odd text valid on the wire
+            out.write((json.dumps(response, separators=(",", ":")) + "\n").encode("ascii"))
             out.flush()
     return 0

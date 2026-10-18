@@ -4,6 +4,8 @@ import hashlib
 import json
 import os
 import re
+import tempfile
+import threading
 import time
 
 from . import fm
@@ -11,8 +13,9 @@ from . import fm
 CONFIG = "lore.json"
 SKIP_DIRS = {".git", ".obsidian", "_TEMPLATES", "node_modules", "__pycache__"}
 RESERVED = {"id", "type", "canonical_name", "name", "aliases", "tags", "status"}
-KEY = re.compile(r"[a-z_][a-z0-9_]*\Z")
+KEY = re.compile(r"[a-z_]+\Z")   # keys we write: exactly what the saga regex reads
 LINK = re.compile(r"\s*(\[\[[^\]]+\]\])\s*(.*)\Z", re.S)   # "[[X]] +2h" -> ("[[X]]", "+2h")
+BAD_NAME = re.compile(r"[\[\]|#^/\\\x00-\x1f]")   # cannot appear inside a wikilink
 BAD_FILENAME = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 DEFAULT_SCHEMA = {
@@ -63,26 +66,64 @@ def sha256(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def atomic_write(path, text):
-    """Write via a temp file in the same folder, then replace; one retry for OneDrive locks."""
-    data = text.encode("utf-8")
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    tmp = f"{path}.{os.getpid()}.tmp"
+_WRITE_LOCK = threading.Lock()
+
+
+def file_sha(path):
     try:
-        with open(tmp, "wb") as fh:
+        with open(path, "rb") as fh:
+            return sha256(fh.read())
+    except FileNotFoundError:
+        return None
+
+
+def atomic_write(path, text, expect=None, create=False):
+    """Write via a unique temp file in the same folder, then swap it in.
+
+    expect: the sha256 the file must still have at the moment of the swap (checked
+    before every attempt). create: the file must not exist; never overwrites.
+    One retry after 0.5 s for OneDrive locks.
+    """
+    # ponytail: a per-process lock; separate processes can still race in the microseconds
+    # between the check and the swap. Use OS file locking if that ever matters.
+    data = text.encode("utf-8")
+    folder = os.path.dirname(path) or "."
+    try:
+        os.makedirs(folder, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(prefix=".lk-", suffix=".tmp", dir=folder)
+    except OSError as exc:
+        raise LoreError("IO_ERROR", f"could not write {path}: {exc}") from exc
+    try:
+        with os.fdopen(fd, "wb") as fh:
             fh.write(data)
         for attempt in (1, 2):
-            try:
-                os.replace(tmp, path)
-                return sha256(data)
-            except PermissionError:
-                if attempt == 2:
-                    raise
-                time.sleep(0.5)
+            with _WRITE_LOCK:
+                if expect is not None and file_sha(path) != expect:
+                    raise LoreError("CONFLICT", f"{path} changed during the write; retry", {"version": file_sha(path)})
+                try:
+                    if not create:
+                        os.replace(tmp, path)
+                    elif os.name == "nt":
+                        os.rename(tmp, path)          # Windows rename never overwrites
+                    else:
+                        os.link(tmp, path)            # fails if path exists
+                    return sha256(data)
+                except FileExistsError:
+                    raise LoreError("CONFLICT", f"file already exists: {path}")
+                except PermissionError:
+                    if attempt == 2:
+                        raise
+            time.sleep(0.5)
     except OSError as exc:
+        raise LoreError("IO_ERROR", f"could not write {path}: {exc}") from exc
+    finally:
         if os.path.exists(tmp):
             os.remove(tmp)
-        raise LoreError("IO_ERROR", f"could not write {path}: {exc}") from exc
+
+
+def inside(root, path):
+    root, path = os.path.realpath(root), os.path.realpath(path)
+    return path == root or path.startswith(root.rstrip(os.sep) + os.sep)
 
 
 def find_root(start="."):
@@ -173,7 +214,12 @@ class Project:
         skip = SKIP_DIRS | set(self.config.get("exclude", []))
         for base in self.config.get("paths", ["."]):
             top = os.path.normpath(os.path.join(self.root, base))
+            if not inside(self.root, top):
+                raise LoreError("INVALID", f"{CONFIG} path {base!r} is outside the project folder")
             for dirpath, dirnames, filenames in os.walk(top):
+                if not inside(self.root, dirpath):   # a junction or link pointing elsewhere
+                    dirnames[:] = []
+                    continue
                 dirnames[:] = sorted(d for d in dirnames if d not in skip and not d.startswith("."))
                 for name in sorted(filenames):
                     if name.endswith(".md") and not name.startswith("~$") and not name.endswith(".tmp"):
@@ -285,24 +331,32 @@ class Project:
         spec = self.schema["types"][type_]
         folder = spec.get("folder") or spec.get("plural") or type_
         base = self.config.get("paths", ["."])[0]
-        return os.path.normpath(os.path.join(self.root, base, folder, BAD_FILENAME.sub("-", name).strip(" .") + ".md"))
+        path = os.path.normpath(os.path.join(self.root, base, folder, BAD_FILENAME.sub("-", name).strip(" .") + ".md"))
+        if not inside(self.root, path):
+            raise LoreError("INVALID", f"type {type_!r} folder points outside the project folder")
+        return path
 
     def create(self, type_, name, fields=None, body=None):
         name = str(name).strip()
+        fields = clean_fields(fields or {})
         if type_ not in self.schema["types"]:
             raise LoreError("INVALID", f"unknown type {type_!r}; add it to {CONFIG} types")
-        if not name or "\n" in name:
-            raise LoreError("INVALID", "name must be a single non-empty line")
+        if not name or BAD_NAME.search(name):
+            raise LoreError("INVALID", "name must be one line without [ ] | # ^ / \\ (they break wikilinks)")
+        if set(fields) & {"id", "type", "canonical_name", "name"}:
+            raise LoreError("INVALID", "id, type and canonical_name are set by create, not by fields")
         if self.resolve(name):
             raise LoreError("CONFLICT", f"an item named {name!r} already exists: {self.resolve(name).path}")
         path = self.path_for(type_, name)
         folder = os.path.dirname(path)
         if os.path.isdir(folder) and os.path.basename(path).lower() in {n.lower() for n in os.listdir(folder)}:
             raise LoreError("CONFLICT", f"file already exists: {self.rel(path)}")
-        values = {"id": self.make_id(type_, name), "type": type_, "canonical_name": name}
-        values.update(clean_fields(fields or {}))
-        text = fm.update(f"\n# {name}\n" if body is None else body, set=values)
-        version = atomic_write(path, text)
+        base_id, n = self.make_id(type_, name), 1
+        while (base_id if n == 1 else f"{base_id}-{n}").lower() in self.by_id:
+            n += 1
+        values = {"id": base_id if n == 1 else f"{base_id}-{n}", "type": type_, "canonical_name": name, **fields}
+        text = fm.update("", set=values, body=f"\n# {name}\n" if body is None else str(body))
+        version = atomic_write(path, text, create=True)
         item = self.read(path)
         item.version = version
         return item
@@ -318,23 +372,24 @@ class Project:
         merged = False
         if version and version != current_version:
             front = fm.parse(text)
-            current = front.fields if front else {}
+            current = dict(front.fields) if front else {}
+            current["body"] = front.body if front else text
             expect = expect or {}
-            stale = [k for k in list(set) + unset if k not in expect or current.get(k, "") != (expect[k] or "")]
-            if body is not None and ("body" not in expect or (front.body if front else text) != expect["body"]):
-                stale.append("body")
+            keys = list(set) + unset + (["body"] if body is not None else [])
+            stale = [k for k in keys if k not in expect or blank(current.get(k)) != blank(expect[k])]
             if stale:
                 raise LoreError("CONFLICT", f"{item.path} changed since it was read: {', '.join(stale)}",
                                 {"version": current_version, "path": item.path,
-                                 "current": {k: current.get(k) for k in stale if k != "body"}})
+                                 "current": {k: current.get(k) for k in stale}})
             merged = True
         new = fm.update(text, set=set, unset=unset, body=body)
         if new == text:
             return current_version, merged
-        with open(path, "rb") as fh:  # ponytail: tiny race window between this check and replace
-            if sha256(fh.read()) != current_version:
-                raise LoreError("CONFLICT", f"{item.path} changed during the write; retry", {"path": item.path})
-        return atomic_write(path, new), merged
+        return atomic_write(path, new, expect=current_version), merged
+
+
+def blank(value):
+    return "" if value is None else value
 
 
 def clean_fields(fields):
@@ -344,8 +399,8 @@ def clean_fields(fields):
             raise LoreError("INVALID", f"bad key {key!r}: use lowercase letters, digits and _")
         if isinstance(value, (list, tuple)):
             out[key] = [str(v) for v in value]
-        elif isinstance(value, bool):
-            out[key] = "true" if value else "false"
         else:
             out[key] = "" if value is None else str(value)
+        if any("\n" in v or "\r" in v for v in (out[key] if isinstance(out[key], list) else [out[key]])):
+            raise LoreError("INVALID", f"{key}: values must be a single line")
     return out

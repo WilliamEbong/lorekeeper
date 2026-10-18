@@ -19,8 +19,12 @@ VERSIONS = ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"
 VERSION_KEY = "io.modelcontextprotocol/protocolVersion"
 
 
+def meta(version):
+    return {VERSION_KEY: version, "io.modelcontextprotocol/clientCapabilities": {}}
+
+
 class McpTests(unittest.TestCase):
-    def request(self, method, params=None, root=FIXTURE):
+    def request(self, method, params=None, root=FIXTURE):  # noqa: D401
         return mcp.handle({"jsonrpc": "2.0", "id": 1, "method": method,
                            "params": {} if params is None else params}, root)
 
@@ -59,7 +63,7 @@ class McpTests(unittest.TestCase):
             for method in ("initialize", "server/discover", "ping", "tools/list", "tools/call", "missing"):
                 for version in ("2099-01-01", None):
                     with self.subTest(method=method, version=version):
-                        self.assertEqual(self.request(method, {"_meta": {VERSION_KEY: version}}), {
+                        self.assertEqual(self.request(method, {"_meta": meta(version)}), {
                             "jsonrpc": "2.0", "id": 1, "error": {
                                 "code": -32022, "message": "Unsupported protocol version",
                                 "data": {"supported": VERSIONS, "requested": version}}})
@@ -74,7 +78,7 @@ class McpTests(unittest.TestCase):
             self.assertNotIn("resultType", legacy)
             for version in VERSIONS:
                 with self.subTest(method=method, version=version):
-                    modern = self.request(method, {**params, "_meta": {VERSION_KEY: version}})["result"]
+                    modern = self.request(method, {**params, "_meta": meta(version)})["result"]
                     self.assertEqual(modern, {**legacy, "resultType": "complete"})
 
     def test_tools_list(self):
@@ -156,31 +160,31 @@ class McpTests(unittest.TestCase):
         self.assertEqual(responses[2], {"jsonrpc": "2.0", "id": None,
                                         "error": {"code": -32700, "message": "Parse error"}})
         for line, response in zip(lines, responses):
-            self.assertEqual(line, json.dumps(response, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+            self.assertEqual(line, json.dumps(response, separators=(",", ":")).encode("ascii"))
 
     def test_serve_utf8_and_unterminated_last_line(self):
-        message = {"id": "é", "method": "tools/call", "params": {"name": "query"}}
+        message = {"jsonrpc": "2.0", "id": "é", "method": "tools/call", "params": {"name": "query"}}
         value = {"body": "café\nnext line"}
         out = io.BytesIO()
         with patch.object(ops, "run", return_value=value):
             self.assertEqual(mcp.serve(FIXTURE, io.BytesIO(json.dumps(message).encode("utf-8")), out), 0)
         self.assertEqual(len(out.getvalue().splitlines()), 1)
-        self.assertIn("café".encode("utf-8"), out.getvalue())
+        self.assertTrue(out.getvalue().isascii())   # non-ASCII travels as JSON escapes
         self.assertEqual(json.loads(out.getvalue())["result"]["structuredContent"], value)
 
     def test_invalid_messages_do_not_stop_stream(self):
         out = io.BytesIO()
-        self.assertEqual(mcp.serve(FIXTURE, io.BytesIO(b'\xff\n[]\n{"id":null,"method":"ping"}\n'), out), 0)
+        self.assertEqual(mcp.serve(FIXTURE, io.BytesIO(b'\xff\n[]\n{"jsonrpc":"2.0","id":null,"method":"ping"}\n'), out), 0)
         responses = [json.loads(line) for line in out.getvalue().splitlines()]
         self.assertEqual([r["error"]["code"] for r in responses[:2]], [-32700, -32600])
-        self.assertEqual(responses[2], {"jsonrpc": "2.0", "id": None, "result": {}})
+        self.assertEqual(responses[2]["error"]["code"], -32600)   # a null id is not a valid request id
         for params in ([], None, {"_meta": []}):
-            message = {"id": 0, "method": "ping", "params": params}
+            message = {"jsonrpc": "2.0", "id": 0, "method": "ping", "params": params}
             self.assertEqual(mcp.handle(message, FIXTURE)["error"]["code"], -32602)
 
     def test_handle_preserves_request(self):
-        message = {"id": "request", "method": "tools/call", "params": {
-            "name": "query", "arguments": {"type": "character"}, "_meta": {VERSION_KEY: VERSIONS[0]}}}
+        message = {"jsonrpc": "2.0", "id": "request", "method": "tools/call", "params": {
+            "name": "query", "arguments": {"type": "character"}, "_meta": meta(VERSIONS[0])}}
         before = copy.deepcopy(message)
         self.assertEqual(mcp.handle(message, FIXTURE)["id"], "request")
         self.assertEqual(message, before)

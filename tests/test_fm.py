@@ -41,8 +41,8 @@ class ValueTests(unittest.TestCase):
             '["", \'\']': ["", ""],
             '[""]': [""],
             "[,]": ["", ""],
-            '[a"b,c"d, e]': ['a"b,c"d', "e"],
-            "[a'b,c'd, e]": ["a'b,c'd", "e"],
+            '[a"b,c"d, e]': ['a"b', 'c"d', "e"],   # quotes only open a token
+            "[a'b,c'd, e]": ["a'b", "c'd", "e"],
             "[[[O'Brien, Jr.]], next]": ["[[O'Brien, Jr.]]", "next"],
         }
         for raw, expected in cases.items():

@@ -94,3 +94,19 @@ Append-only. Newest entries at the bottom. Each entry gives: date/time (UTC if k
 - I wrote store.py, ops.py, cli.py, the fixture world, and tests for store, CLI, rules, perf and sagas. Fixed one bug: an absent key now equals an expected empty value in a merge.
 - 48 tests green: the three saga Wikis round-trip byte-identically and load with no parser findings; 3,000 items load in under 1.5 s.
 - Decision: `.gitattributes` marks `tests/fixtures/**` as `-text` to keep the CRLF fixture intact.
+- Codex built `lorekeeper/mcp.py` (112 lines) + `tests/test_mcp.py` (15 tests, including the golden MCP-vs-CLI test). Stray check clean. I added one line: blank input lines are skipped.
+- **Converge 001** (followed SKILL.md by hand): FR-1..FR-17 and SC-1..SC-9 are met. The only open item is the `lore` console script, which is planned for 007. Outcome: converged, no tasks appended.
+- **ponytail-review 001:** cut 2 findings, net -5 lines (a dead bool branch in clean_fields; a one-caller `names()` helper). 63 tests green.
+- A Codex read-only adversarial review of 001 is running.
+- **Codex adversarial review of 001:** 16 findings, all fixed, with regression tests in `tests/test_review_001.py` (13 tests).
+  - Writes: unique `mkstemp` temp files; the version is rechecked under a lock before every swap, including the OneDrive retry; `create`/`init` never overwrite (Windows `os.rename`, POSIX `os.link`).
+  - Paths: scan and write paths are checked to stay inside the project folder.
+  - Links: `link` on a single-value role refuses to replace an existing link (CONFLICT); a generated link must resolve to its target; `unlink` works on broken links.
+  - List values: items containing quotes or brackets are quoted, and quotes only open a token.
+  - Create: names containing `[ ] | # ^ / \` are refused; fields cannot override id/type/canonical_name; ids are deduplicated with `-2` etc.; the body is passed through untouched.
+  - Merge: empty-list expectations merge correctly, and body conflicts return the current body.
+  - Errors: ValueError/OSError become LoreError INVALID/IO_ERROR at the ops boundary, and newlines in values are refused.
+  - Written keys match `[a-z_]+` (spec FR-2a added).
+  - MCP: the envelope is validated (`jsonrpc` "2.0", string/int id, method); modern requests need `clientCapabilities`; output is ASCII-escaped, so lone surrogates can't crash the server.
+- Note: Codex's sandbox blocks temp-file writes in read-only mode, so its in-review test run is not meaningful. Claude runs the suite.
+- **Feature 001 done:** 76 tests green.

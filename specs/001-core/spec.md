@@ -33,6 +33,7 @@ The format is deliberately the one the user's three saga Wikis already use, so a
   - anything else, which is kept verbatim but reported as `WARN UNSUPPORTED_FRONTMATTER <path>:<line>`
 
   Values are a scalar (bare, `"double"` or `'single'` quoted), an inline list `[a, "b", "[[X]]"]`, or empty.
+- **FR-2a Written keys.** Keys that Lorekeeper writes match `[a-z_]+`, which is what the saga regex reads. Reading still accepts digits.
 - **FR-3 Byte-stable round trip.** Parsing a file and writing it back with no changes reproduces the exact bytes, including line endings, comments, key order, quoting and spacing. An edit rewrites only the lines of the keys it changes:
   - new keys are appended before the closing `---`
   - a removed key's line is deleted
