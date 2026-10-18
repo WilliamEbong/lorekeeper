@@ -10,6 +10,7 @@ const worldName = meta('lore-name');
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const CATEGORIES = ['person', 'place', 'event', 'group', 'thing', 'narrative'];
 const LIST_KEYS = new Set(['tags', 'aliases']);
+const TIMING = new Set(['after', 'same_start', 'same_end', 'sf', 'starts_after_start', 'ends_after_end']);   // order, not relationship
 const DRAG_THRESHOLD = 6;   // screen pixels; a click with a small wobble never re-dates an item
 const TITLES = {
   BAD_ENCODING: 'File is not saved as UTF-8 text', BAD_FRONTMATTER: 'The fields at the top of a file can’t be read',
@@ -71,7 +72,7 @@ const isDateKey = (key) => graph.properties[key]?.format === 'date' || ['born', 
 const label = (key) => ({canonical_name: 'Name', name: 'Name', type: 'Type', id: 'ID'})[key]
   || graph.properties[key]?.label || graph.roles[key]?.label || words(key);
 // A link A -role-> B, seen from B: the role's stated inverse, else 'Sibling of' (B is A's sibling).
-const inverseLabel = (role) => graph.roles[role]?.inverse || (/ of$/i.test(label(role)) ? `${label(role)} (from)` : `${label(role)} of`);
+const inverseLabel = (role) => graph.roles[role]?.inverse || (/^\w+$/.test(label(role)) ? `${label(role)} of` : `${label(role)} (from)`);
 const startKey = (item) => ['born', 'date', 'start'].find(k => item.fields[k]) || (isPerson(item) ? 'born' : 'date');
 const endKey = (item) => ['died', 'end'].find(k => item.fields[k]) || (isPerson(item) ? 'died' : 'end');
 const nameKey = (item) => item.fields.canonical_name != null ? 'canonical_name' : 'name';
@@ -896,7 +897,7 @@ function enableRedate(g, item, c, at) {
       }
       let value = gregorian(Math.round(minuteAt(c.x(item.lo) + dx)), s.precision);
       if (edge === 'start') {
-        if (minuteOf(value) > minuteOf(e.from)) value = gregorian(minuteOf(e.from), s.precision);   // not after the end
+        if (minuteOf(value) > item.hi - 1) value = gregorian(item.hi - 1, s.precision);   // not after the end's last minute
         return {[startKey(item)]: value};
       }
       const field = {[startKey(item)]: value};
@@ -1069,7 +1070,7 @@ function relationships(view) {
   view.append(peopleFilter(view, 'Who is related to whom. Add relationships in the inspector under Add a connection.'));
   const related = (i) => ['person', 'group'].includes(typeInfo(i.type).category);
   const links = graph.links.map(l => [l, byPath.get(l.from_path), byPath.get(l.to_path)])
-    .filter(([l, a, b]) => l.resolved && a && b && a !== b && related(a) && related(b));
+    .filter(([l, a, b]) => l.resolved && a && b && a !== b && related(a) && related(b) && !TIMING.has(l.role));
   const cards = new Map(), own = new Set(links.map(([l, a, b]) => `${a.path}\0${l.role}\0${b.path}`));
   const put = (item, kind, other) => {
     if (!cards.has(item.path)) cards.set(item.path, new Map());
