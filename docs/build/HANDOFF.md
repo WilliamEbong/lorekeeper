@@ -15,7 +15,11 @@ Audiences: writers who draft with AI agents, novelists who don't use AI, and wor
 
 ## 2. Current state
 
-**Run 3 is done, on branch `feat/008-editor-ux`** (local commits only; not merged into `main`, not pushed). HEAD is the final docs commit after `d1d3468`. 240 tests pass (1 POSIX-only skip). `main` is still `adc9c41` and matches the private GitHub repo.
+**Run 3 and its follow-ups (3b) are done.**
+- Run 3 (feature 008) was merged into `main` and pushed to the private repo (`3faade4`).
+- The owner's follow-ups (feature 009) are merged into local `main` at the final docs commit, which is about seven commits ahead of `origin/main`. Pushing them waits for the owner's go-ahead.
+- 247 tests pass (1 POSIX-only skip).
+- The three sagas now vendor engine `2de4351`. Live HEADs: Realm `6ee4816`, Space `87db843`, Zombies `89095c4`. They were landed fast-forward only, after the probes matched the before-baseline.
 
 What the branch adds:
 - **Editor (feature 008, specs/008-editor-ux):** rebuilt for novelists.
@@ -37,6 +41,13 @@ What the branch adds:
   - Live-reload polling went from 0.7 s to 0.05 s at 3,000 files.
 - **Wuthering Heights sample (re-imported):** 2 FAIL and 2 WARN, all genuine. It reported 23 FAIL and 7 WARN before.
 
+Follow-ups in 009:
+- On the timeline, dragging either end of a bar changes just that date, and dragging the middle moves the whole item.
+- The Relationships tab is a real relationships view (people and groups), separate from the Ages grid.
+- BC dates finer than a year read `0044-03-15 BC` ("15 March 44 BC" in the editor).
+- `1800s` means a century.
+- Aeon import keeps nesting (`part_of`, `located_in`), keeps dated types' own names, and exports multitext cleanly.
+
 **In flight:** nothing.
 
 ## 3. Decision log (this run; earlier decisions are in SESSION-LOG and BUILD-NOTES)
@@ -51,6 +62,10 @@ What the branch adds:
 | 19 | An event dated exactly like a birth or death is not a DEAD/UNBORN finding | Birth and death events were flagged against the same person | settled |
 | 20 | `create()` keeps the index current; callers no longer re-index | Imports were quadratic | settled |
 | 21 | Aeon SS/FF import as unchecked roles | Lorekeeper's `same_start`/`same_end` mean "equal", which is wrong for Aeon | settled; checking them is on the Later list |
+| 22 | Relationships tab = actual relationships; Ages tab = the age grid | Owner: relationships should not be mixed with ages | settled (supersedes 15) |
+| 23 | Bar ends are drag handles (10 px, bars of 24 px or more with a written exact end); the middle moves the whole item | Owner request | settled (supersedes 17's single mode) |
+| 24 | "N00s" is a century; BC finer than a year is written `0044-03-15 BC` | How writers use it (the Realm notes say "the late 200s"); a wider interval never invents a FAIL | settled |
+| 25 | The sagas stay in warn mode; Space's chronology findings stay with the author | Fail mode would block the pipeline on canon decisions | settled |
 
 ## 4. Open questions (owner's call)
 
@@ -63,8 +78,8 @@ What the branch adds:
 ## 5. Next actions
 
 0. **Owner feature request (2026-10-18), not started:** a chapter-scoped story wiki that shows only what is known by a chosen chapter. It is AI-optional, and it builds on the saga's chapter wrap-up rather than replacing it. The full brief and its grounding are in BUILD-PLAN.md under "Feature requests from the owner". Start it with speckit-specify.
-1. Owner reviews the editor (`lore serve` in a world folder), then approves merging and pushing the branch. **← NEXT**
-2. Re-vendor the engine into the three sagas. They carry `eb20b30`; the branch changes check results: TWO_PLACES, END_BEFORE_START, AMBIGUOUS_NAME (cards are exempt) and `learns`. Use clones and `land.sh`, as in run 2, and compare saga reports before landing. The dates agent checked read-only that saga card dates and findings are unchanged.
+1. Owner approves pushing local `main` (the 009 follow-ups) to the private repo. **← NEXT**
+2. Then start the owner's chapter-scoped story wiki (item 0), with speckit-specify.
 3. Space chronology report: cards 051/052 (RAIL_REGRESSION) and four impossible SRD days (carried over).
 4. Apply the deferred saga keys in `chronology_deferred.md` as chapters freeze (carried over).
 

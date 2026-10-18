@@ -325,6 +325,12 @@ Paths are relative to each saga root and identical in all three repos.
 - [x] Audit fixes: interop; frontmatter and store; ops, CLI, MCP and server; dates and checks (four worktrees, merged)
 - [x] Large-world performance: spreadsheet paging and shared place list, capped Ages and Continuity, stamp polling 0.7 s to 0.05 s
 - [x] User guide, agent skill, Aeon notes and spec 006 updated; full suite 240 OK; two fresh-context reviews (engine, editor) and all their findings fixed; final handoff
+- [x] Run 3b (owner review, spec 009):
+  - drag handles for start, end and the whole block;
+  - a real Relationships view, separate from Ages;
+  - BC era dates, centuries, Aeon nesting, Aeon type names and multitext;
+  - a fresh review, with its findings fixed;
+  - the engine re-vendored into all three sagas (probes identical, landed fast-forward only).
 
 **Later (not built).** ~~BC dates finer than a year display as astronomical years~~; ~~"1800s" means the decade~~; ~~Aeon nesting is dropped on import~~; ~~dated Aeon types all become `event`~~; ~~Aeon multitext exports as JSON text~~ (all done in run 3b, spec 009); re-vendor the engine into the three sagas (run 3b).
 
@@ -351,7 +357,17 @@ Paths are relative to each saga root and identical in all three repos.
   
   The missing idea is a *story position* (the chapter a fact was established in, or revealed to the reader), which differs from the in-world date.
 
-**Questions to settle at specify time:**
+**Scope and answers the owner added the same day (2026-10-18, before any spec):**
+- It is a *progressive wiki*. Each type has an index page (Characters, Factions, Locations, and possibly items, objects and vehicles) listing only the entries named by the chosen chapter.
+- Clicking an entry opens its *progressive card*, which has its own chapter toggle.
+- Character cards hold the critical things as of that chapter: core beliefs, what they know, where they are, relationships, and the like.
+- Factions, locations, items, objects and vehicles get the same kind of progressive card.
+- **Unnamed characters.** A character seen but not yet named is listed under the description the reader has ("the hooded rider") from their first appearance, and switches to their name in the chapter that names them.
+- **Identity reveals.** In the progressive view, a secret identity is its own card until the reveal chapter; then the cards merge. A **complete** view, with everything, shows one card holding all of a character's identities.
+- **Things.** Only important individual items get cards, plus category pages for kinds of things (for example, "standard alien battle tank").
+- **Defaults accepted.** The cut-off follows reading order; facts are stamped per line, plus `first_appearance`; one chapter picker filters every editor view; hand-written worlds use the same stamps.
+
+**Questions that remain for the spec (some are answered above):**
 - Is the cut-off the reading order or the in-world chronology? (Flashbacks make these differ.)
 - Should the cut-off cover what the reader knows, what each character knows, or both?
 - How is a fact stamped with the chapter that establishes it: per field, per link, per page section?
