@@ -1,33 +1,24 @@
 # HANDOFF — Lorekeeper build
 
-**Last updated:** 2026-10-18, session 2 (after the usage reset), mid feature 004.
-**Current position:**
-- **001, 002:** done.
-- **003:** done except the last review fixes. Codex is fixing checks.py items 2, 3, 5, 6 and 7 from `scratchpad/review003.txt` (age-limit month counts, max_duration month extrema, two-places performance with a shared person, monotonic provisional extrema, month-lag equality). Claude's fixes for items 1, 4, 8, 9 and 10 are committed (`2f3ca19`). When Codex finishes: stray-check, run the tests, commit, tick 003 in BUILD-PLAN.
-- **004 (in the Realm CLONE only, `C:\Users\Owner\lk-scratch\sagas\Realm Saga`, uncommitted):**
-  - vendored `_system/vendor/lorekeeper/*.py` + `VERSION`
-  - `_system/scripts/chrono.py` (context / assemble / problems_for / gate / health_line / report)
-  - `state.py` + `saga.py` wired by `lk-scratch\snap\patch_saga.py`
-  - `_system/tests/test_chrono.py` (4 tests green)
-  - docs by `lk-scratch\snap\patch_docs.py` (skill `chronology.md`, README row, PIPELINE command row and §10 paragraph, template comment keys, START_HERE intent)
-  - parity lists updated, BUT `_system/vendor/lorekeeper/VERSION` was not yet added to `SHARED_FILES` (the replace missed)
-  - manifest key added by `lk-scratch\snap\add_manifest_key.py`; the Realm rules JSON is in SESSION-LOG
-- **Next 004 steps:**
-  1. Fix the VERSION entry in the parity list.
-  2. Run the full Realm clone suite.
-  3. Copy the shared files to the Space and Zombies clones; run patch_docs (START_HERE) and add the manifest keys there (Space: `[srd, gregorian]` calendars, `cards: {"rail": ["Primary allocation"]}`, monotonic RAIL_REGRESSION rule; Zombies: gregorian, `cards: {"date": ["Date/era"], "rail": ["Arc/thread"]}`).
-  4. Run all 3 suites plus parity in the clones.
-  5. Commit `system: lorekeeper chronology (warn mode)` in each clone with an explicit path allowlist.
-  6. Backfill with 3 parallel subagents (frontmatter only + agent_decisions.md), commit `wiki:`/`knowledge:`.
-  7. Run chrono-report ×3, commit `knowledge:`.
-  8. Then 005 editor; land 004 + 005 together.
+**Last updated:** 2026-10-18, session 2, features 004/005 in flight.
+**Done:** 001, 002, 003 (all reviewed and fixed). In the saga CLONES (`C:\Users\Owner\lk-scratch\sagas\{Realm Saga,Space saga,Zombies saga}`), `system: lorekeeper chronology (warn mode)` is committed (Realm 1bd7f16, Space a5799be, Zombies dd98943). All 3 clone suites and parity are green.
+**In flight at this writing:**
+1. Three general-purpose agents are backfilling Wiki chronology in the clones (brief: `lk-scratch\snap\backfill_brief.md`). Once they report:
+   - check each clone's `git diff --stat` (only `Wiki/**` and `_system/knowledge/agent_decisions.md` may change)
+   - run `saga.py chrono-report`
+   - commit the Wiki pages as `wiki: chronology keys backfilled (Lorekeeper)` and agent_decisions as `knowledge: chronology backfill decisions`
+   - after the final vendor update, commit `_system/knowledge/chronology_report.md` as `knowledge: chronology report`
+2. Codex job `task-mvd7sf2a-ixipvk` (waiter `bkaohkx47`) is building `lorekeeper/serve.py`, `editor.html/js/css`, `tests/test_serve.py` and the `serve` adapter in cli.py. Afterwards: stray-check, run the tests, verify the 005 SCs with the Playwright MCP, then the Codex review.
+**Then:**
+- 005 FR-8: `saga.py timeline` / `timeline-requests` in the clones (chrono gets `serve_project()` = `project()[0]`, with `requests_dir` = `_system/runtime/timeline_requests`); re-vendor; second `system:` commit in each clone.
+- LAND all three clones into the live repos back to back: probe the live state first; `git fetch <clone> main`; `merge --ff-only`; re-verify porcelain status and in-progress file hashes.
+- Then 006 (interop; ask once for Aeon access), 007 (pyproject, docs, `gh repo create --private`), close-out.
 **Key facts:**
-- The speckit skills ARE now invocable via the Skill tool.
+- The speckit skills are invocable now.
 - context7 is out of quota; use WebFetch.
-- Aeon computer-use was declined; ask again once, at 006.
-- Snapshots: `lk-scratch\snap\snap.sh`. Codex waiter: `snap\codexwait.sh <task>`.
-- Long heredocs break the Bash tool; write scripts to files.
-- Baselines: `docs/build/baselines/{probe,clone}-before/`, all green. Probes (full copies with the in-progress state) are at `lk-scratch\probe\*`.
+- Scripts are in `lk-scratch\snap\` (snap.sh, codexwait.sh, baseline.sh, patch_saga.py, patch_docs.py, add_manifest_key.py (use `@file` for JSON), commit_system.sh).
+- The `rm -rf "$VAR"` safety check blocks variable paths: use literal paths, or overwrite instead of deleting.
+- The perf load test can flake under heavy machine load (1.93 s seen); re-run when idle.
 **Read order for any new or resumed session:** this file → `BUILD-PLAN.md` (plan + checklist) → the tail of `SESSION-LOG.md`.
 
 ---
