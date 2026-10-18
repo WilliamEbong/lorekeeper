@@ -76,13 +76,13 @@ Write `2025-04-01..2025-04-10` when an event's date is somewhere in that range. 
 
 Keep sources with the date: `2025-04-02 (letter)` or `2025-04-02, outline note`. To mark a working assumption, use `2025-04-02 (provisional)` or the separate field `status: provisional`. Relevant continuity findings are then warnings, even if the assumed dates would otherwise prove a conflict. A provisional date still needs valid date syntax.
 
-`date_min` and `date_max` can narrow the possibilities or supply bounds when no start date is stated. Contradictory bounds are reported. An unparseable date stays in the file and produces a warning; Lorekeeper does not quietly replace it.
+`date_min` and `date_max` can narrow the possibilities of a stated date. Without a stated date, they date an item only when both are given; a lone bound leaves it undated. Contradictory bounds are reported. An unparseable date stays in the file and produces a warning; Lorekeeper does not quietly replace it.
 
 Gregorian dates work without configuration. Custom calendars need definitions in `lore.json`; arbitrary invented month names are not understood automatically. `lore convert "2025-04-02"` displays a date in the project's configured calendars. The `age` command returns possible year bounds alongside an age description. The Ages view shows the description, so check the underlying date precision before treating it as exact. For an immortal or other ageless character, add `max_age: none` to that person's frontmatter; birth and death consistency checks still apply.
 
 ## Read a continuity report
 
-Run `lore check` from your story folder. Each finding includes a code, an explanation and a file with a line number. **FAIL** means the data establishes a problem. **WARN** means a possible problem, unreadable or incomplete information, or a rule deliberately set to warn. A clean report says `0 FAIL, 0 WARN`. Checks never move dates or repair files for you.
+The editor's Continuity tab shows the same report. To run it in a terminal, enter `lore check` in your story folder (or any folder inside it). Each finding includes a code, an explanation and a file with a line number. **FAIL** means the data establishes a problem. **WARN** means a possible problem, unreadable or incomplete information, or a rule deliberately set to warn. A clean report says `0 FAIL, 0 WARN`. Checks never move dates or repair files for you.
 
 | Code | What to look at |
 | --- | --- |
@@ -96,16 +96,16 @@ Run `lore check` from your story folder. Each finding includes a code, an explan
 | `BROKEN_LINK` | A field links to a name that cannot be found. |
 | `ROLE_TYPE` | A link reaches the wrong kind of item, such as a location used as a participant. |
 | `DATE_UNPARSED` | A date, bound or duration cannot be understood, or bounds contradict the stated date. |
-| `END_BEFORE_START` | An item ends before it starts, or a person dies before they are born. FAIL when the dates prove it, WARN when uncertain dates allow it. |
+| `END_BEFORE_START` | A written end (`end` or `died`) comes before the start. FAIL when even the latest possible end is before the earliest possible start; WARN when the end may begin earlier, such as an end of `2020-05` for a start of `2020-05-10`. Ends worked out from a `duration` are not checked. |
 | `DEPENDENCY_UNDATED` | A timing relationship lacks a date needed for comparison. |
 | `DEPENDENCY` | A timing relationship is violated or uncertain, or its lag cannot be read. |
 | `DEAD_PARTICIPANT` | A person is involved after their death. |
 | `UNBORN_PARTICIPANT` | A person's involvement ends before their birth. |
 | `AGE_LIMIT` | A participant exceeds the allowed age: 130 years by default, adjustable per project or person. |
 | `PARENT_AGE` | A parent is younger than the minimum at the child's birth: 12 years by default. |
-| `TWO_PLACES` | A person has overlapping appearances in different places. A place nested inside another via `located_in` is compatible with it. Broad dates alone do not always establish a collision. |
+| `TWO_PLACES` | A person has overlapping appearances in different places; the message names both places. A place nested inside another via `located_in` is compatible with it. Back-to-back scenes (one ends as the next begins) do not clash. Broad dates alone do not always establish a collision. |
 | `ORDER_REGRESSION` | Dates move backwards through a configured numeric order. Series uses this for books. |
-| `MAX_DURATION` | An item may exceed a configured maximum duration. |
+| `MAX_DURATION` | An item may exceed a configured maximum duration. Lasting exactly the maximum is allowed. |
 | `GAP` | The time between linked items does not meet a configured exact, minimum or maximum gap. |
 | `STORY_ORDER` | The `narrative.md` outline definitely moves backwards in time. This is a warning, since flashbacks can be intentional. |
 
@@ -137,7 +137,7 @@ Markdown export produces a timeline table followed by item fields and prose. It 
 
 ## Work alongside Obsidian
 
-Open the story folder as an Obsidian vault. The Markdown files, flat properties and quoted wikilinks are designed to be usable there. Keep relationship links in frontmatter when you want Lorekeeper to check them. Ordinary prose links can point to any note, including the narrative outline.
+Open the story folder as an Obsidian vault. The Markdown files, flat properties and quoted wikilinks are designed to be usable there. Lists that Obsidian's Properties panel writes one item per line are read too; when Lorekeeper changes such a field, it rewrites it as a one-line list. A field Lorekeeper cannot read is left exactly as it is, reported as a warning, and refused for editing until you fix it by hand. Keep relationship links in frontmatter when you want Lorekeeper to check them. Ordinary prose links can point to any note, including the narrative outline.
 
 Lorekeeper skips `.obsidian`, hidden folders and `_TEMPLATES`. It normally scans Markdown throughout the story folder; `paths` and `exclude` in `lore.json` can narrow that scope. Keep unrelated manuscripts outside the folder or outside the configured scan paths. Save changes in Obsidian and the browser will pick them up. Avoid editing the same field in both places at once; browser conflict messages protect pending edits.
 

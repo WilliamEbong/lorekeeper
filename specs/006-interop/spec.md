@@ -18,7 +18,7 @@ Writers come to Lorekeeper with existing Aeon Timeline files and spreadsheets, a
 - **FR-2 Import op** `import FILE [--into DIR]`. Converts an `.aeon` or `.csv` into the current project as Lorekeeper items.
   - **Types and roles.** Aeon types map to Lorekeeper types by category: PERSON→character, LOCATION→location, and event-like types (`canHaveDate`)→event. Other types keep a slugged form of their own label, and missing types/roles are added to `lore.json`.
   - **Relationships.** Each becomes a role link on the subject.
-  - **Dependencies.** FS→`after`, SS→`same_start`, FF→`same_end`, SF→`sf`.
+  - **Dependencies.** On the successor (Aeon's object), pointing at the predecessor (the subject): FS→`after`, SS→`starts_after_start`, FF→`ends_after_end`, SF→`sf`. Amended 2026-10-18: the first version put them on the subject and mapped SS/FF to the equality roles.
   - **Dates.** Written at their Aeon precision.
   - **Summary and body.** The summary becomes the body.
   - **Narrative.** Its order is written to `narrative.md`.

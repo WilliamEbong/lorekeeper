@@ -64,7 +64,7 @@ All examples below assume an initialized novel template unless stated otherwise.
 | `export` | `format`, `out` | none | `lore export md reading-copy.md` |
 | `check` | none | none | `lore check --json` |
 
-Global CLI options are `--root <project>`, `--json`, `--version` and help. `serve` and `mcp` are CLI adapters, not operations or MCP tools. Start the editor with `lore serve --root <project>`, optionally `--port 8765` or `--saga`; start MCP with `lore mcp --root <project>`. The editor prints its loopback URL; it does not automatically open a browser. CLI check exits 1 on any FAIL, 0 otherwise; operational errors exit 2. A `--json` operational error is printed as JSON on stdout and also described on stderr.
+Global CLI options are `--root <project>`, `--json`, `--version` and help. `--root` may name the project folder or any folder inside it; with no `lore.json` there or above, the command stops with NOT_FOUND (exit 2), and `mcp` and `serve` refuse to start. Every face checks parameter types the same way: a wrong type is INVALID, MCP `arguments` that are not an object get JSON-RPC -32602, and an unexpected server failure returns HTTP 500 INTERNAL. Without `--json`, `timeline`, `age`, `when`, `where` and `knows` print plain sentences; use `--json` for data. `serve` and `mcp` are CLI adapters, not operations or MCP tools. Start the editor with `lore serve --root <project>`, optionally `--port 8765` or `--saga`; start MCP with `lore mcp --root <project>`. The editor prints its loopback URL; it does not automatically open a browser. CLI check exits 1 on any FAIL, 0 otherwise; operational errors exit 2. A `--json` operational error is printed as JSON on stdout and also described on stderr.
 
 ## Safe mutation details
 
@@ -86,7 +86,7 @@ For example, after reading `show`, an MCP call can be:
 
 To remove a field, use `unset` and include its old value in `expect`. Replacing `body` while supplying `version` always requires `expect.body`, even when the version is current. Use MCP for multiline bodies so shell quoting cannot alter them. CLI supports `--body "<new body>" --expect "body=<old body>"` with the actual text.
 
-`link` and `unlink` accept `version` but not `expect`; a stale version is refused, so reread before retrying. Linking a role declared `single` refuses to replace an existing target. Unlink it explicitly first. Broken links can also be unlinked by their written target name. Always use the latest returned version for the next mutation.
+`link` and `unlink` accept `version` but not `expect`; a stale version is refused, so reread before retrying. Linking a role declared `single` refuses to replace an existing target. Unlink it explicitly first. Broken links can also be unlinked by their written target name, and a plain-text (unbracketed) value is unlinked by its text. Always use the latest returned version for the next mutation.
 
 `create` supplies `id`, `type` and `canonical_name`; do not override them through `field`. Names cannot contain brackets, pipe, hash, caret, slash, backslash or control characters. `init` is create-only, with `novel`, `series` and `campaign` as the optional templates. It does not apply templates to existing projects. Import skips existing names instead of replacing them; inspect the returned warnings. Export accepts `aeon`, `csv` or `md` and replaces its output file. There is no delete or automatic request-application operation.
 

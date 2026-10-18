@@ -113,12 +113,12 @@ Disabled types, properties and references are deleted by the v17 step. The other
 
 ## 4. Data
 - **`itemsById[id]`:** `{id, type, label, summary, color, tags{}, propertyValues{}, links{}, attachments{}, image, displayId, internalId, narrativeLabel?}`.
-- **`itemDatesById[id]`:** `{startDate, endDate, duration, ongoing, isDateLocked, preferred*, latestStartDate, earliestEndDate, preferredPrecision}`.
+- **`itemDatesById[id]`:** `{startDate, endDate, duration, ongoing, isDateLocked, preferred*, latestStartDate, earliestEndDate, preferredPrecision}`. A point item or a living person stores `endDate` equal to `startDate` with zero duration: that means no end, not a death.
   - Each date is `{era, year, month, day, hour, minute, second, timestamp, weekday, precision}`.
   - **Month and day are 1-based** (verified: 1,006 dates).
   - `duration` is `{years, months, weeks, days, hours, minutes, seconds}`.
 - **`relationshipsById[id]`:** `{id, subject, reference, object}`, i.e. "subject *role* object".
-- **`dependenciesById[id]`:** `{id, subject, object, dependencyType}`, with type FS, SS, FF or SF.
+- **`dependenciesById[id]`:** `{id, subject, object, dependencyType}`, with type FS, SS, FF or SF. The subject is the predecessor: for FS, the object cannot start until the subject finishes (all 37 template dependencies agree). SS and FF mean the object starts (or finishes) no earlier than the subject, not at the same moment. Lorekeeper puts `after` (FS), `starts_after_start` (SS), `ends_after_end` (FF) or `sf` on the object, pointing at the subject.
 - **`dateConstraintsById[id]`:** `{constraintType: Relative|Date|DatePart, subject, subjectTarget: Start|End, object, objectTarget, comparison: Before|After|Equal, date, offset, partPrecision, partValue}`.
 - **`narrative.sacOrderById`:** the narrative tree, `{id: {super, childOrder{childId: rank}}}`.
 - **`sequenceOrder`:** chronological tie-break order.
