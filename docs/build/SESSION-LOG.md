@@ -86,3 +86,11 @@ Append-only. Newest entries at the bottom. Each entry gives: date/time (UTC if k
 - Finding: month and day are 1-based. AD timestamps = proleptic Gregorian seconds since 0001-01-01 (901/901 exact). BC dates are +1 day versus proleptic (105/105, all 1 January).
 - Wrote `docs/research/AEON-SPEC.md` (clean-room, our words).
 - Plan text: "17 templates" corrected to "19 bundled template files".
+
+### Feature 001 core: specify / plan / tasks / implement (2026-10-18)
+- Decision: the feature folder is `specs/001-core` (the lean speckit-specify asks for one; chosen autonomously).
+- Decision: context7 hit its monthly quota, so the MCP spec was checked with WebFetch on modelcontextprotocol.io. The current revision is 2026-07-28 ("modern": stateless, per-request `_meta`, `server/discover`, error -32022). Legacy (`initialize`) covers ≤2025-11-25. Lorekeeper's server is dual-era.
+- Codex built `lorekeeper/fm.py` + `tests/test_fm.py` (20 tests). It asked one clarifying question first (body boundary), which I answered: the body excludes the closing delimiter's newline. Stray-change check: only expected Lorekeeper files changed; the sagas were untouched.
+- I wrote store.py, ops.py, cli.py, the fixture world, and tests for store, CLI, rules, perf and sagas. Fixed one bug: an absent key now equals an expected empty value in a merge.
+- 48 tests green: the three saga Wikis round-trip byte-identically and load with no parser findings; 3,000 items load in under 1.5 s.
+- Decision: `.gitattributes` marks `tests/fixtures/**` as `-text` to keep the CRLF fixture intact.
