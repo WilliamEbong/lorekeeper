@@ -9,8 +9,9 @@ import shutil
 import struct
 import tempfile
 import unittest
+from unittest import mock
 
-from lorekeeper import dates, interop, store
+from lorekeeper import checks, dates, interop, store
 from lorekeeper.timeinfo import item_dates
 
 FIXTURE = Path(__file__).parent / "fixtures" / "world"
@@ -124,6 +125,11 @@ class InteropTests(unittest.TestCase):
                 for ident, record in raw["itemDatesById"].items():
                     for source, dest in (("startDate", "start"), ("endDate", "end")):
                         if record.get(source):
+                            if dest == "end" and by_id[ident]["end"] is None:
+                                # A zero-duration end (a point, or a living person) is dropped.
+                                self.assertEqual(interop._date_text(record[source], result["calendar"]),
+                                                 by_id[ident]["start"])
+                                continue
                             self.assertIsNotNone(dates.parse(by_id[ident][dest], self.project.calendars))
 
     def test_sc2_aeon_roundtrip_and_import(self):
@@ -154,6 +160,8 @@ class InteropTests(unittest.TestCase):
             self.assertEqual(item["summary"], original.body)
             self.assertEqual(item["tags"], original.fields.get("tags", []))
             start, end, _ = item_dates(self.project, original)
+            if end == start:
+                end = None   # a point's derived end is exported as end == start, which reads back as no end
             for actual, expected in ((item["start"], start), (item["end"], end)):
                 if expected is None:
                     self.assertIsNone(actual)
@@ -164,11 +172,12 @@ class InteropTests(unittest.TestCase):
         roles = {key: spec["label"] for key, spec in result["roles"].items()}
         actual_links = {(names[r["subject"]], roles[r["role"]], names[r["object"]]) for r in result["relationships"]}
         expected_links = {(item.name, role, other.name) for item in self.project.items
-                          for role, links in self.project.links(item).items() if role not in interop.DEPENDENCIES.values()
+                          for role, links in self.project.links(item).items() if role not in interop.DEPENDENCY_KINDS
                           for _, other, _ in links if other}
         self.assertEqual(actual_links, expected_links)
+        # Aeon's dependency subject is the predecessor: the flood comes first.
         self.assertEqual({(names[d["subject"]], names[d["object"]], d["kind"]) for d in result["dependencies"]},
-                         {("Crossing Harrow Pass", "The flood at Saltmarsh", kind) for kind in interop.DEPENDENCIES})
+                         {("The flood at Saltmarsh", "Crossing Harrow Pass", kind) for kind in interop.DEPENDENCIES})
         self.assertEqual([names[key] for key in result["narrative"]], ["Crossing Harrow Pass", "The flood at Saltmarsh"])
         target = self.empty()
         counts = interop.import_into(target, result)
@@ -329,15 +338,161 @@ class InteropTests(unittest.TestCase):
                     self.read_document(doc)
                 self.assertEqual(caught.exception.code, "INVALID")
 
-    def test_import_duplicate_names_and_no_existing_subject_updates(self):
-        result = self.read_document(sample())
-        duplicate = copy.deepcopy(result["items"][0])
-        duplicate["id"] = "duplicate"
-        result["items"].append(duplicate)
+    def test_import_duplicate_names_are_suffixed_and_existing_names_skipped(self):
+        doc = sample()
+        data = doc["core"]["data"]
+        data["itemsById"]["d"] = {**copy.deepcopy(data["itemsById"]["c"]), "id": "d"}   # a second "Third"
+        doc["core"]["definitions"]["references"]["byId"] = {"r": {"label": "See also", "types": {}}}
+        data["relationshipsById"] = {"1": {"subject": "a", "reference": "r", "object": "d"},
+                                     "2": {"subject": "b", "reference": "r", "object": "c"}}
+        result = self.read_document(doc)
         target = self.empty()
         counts = interop.import_into(target, result)
-        self.assertEqual((counts["created"], counts["skipped"]), (3, 1))
-        self.assertEqual(len(store.Project(target.root).items), 3)
+        self.assertEqual((counts["created"], counts["skipped"]), (4, 0))
+        loaded = store.Project(target.root)
+        self.assertEqual(loaded.find("First").fields["see_also"], ["[[Third (2)]]"])
+        self.assertEqual(loaded.find("Second").fields["see_also"], ["[[Third]]"])
+        # Names that already exist in the project are skipped, and their files stay untouched.
+        before = {p: p.read_bytes() for p in Path(target.root).rglob("*") if p.is_file()}
+        again = interop.import_into(loaded, result)
+        self.assertEqual((again["created"], again["skipped"]), (0, 4))
+        self.assertEqual(before, {p: p.read_bytes() for p in Path(target.root).rglob("*") if p.is_file()})
+
+    def test_zero_duration_end_is_not_a_death(self):
+        doc = sample()
+        defs, data = doc["core"]["definitions"], doc["core"]["data"]
+        defs["types"]["byId"]["person"] = {"label": "Person", "category": "PERSON", "canHaveDate": True}
+        data["itemsById"]["b"]["type"] = "person"
+        born = {"era": 1, "year": 1771, "month": 5, "day": 1, "precision": 5}
+        data["itemDatesById"]["a"]["endDate"] = dict(data["itemDatesById"]["a"]["startDate"])
+        data["itemDatesById"]["b"] = {"startDate": born, "endDate": dict(born)}
+        data["itemDatesById"]["c"] = {"startDate": born, "endDate": {**born, "day": 2}}
+        result = self.read_document(doc)
+        ends = {item["name"]: item["end"] for item in result["items"]}
+        self.assertEqual(ends, {"First": None, "Second": None, "Third": "1771-05-02"})
+        target = self.empty()
+        interop.import_into(target, result)
+        loaded = store.Project(target.root)
+        self.assertEqual(loaded.find("Second").fields["born"], "1771-05-01")
+        self.assertNotIn("died", loaded.find("Second").fields)
+        self.assertNotIn("end", loaded.find("First").fields)
+        self.assertEqual(loaded.find("Third").fields["end"], "1771-05-02")
+
+    def test_dependencies_put_the_successor_after_the_predecessor(self):
+        doc = sample()
+        data = doc["core"]["data"]
+        day = lambda n: {"era": 1, "year": 2000, "month": 1, "day": n, "precision": 5}
+        data["itemDatesById"] = {"a": {"startDate": day(1), "endDate": day(3)},
+                                 "b": {"startDate": day(2), "endDate": day(5)},
+                                 "c": {"startDate": day(6), "endDate": day(7)}}
+        # Aeon's subject is the predecessor: Second finishes before Third starts (FS);
+        # Second starts and ends no earlier than First (SS, FF), but not at the same moment.
+        data["dependenciesById"] = {"fs": {"subject": "b", "object": "c", "dependencyType": "FS"},
+                                    "ss": {"subject": "a", "object": "b", "dependencyType": "SS"},
+                                    "ff": {"subject": "a", "object": "b", "dependencyType": "FF"}}
+        target = self.empty()
+        self.assertEqual(interop.import_into(target, self.read_document(doc))["warnings"], [])
+        loaded = store.Project(target.root)
+        self.assertEqual(loaded.find("Third").fields["after"], ["[[Second]]"])
+        second = loaded.find("Second").fields
+        self.assertNotIn("after", second)
+        self.assertEqual((second["starts_after_start"], second["ends_after_end"]), (["[[First]]"], ["[[First]]"]))
+        self.assertNotIn("same_start", second)
+        self.assertTrue(loaded.config["roles"]["starts_after_start"]["label"])
+        self.assertTrue(loaded.config["roles"]["ends_after_end"]["label"])
+        self.assertEqual([f for f in checks.run(loaded) + loaded.findings() if f["code"].startswith("DEPENDENCY")], [])
+        path = self.root / "planned.aeon"
+        interop.write_aeon(loaded, path)
+        back = interop.read_aeon(path)
+        names = {item["id"]: item["name"] for item in back["items"]}
+        self.assertEqual({(names[d["subject"]], names[d["object"]], d["kind"]) for d in back["dependencies"]},
+                         {("Second", "Third", "FS"), ("First", "Second", "SS"), ("First", "Second", "FF")})
+        self.assertEqual(back["relationships"], [])
+
+    def test_list_properties_import_option_labels(self):
+        doc = sample()
+        doc["core"]["definitions"]["properties"]["byId"] = {"g": {"label": "Gender", "format": "list", "allowed": {
+            "opt1": {"id": "opt1", "label": "Male"}, "opt2": {"id": "opt2", "label": "Female"}}}}
+        doc["core"]["data"]["itemsById"]["a"]["propertyValues"] = {"g": "opt2"}
+        result = self.read_document(doc)
+        self.assertEqual(next(i for i in result["items"] if i["id"] == "a")["fields"], {"g": "Female"})
+        target = self.empty()
+        interop.import_into(target, result)
+        self.assertEqual(store.Project(target.root).find("First").fields["gender"], "Female")
+
+    def test_unlinkable_name_characters_are_replaced(self):
+        doc = sample()
+        doc["core"]["data"]["itemsById"]["b"]["label"] = "Modern/International Design"
+        target = self.empty()
+        counts = interop.import_into(target, self.read_document(doc))
+        self.assertEqual(counts["created"], 3)
+        self.assertTrue(any("Modern/International Design" in w and "Modern-International Design" in w
+                            for w in counts["warnings"]))
+        loaded = store.Project(target.root)
+        self.assertEqual(loaded.find("Modern-International Design").type, "event")
+        self.assertIn("[[Modern-International Design]]", Path(target.root, "narrative.md").read_text(encoding="utf-8"))
+
+    def test_import_indexes_the_project_once(self):
+        doc = sample()
+        items = doc["core"]["data"]["itemsById"]
+        for n in range(30):
+            items[f"x{n}"] = {"id": f"x{n}", "type": "ev", "label": f"Extra {n}", "tags": {}, "propertyValues": {}}
+        result = self.read_document(doc)
+        target = self.empty()
+        original = store.Project._index
+        with mock.patch.object(store.Project, "_index", autospec=True, side_effect=original) as index:
+            self.assertEqual(interop.import_into(target, result)["created"], 33)
+        self.assertLessEqual(index.call_count, 3)   # not once per created item
+
+    def test_csv_types_match_the_schema_case_insensitively(self):
+        path = self.root / "case.csv"
+        store.atomic_write(path, "label,type,startDate,endDate\r\nAda,Character,1815,1852\r\n")
+        target = self.empty()
+        interop.import_into(target, interop.read_csv(path))
+        loaded = store.Project(target.root)
+        ada = loaded.find("Ada")
+        self.assertEqual(ada.type, "character")
+        self.assertEqual((ada.fields["born"], ada.fields["died"]), ("1815", "1852"))
+        self.assertNotIn("Character", loaded.config.get("types", {}))
+
+    def test_aeon_role_on_builtin_key_adds_its_target_types(self):
+        doc = sample()
+        defs, data = doc["core"]["definitions"], doc["core"]["data"]
+        defs["types"]["byId"]["team"] = {"label": "Team", "canHaveDate": False}
+        data["itemsById"]["c"]["type"] = "team"
+        defs["references"]["byId"] = {"m": {"label": "Member Of", "types": {"team": True}}}
+        data["relationshipsById"] = {"r": {"subject": "a", "reference": "m", "object": "c"}}
+        target = self.empty()
+        interop.import_into(target, self.read_document(doc))
+        loaded = store.Project(target.root)
+        self.assertEqual(loaded.schema["roles"]["member_of"]["to"], ["organization", "team"])
+        self.assertEqual(loaded.schema["roles"]["member_of"]["label"], "Member of")
+        self.assertEqual([f for f in loaded.findings() if f["code"] == "ROLE_TYPE"], [])
+
+    def test_file_name_collisions_are_planned_before_any_write(self):
+        doc = sample()
+        items = doc["core"]["data"]["itemsById"]
+        for key, label in (("a", "Mr."), ("b", "Mr"), ("c", "CON")):
+            items[key]["label"] = label
+        items["d"] = {"id": "d", "type": "ev", "label": "Stray", "tags": {}, "propertyValues": {}}
+        target = self.empty()
+        store.atomic_write(Path(target.root, "Events", "stray.md"), "not an item\n")
+        counts = interop.import_into(target, self.read_document(doc))
+        self.assertEqual(counts["created"], 4)
+        loaded = store.Project(target.root)
+        # "Mr" is imported first; "Mr." would also be stored as Mr.md, and CON.md is a Windows device.
+        self.assertEqual({item.name for item in loaded.items}, {"Mr", "Mr. (2)", "CON (2)", "Stray (2)"})
+        self.assertEqual(len({item.path.lower() for item in loaded.items}), 4)
+        self.assertEqual(Path(target.root, "Events", "stray.md").read_text(encoding="utf-8"), "not an item\n")
+        self.assertEqual(interop._suffixed("Con.Air", 2), "Con (2).Air")   # Con.Air.md is also the CON device
+        # A destination that cannot be written is refused before lore.json or any item changes.
+        target = self.empty("refused", config={"types": {"event": {"label": "Event", "folder": "../outside"}}})
+        doc["core"]["definitions"]["types"]["byId"]["other"] = {"label": "Plot Thread", "canHaveDate": False}
+        items["d"]["type"] = "other"
+        before = {p: p.read_bytes() for p in Path(target.root).rglob("*") if p.is_file()}
+        with self.assertRaises(store.LoreError):
+            interop.import_into(target, self.read_document(doc))
+        self.assertEqual(before, {p: p.read_bytes() for p in Path(target.root).rglob("*") if p.is_file()})
 
     def test_import_refuses_outside_destination_before_writes(self):
         target = self.empty()

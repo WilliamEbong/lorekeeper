@@ -15,7 +15,19 @@ from . import dates, fm, store
 from .store import LoreError
 from .timeinfo import calendar_of, item_dates
 
-DEPENDENCIES = {"FS": "after", "SS": "same_start", "FF": "same_end", "SF": "sf"}
+# Aeon's dependency subject is the predecessor, so the successor (Aeon's object) carries
+# the role: FS imports as `after: [[predecessor]]`. SS/FF mean "starts/ends no earlier
+# than", not the equal dates that same_start/same_end check.
+DEPENDENCIES = {"FS": "after", "SS": "starts_after_start", "FF": "ends_after_end", "SF": "sf"}
+# Aeon has no "equal" dependency: Lorekeeper's stricter same_start/same_end export as SS/FF.
+DEPENDENCY_KINDS = {**{role: kind for kind, role in DEPENDENCIES.items()}, "same_start": "SS", "same_end": "FF"}
+# Declared in lore.json when an import uses them; checks.py does not check them yet.
+DEPENDENCY_ROLES = {
+    "starts_after_start": {"label": "Starts after start of (start-to-start)", "inverse": "Starts before start of", "to": []},
+    "ends_after_end": {"label": "Ends after end of (finish-to-finish)", "inverse": "Ends before end of", "to": []}}
+# Windows opens these as devices, even with an extension ("Con.Air.md").
+WINDOWS_DEVICES = {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"} | {
+    port + n for port in ("COM", "LPT") for n in "0123456789\u00b9\u00b2\u00b3"}
 CSV_COLUMNS = ["label", "type", "startDate", "endDate", "summary", "tags", "displayId"]
 GREGORIAN = dates.Calendar({})
 
@@ -140,6 +152,14 @@ def _date_text(value, calendar):
     return GREGORIAN.format(axis, unit)
 
 
+def _option(prop, value):
+    """List properties store an option id; import that option's label (unknown ids stay as they are)."""
+    if not isinstance(prop, dict) or prop.get("format") != "list" or not isinstance(value, str):
+        return value
+    option = (prop.get("allowed") or {}).get(value)
+    return option.get("label", value) if isinstance(option, dict) else value
+
+
 def read_aeon(path):
     """Read either container version and normalize v14/v27 core records."""
     try:
@@ -179,12 +199,14 @@ def read_aeon(path):
                 continue
             item = items[key]
             times = data.get("itemDatesById", {}).get(key, {})
+            start, end = (_date_text(times.get(part), calendar) for part in ("startDate", "endDate"))
             result["items"].append({"id": key, "type": item["type"], "name": item["label"],
                                     "summary": item.get("summary", ""),
                                     "tags": [data.get("tags", {}).get(tag, tag) for tag in (item.get("tags") or [])],
-                                    "fields": item.get("propertyValues") or {},
-                                    "start": _date_text(times.get("startDate"), calendar),
-                                    "end": _date_text(times.get("endDate"), calendar)})
+                                    "fields": {pid: _option(result["properties"].get(pid), value)
+                                               for pid, value in (item.get("propertyValues") or {}).items()},
+                                    # Aeon stores a point, or a living person, with end == start: no end, no death.
+                                    "start": start, "end": None if end == start else end})
         result["relationships"] = [{"subject": r["subject"], "role": r["reference"], "object": r["object"]}
                                    for r in data.get("relationshipsById", {}).values()]
         result["dependencies"] = [{"subject": r["subject"], "object": r["object"], "kind": r["dependencyType"]}
@@ -257,7 +279,7 @@ def write_aeon(project, path):
     schema = project.schema
     ids = {id(item): _token() for item in project.items}
     type_ids = {key: _token() for key in schema["types"]}
-    role_ids = {key: _token() for key in schema["roles"] if key not in DEPENDENCIES.values()}
+    role_ids = {key: _token() for key in schema["roles"] if key not in DEPENDENCY_KINDS}
     prop_ids = {key: _token() for key in schema["properties"]}
     tag_ids = {}
     chapter_label, scene_label = _token(), _token()
@@ -351,8 +373,9 @@ def write_aeon(project, path):
                     continue
                 rid = _token()
                 record = {"id": rid, "subject": ident, "object": ids[id(other)]}
-                if role in DEPENDENCIES.values():
-                    record["dependencyType"] = next(k for k, v in DEPENDENCIES.items() if v == role)
+                if role in DEPENDENCY_KINDS:
+                    # This item is the successor; Aeon's subject is the predecessor.
+                    record.update(subject=ids[id(other)], object=ident, dependencyType=DEPENDENCY_KINDS[role])
                     data["dependenciesById"][rid] = record
                 elif role in role_ids:
                     record["reference"] = role_ids[role]
@@ -399,6 +422,14 @@ def _field(value):
     return json.dumps(text, ensure_ascii=False) if "\n" in text or "\r" in text else text
 
 
+def _suffixed(base, n):
+    """'Name (n)'. Windows reads "Con.Air.md" as the CON device, so a device stem takes the suffix."""
+    if n == 1:
+        return base
+    head, dot, tail = base.partition(".")
+    return f"{head} ({n}){dot}{tail}" if head.rstrip(" ").upper() in WINDOWS_DEVICES else f"{base} ({n})"
+
+
 def import_into(project, data, into=None):
     """Create new items only; skipped subjects and their existing files remain untouched.
 
@@ -413,7 +444,9 @@ def import_into(project, data, into=None):
     warnings, mapped_types, mapped_roles, mapped_props = [], {}, {}, {}
     csv_source = data.get("calendar") is None
     for key, spec in data.get("types", {}).items():
-        mapped = key if csv_source else {"PERSON": "character", "LOCATION": "location"}.get(spec.get("category"))
+        # A CSV type matches the schema case-insensitively: "Character" is character.
+        mapped = (next((t for t in (key, _key(key)) if t in schema["types"]), key) if csv_source
+                  else {"PERSON": "character", "LOCATION": "location"}.get(spec.get("category")))
         # older templates leave category OTHER even for people and places: fall back to the name
         names = {str(spec.get("label", "")).lower(), str(key).lower()}
         mapped = mapped or next((t for t, words in (("character", {"character", "person", "people", "defaultperson"}),
@@ -438,34 +471,74 @@ def import_into(project, data, into=None):
                 mapped += "_imported"
             used.add(mapped)
             mapping[key] = mapped
+            to = [mapped_types[t] for t in spec.get("types", {}) if t in mapped_types]
             if mapped not in schema[section]:
                 value = {"label": spec.get("label", mapped)}
                 if section == "roles":
-                    value.update(to=[mapped_types[t] for t in spec.get("types", {}) if t in mapped_types],
-                                 inverse=spec.get("inverseLabel", ""))
+                    value.update(to=to, inverse=spec.get("inverseLabel", ""))
                 else:
                     value["format"] = spec.get("format", "text")
                 schema[section][mapped] = value
                 config.setdefault(section, {})[mapped] = value
-    # Validate names/fields before touching lore.json or any item file.
-    pending, targets, claimed = [], {}, dict(project.by_name)
+            elif section == "roles" and schema["roles"][mapped].get("to"):
+                # An Aeon role on an existing key (Member Of) adds its target types; an empty `to` allows any.
+                current = schema["roles"][mapped]
+                merged = list(dict.fromkeys(current["to"] + to))
+                if merged != current["to"]:
+                    schema["roles"][mapped] = config.setdefault("roles", {})[mapped] = {**current, "to": merged}
+    # Plan every name and file before touching lore.json or any item file: a refused import writes nothing.
+    local = config
+    if folder is not None:
+        local = copy.deepcopy(config)
+        local["paths"] = [project.rel(folder)]
+        # Type folders stay underneath --into, including custom absolute folders.
+        local["types"] = {key: {**spec, "folder": _key(key), "plural": _key(key)} for key, spec in schema["types"].items()}
+    planner = store.Project.from_items(project.root, local, [])
+    pending, targets, names, planned, listings = [], {}, set(), set(), {}
     skipped = 0
+
+    def taken(path):
+        folder_, file_name = os.path.split(path)
+        if folder_ not in listings:
+            listings[folder_] = {n.lower() for n in os.listdir(folder_)} if os.path.isdir(folder_) else set()
+        return (path.lower() in planned or file_name.lower() in listings[folder_]
+                or file_name.split(".")[0].rstrip(" ").upper() in WINDOWS_DEVICES)
+
     for record in data.get("items", []):
-        name = str(record["name"]).strip()
         ident = record["id"]
-        if not name or store.BAD_NAME.search(name):
-            _invalid(f"imported name cannot be represented as a wikilink: {name!r}")
-        existing = project.resolve(name) or claimed.get(name.lower())
+        original = str(record["name"]).strip()
+        # Characters that break wikilinks ("Modern/International Design") become "-".
+        base = store.BAD_NAME.sub("-", original).strip()
+        if not base:
+            _invalid(f"imported item {ident!r} has no name")
+        n = 1
+        while _suffixed(base, n).lower() in names:     # a second "Name" in this file is "Name (2)"
+            n += 1
+        name = _suffixed(base, n)
+        names.add(name.lower())
+        existing = project.resolve(name)
         if existing:
             skipped += 1
             warnings.append(f"WARN skipped existing name: {name}")
-            targets[ident] = existing.name if hasattr(existing, "name") else existing
+            targets[ident] = existing.name
             continue
-        claimed[name.lower()] = name
-        targets[ident] = name
         type_ = mapped_types.get(record["type"], record["type"])
         if type_ not in schema["types"]:
             _invalid(f"import has undefined type: {type_}")
+        path = planner.path_for(type_, name)
+        # One file per name, case-insensitively: "Mr." and "Mr" are both Mr.md.
+        while taken(path):
+            n += 1
+            if n > 999:
+                _invalid(f"no free file name for imported item {original!r}")
+            name = _suffixed(base, n)
+            if name.lower() not in names and not project.resolve(name):
+                path = planner.path_for(type_, name)
+        names.add(name.lower())
+        planned.add(path.lower())
+        targets[ident] = name
+        if name != original:
+            warnings.append(f"WARN imported {original} as {name}")
         fields = {}
         for key, value in record.get("fields", {}).items():
             mapped = mapped_props.get(key, key)
@@ -483,14 +556,19 @@ def import_into(project, data, into=None):
         pending.append((ident, type_, name, fields, record.get("summary") or ""))
     by_id = {row[0]: row for row in pending}
     for link in data.get("relationships", []) + data.get("dependencies", []):
-        subject = by_id.get(link["subject"])
+        dependency = "kind" in link
+        # A dependency's object is the successor: it carries `after: [[subject]]`.
+        carrier, other = (link["object"], link["subject"]) if dependency else (link["subject"], link["object"])
+        subject = by_id.get(carrier)
         if subject is None:
             continue
-        target = targets.get(link["object"])
-        role = DEPENDENCIES.get(link.get("kind")) if "kind" in link else mapped_roles.get(link["role"], link["role"])
+        target = targets.get(other)
+        role = DEPENDENCIES.get(link.get("kind")) if dependency else mapped_roles.get(link["role"], link["role"])
         if target is None or not role:
             warnings.append(f"WARN skipped unresolved link from {subject[2]}")
             continue
+        if role in DEPENDENCY_ROLES and role not in schema["roles"]:
+            schema["roles"][role] = config.setdefault("roles", {})[role] = dict(DEPENDENCY_ROLES[role])
         values = subject[3].setdefault(role, [])
         if not isinstance(values, list):
             values = subject[3][role] = [values]
@@ -511,17 +589,12 @@ def import_into(project, data, into=None):
     if config != project.config or not os.path.exists(cfg_path):
         store.atomic_write(cfg_path, json.dumps(config, ensure_ascii=False, indent=2) + "\n", expect=store.file_sha(cfg_path))
     project.config, project.schema = config, store.merged_schema(config)
-    writer = project
-    if folder is not None:
-        local = copy.deepcopy(config)
-        local["paths"] = [project.rel(folder)]
-        # Type folders stay underneath --into, including custom absolute folders.
-        local["types"] = {key: {**spec, "folder": _key(key), "plural": _key(key)} for key, spec in project.schema["types"].items()}
-        writer = store.Project.from_items(project.root, local, project.items)
+    writer = project if folder is None else store.Project.from_items(project.root, local, project.items)
     for _, type_, name, fields, body in pending:
         item = writer.create(type_, name, fields, body)
         writer.items.append(item)
-        writer._index()  # create() intentionally does not mutate the Project index.
+        # Names and files were planned above; only ids need tracking (re-indexing per item is quadratic).
+        writer.by_id[item.id.lower()] = item
     project.items = writer.items
     project._index()
     narrative = [targets[key] for key in data.get("narrative", []) if key in targets]
