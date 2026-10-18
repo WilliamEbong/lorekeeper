@@ -86,8 +86,9 @@ def op_show(p, item):
     it = p.find(item)
     roles = p.schema["roles"]
     links = {role: [o.name if o else t for t, o, _ in ls] for role, ls in p.links(it).items()}
-    back = {roles.get(role, {}).get("inverse", f"{role} (from)"): [i.name for i in src]
-            for role, src in p.backlinks(it).items()}
+    back = {}
+    for role, src in p.backlinks(it).items():   # roles may share an inverse label
+        back.setdefault(roles.get(role, {}).get("inverse", f"{role} (from)"), []).extend(i.name for i in src)
     return {**it.summary(), "version": it.version, "fields": it.fields, "links": links,
             "backlinks": back, "body": it.body}
 
@@ -156,8 +157,13 @@ def op_unlink(p, item, role, target, version=None):
         other = None   # The link may point nowhere.
     current = _role_values(it, role)
     wanted = (store.fm.link_target(target) or target).strip().lower()
-    keep = [v for v, t in zip(current, _targets(p, current))
-            if not (t is other if other else (store.link_parts(v) or ("",))[0].lower() == wanted)]
+
+    def gone(v, t):
+        parts = store.link_parts(v)
+        if parts is None:              # plain text, not a wikilink: match by its text
+            return v.strip().lower() == wanted
+        return t is other if other else parts[0].lower() == wanted
+    keep = [v for v, t in zip(current, _targets(p, current)) if not gone(v, t)]
     if len(keep) == len(current):
         raise LoreError("NOT_FOUND", f"{it.name} has no {role} link to {target}")
     single = p.schema["roles"].get(role, {}).get("single") or not isinstance(it.fields.get(role), list)
@@ -284,7 +290,7 @@ def op_request(p, item, note, field=None, unset=None, version=None, expect=None)
     body["base_version"] = it.version if version is None else version
     body["base"] = body["current"].copy() if expect is None else dict(expect)
     if body["base_version"] != it.version or any(
-            value != it.fields.get(key) for key, value in body["base"].items()):
+            store.blank(value) != store.blank(it.fields.get(key)) for key, value in body["base"].items()):
         body["stale"] = True
     store.atomic_write(os.path.join(requests_dir(p), rid + ".json"), to_json(body) + "\n", create=True)
     return {"request": rid, "queued": True}
@@ -330,6 +336,7 @@ def op_check(p):
 
 
 S, I, B, L, D = "str", "int", "bool", "list", "dict"
+KINDS = {S: str, I: int, B: bool, L: list, D: dict}
 OPS = [
     Op("init", "Create lore.json, optionally with a starter world, in the project folder.",
        [Param("name", S, False, "project name"),
@@ -400,6 +407,12 @@ def run(name, args=None, root=None, config=None, project=None):
     missing = [p.name for p in op.params if p.required and p.name not in args]
     if missing:
         raise LoreError("INVALID", f"missing parameter(s) for {name}: {', '.join(missing)}")
+    for p in op.params:   # JSON callers (MCP, HTTP) can send any type
+        value = args.get(p.name)
+        if value is not None and type(value) is not KINDS[p.kind]:
+            raise LoreError("INVALID", f"{p.name} must be {p.kind}")
+        if p.kind == L and value is not None and not all(isinstance(v, str) for v in value):
+            raise LoreError("INVALID", f"{p.name} must be a list of strings")
     try:
         if name == "init":
             return op.handler(root or ".", **args)

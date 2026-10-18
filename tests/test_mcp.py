@@ -112,7 +112,8 @@ class McpTests(unittest.TestCase):
 
     def test_golden_cli_parity(self):
         cases = [("query", {}, []), ("query", {"type": "character"}, ["--type", "character"]),
-                 ("show", {"item": "Mara Quell"}, ["Mara Quell"]), ("check", {}, []), ("schema", {}, [])]
+                 ("show", {"item": "Mara Quell"}, ["Mara Quell"]), ("check", {}, []), ("schema", {}, []),
+                 ("timeline", {}, []), ("age", {"item": "Mara Quell", "at": "2021"}, ["Mara Quell", "2021"])]
         env = dict(os.environ, PYTHONPATH=REPO, PYTHONDONTWRITEBYTECODE="1")
         for name, arguments, cli_args in cases:
             with self.subTest(name=name, arguments=arguments):
@@ -135,6 +136,20 @@ class McpTests(unittest.TestCase):
                          {"code": -32602, "message": "Unknown tool: missing"})
         self.assertEqual(self.request("missing")["error"],
                          {"code": -32601, "message": "Method not found: missing"})
+
+    def test_arguments_are_type_checked(self):
+        with tempfile.TemporaryDirectory(dir=REPO) as tmp:
+            root = os.path.join(tmp, "world")
+            shutil.copytree(FIXTURE, root)
+            for arguments in ({"item": "Mara Quell", "unset": "born"}, {"item": "Mara Quell", "field": "born=1990"}):
+                with self.subTest(arguments=arguments):
+                    result = self.call("set", arguments, root)
+                    self.assertIs(result["isError"], True)
+                    self.assertEqual(result["structuredContent"]["error"]["code"], "INVALID")
+        for arguments in ("type=event", [], ["type"], 5):
+            with self.subTest(arguments=arguments):
+                self.assertEqual(self.request("tools/call", {"name": "query", "arguments": arguments})["error"],
+                                 {"code": -32602, "message": "Invalid params: arguments must be an object"})
 
     def test_tool_exceptions(self):
         for exc, expected in ((RuntimeError("broken"), {"error": {"code": "INTERNAL", "message": "broken"}}),
