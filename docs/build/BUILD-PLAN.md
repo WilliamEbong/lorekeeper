@@ -307,3 +307,22 @@ Paths are relative to each saga root and identical in all three repos.
 
 ## Phase 9 — close-out
 - [x] Final HANDOFF; ACTIVE removed; hooks unregistered; memory updated; final report to user
+
+# Run 3: editor UX overhaul and whole-app audit (2026-10-18)
+
+**Goal.** Make the browser editor excellent and easy for novelists, then fix what a whole-app audit finds. Spec Kit feature: [specs/008-editor-ux](../../specs/008-editor-ux/spec.md) ([plan](../../specs/008-editor-ux/plan.md), [tasks](../../specs/008-editor-ux/tasks.md)). Branch `feat/008-editor-ux`, local commits only.
+
+**Deepened brief.**
+1. A professional would add: undo after every save, protection against accidental drags, plain-language errors with a way out, continuity results inside the editor (the product's core promise was missing from it), empty states, phone layout, and a test that pins the editor's date maths to the engine's.
+2. Rawest material: the running editor on a 116-item imported world (Wuthering Heights), the fixture world, an empty world and saga mode; the code; the user guide.
+3. Methods: Impeccable critique (independent design review scored the old editor 18/40) and detector; Spec Kit; Playwright; three read-only audit agents (dates/checks, store/fm/ops/cli, interop/mcp/serve), then fixes in parallel worktrees.
+4. Independent proof: the unit suite; Playwright on real pages (light, dark, 390 px, saga mode); the Impeccable detector; a fresh-context reviewer on the final diff.
+
+**Acceptance checks.** Spec 008 SC-1 to SC-7; detector clean; every confirmed audit finding fixed with a test or listed under Later; full suite green; reviewer findings fixed.
+
+- [x] Editor rewritten (shell, find, inspector, six views, toasts with undo, conflict actions, drag safety) and verified in Playwright
+- [x] Docs (user guide, README) updated for the editor
+- [ ] Audit fixes: interop; frontmatter and store; ops, CLI, MCP and server; dates and checks
+- [ ] User guide finding codes updated; full suite; fresh-context review; final handoff
+
+**Later (not built).** BC dates finer than a year still display as astronomical years (`-0043-03-15`); "1800s" means the decade 1800–1809; Aeon nesting (`super`) is dropped on import; dated Aeon types all become `event`; Aeon multitext exports as JSON text; re-vendor the engine into the three sagas (they carry `eb20b30`).

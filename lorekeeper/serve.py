@@ -60,6 +60,10 @@ def stamp(root, config=None):
     return hashlib.sha256(ops.to_json(sorted(rows)).encode("utf-8")).hexdigest()
 
 
+ASSETS = {"/": "text/html", "/editor.js": "text/javascript", "/editor.css": "text/css",
+          "/favicon.svg": "image/svg+xml"}
+
+
 def make_server(root, port=0, saga=False, config=None, factory=None):
     root = os.path.abspath(root)
     settings = config
@@ -111,7 +115,7 @@ def make_server(root, port=0, saga=False, config=None, factory=None):
                                        "params": [p._asdict() for p in op.params]} for op in ops.OPS]}
                 elif path == "/api/stamp":
                     result = {"stamp": stamp(root, config)}
-                elif path in ("/", "/editor.js", "/editor.css"):
+                elif path in ASSETS:
                     name = "editor.html" if path == "/" else path[1:]
                     with open(os.path.join(assets, name), encoding="utf-8") as fh:
                         body = fh.read()
@@ -119,8 +123,8 @@ def make_server(root, port=0, saga=False, config=None, factory=None):
                         body = body.replace("__LORE_TOKEN__", token).replace("__LORE_SAGA__", str(saga_mode).lower())
                         calendars = settings.get("calendars") or [{"id": "gregorian", "type": "gregorian"}]
                         body = body.replace("__LORE_CALENDARS__", html.escape(ops.to_json(calendars), quote=True))
-                    self.send(200, body, {"/": "text/html", "/editor.js": "text/javascript",
-                                          "/editor.css": "text/css"}[path])
+                        body = body.replace("__LORE_NAME__", html.escape(str(settings.get("name") or os.path.basename(root)), quote=True))
+                    self.send(200, body, ASSETS[path])
                     return
                 else:
                     raise LoreError("NOT_FOUND", "No such editor resource")

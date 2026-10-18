@@ -263,7 +263,8 @@ def op_graph(p):
             links += [{"from": it.id or it.name, "role": role, "to": (o.id or o.name) if o else t,
                        "from_path": it.path, "to_path": o.path if o else None,
                        "resolved": o is not None, "lag": lag} for t, o, lag in targets]
-    return {"items": items, "links": links, "roles": p.schema["roles"], "types": p.schema["types"]}
+    return {"items": items, "links": links, "roles": p.schema["roles"], "types": p.schema["types"],
+            "properties": p.schema["properties"]}
 
 
 def requests_dir(p):

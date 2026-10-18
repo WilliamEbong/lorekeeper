@@ -63,7 +63,9 @@ class ServeTests(unittest.TestCase):
         self.assertIn(f'<meta name="lore-token" content="{self.token}">', page)
         self.assertIn('type="module"', page)
         self.assertNotIn("Access-Control-Allow-Origin", headers)
-        for path, mime in (("/editor.js", "text/javascript"), ("/editor.css", "text/css")):
+        self.assertIn('<meta name="lore-name" content="The Salt Road">', page)
+        for path, mime in (("/editor.js", "text/javascript"), ("/editor.css", "text/css"),
+                           ("/favicon.svg", "image/svg+xml")):
             status, body, headers = self.request(path)
             self.assertEqual(status, 200)
             self.assertTrue(body)

@@ -12,29 +12,33 @@ The editor saves directly to your story files. Keep backups of the folder as you
 
 ## Create, connect and revise
 
-Choose a **New item type**, enter a **New item name**, and press **Create**. Select the item in a view or the **Selected item** list. Its fields appear in the inspector on the right. Add dates, then press **Save**. Characters use `born` and `died`; other items normally use `date` and `end`.
+Press **New item**, choose a type, enter a name and press **Create**. The new item opens in the inspector on the right, with its first date field ready for typing. To open an existing item, select it in any view, or press `/` and start typing its name in the **Find an item** box.
 
-To connect an event to a character, select the event, choose **Participants** as the link role, choose the character, and press **Add link**. Use **Location** for its place. **Backlinks** show items that point to the selected item. A location holds one link; remove an existing location link before adding another.
+The inspector shows the item's fields with plain labels. Characters use **Born** and **Died**; other items normally use **Date** and **End**. Under each date field the editor says how it reads the date, for example "Reads as July 1764", or warns you when it cannot read it. Fields that hold several values, such as **Tags** and **Aliases**, take one value per line. **Add a field** adds one of the project's fields, or a new one of your own. Press **Save** or Ctrl+S to save; **Discard changes** puts the fields back. A field you have changed but not saved is marked "changed", and the status at the top right says "Unsaved changes" until you save. After each save, a message offers **Undo**.
 
-Fields that contain several values appear as lists, for example `["travel", "opening"]`. Keep the brackets and the double quotes when editing a list. The link controls save you from typing these lists yourself. The inspector edits fields and links; write longer prose in the Markdown file with your usual editor or Obsidian. Adding new kinds of fields or changing project settings also requires editing files or using the command line.
+**Connections** lists the item's links, grouped by kind, such as Participants and Location. Select a name to open that item, or press the cross beside it to remove the link. To add a link, choose the kind of connection under **Add a connection**, start typing a name, choose it from the list, and press **Add** (or Enter). The list offers only items of the right kind: Participants accepts characters and organizations, and Location accepts places. A location holds one link; remove the existing one before adding another. **Linked from** shows the items that point to this one.
 
-Changing a canonical name does not rewrite existing links or rename its file. If you rename an item, update links that use the old name, or keep the old name in its `aliases` list.
+The inspector edits fields and links; write longer prose in the Markdown file with your usual editor or Obsidian. Changing project settings, such as new types or calendars, still means editing `lore.json` or using the command line.
 
-If another editor changes the same item, Lorekeeper can merge changes to different fields. If the same field has changed, it refuses your save and shows the current values. Your input stays visible. Copy any draft text you want to keep, reload to read the latest item, and reconcile the changes before saving again. Saved edits from other programs normally appear within a few seconds.
+Changing a name does not rewrite existing links or rename its file. If you rename an item, update links that use the old name, or keep the old name in its **Aliases**.
 
-## The five views
+If another program changes the same item while you are editing it, Lorekeeper merges changes to different fields. If the same field has changed, it refuses your save and tells you the new value. Your text stays in the inspector. Choose **Load their version** to drop your edit, or **Keep my text** to keep it on top of the latest version and then save again on purpose. Saved edits from other programs normally appear within a few seconds, and the editor keeps your place while it updates.
 
-**Timeline** places dated items on a time axis. Use its zoom and pan controls, then select a mark to inspect it. An exact Gregorian date can be dragged to a different position while keeping its precision. Dragging changes the start only; an explicit end date stays where it was. Approximate dates, ranges and custom-calendar dates must be changed in the inspector. Undated items remain available in the item selector and Spreadsheet.
+## The six views
 
-**Subway** gives people separate lanes, with stops at their participating events. Shared events connect the lanes. It initially shows the twelve people with the most events. Use **Filter people** to find others. Participation comes from an event's `participants` links.
+**Timeline** places dated items on a time axis, grouped by type, each type in its own colour. The dates along the top stay in view while you scroll. Solid marks are exact dates; pale, dashed marks are approximate or uncertain ones, such as circa dates, ranges, or a month or year with no end. Use the buttons to zoom and move along the axis, or Ctrl and the mouse wheel to zoom, and Shift and the wheel to move. The `+`, `−` and `0` keys zoom in, zoom out and fit everything. Tick or untick a type to hide or show it. Drag an exactly dated item sideways to change its date; the new date shows as you drag, a drag moves the item's end date with it, and a message offers **Undo**. Approximate dates, ranges and custom-calendar dates are changed in the inspector instead. Undated items are listed in Spreadsheet.
 
-**Relationships** is a table of people against dated, non-person items. Where a person participates, the cell shows their age. It is useful for spotting a child who has become an adult too soon. This view is an age grid, not a general family-tree diagram. Other relationships are available in the inspector's links and backlinks.
+**Subway** gives each person a coloured line, solid between their birth and death, with stops at the events they take part in. Shared events connect the lines. It first shows the twelve people with the most events; use **Filter people by name** to find others. Participation comes from an event's Participants links.
 
-**Spreadsheet** lists items with name, type, date or birth, end or death, and location. Press Enter or leave a cell to save it. **Inspect** opens the other fields. A failed save leaves the cell available for correction.
+**Ages** is a table of people against the dated events they take part in. Each cell shows the person's age at that event. Yellow cells show someone under 18; red cells show an appearance before birth or after death. The person and event names stay in view while you scroll. A person without a birth date shows "No birth date". This view is an age grid, not a family tree; other relationships are in the inspector.
 
-**Narrative** lists `chapter` and `card` items. It sorts by the numeric `chapter`, `order`, or `number` field, in that priority; otherwise it uses numbers in names and then name order. It flags a move backwards in time, which may be an intentional flashback. It does not read `narrative.md` or display book and session items. Campaign sessions can be edited in Spreadsheet or the inspector; read their outline in `narrative.md` and their index in `sessions.md`.
+**Spreadsheet** lists every item with its name, type, date or birth, end or death, and location. Filter it by name or type, and sort it by pressing a column heading. Press Enter or leave a cell to save it; Esc puts back what was there. Type and Location are chosen from lists. **Open** shows the item in the inspector. A cell that could not be saved is marked in red and keeps your text.
 
-The browser has no check-results panel or import/export buttons. Those tasks use the short commands below; someone helping you set up the project can run them too.
+**Narrative** lists the parts of the story in reading order: chapters, and any other type marked as narrative, such as the series template's books and the campaign template's sessions. It sorts by the numeric `chapter`, `order` or `number` field, in that priority; otherwise it uses numbers in names, then name order. It flags a part that is earlier in time than the part before it, which may be an intentional flashback. It does not read `narrative.md`.
+
+**Continuity** runs the same check as `lore check` and lists the problems in plain words: definite problems first, then possible ones. Each problem names its file and line, and **Open** shows the item concerned. The tab shows the number of definite problems (or possible ones, when there are none) and refreshes after every change. Lorekeeper never changes your files to fix a problem.
+
+Import and export still use the short commands below; someone helping you set up the project can run them too.
 
 ## Files you can keep
 
@@ -74,7 +78,7 @@ Keep sources with the date: `2025-04-02 (letter)` or `2025-04-02, outline note`.
 
 `date_min` and `date_max` can narrow the possibilities or supply bounds when no start date is stated. Contradictory bounds are reported. An unparseable date stays in the file and produces a warning; Lorekeeper does not quietly replace it.
 
-Gregorian dates work without configuration. Custom calendars need definitions in `lore.json`; arbitrary invented month names are not understood automatically. `lore convert "2025-04-02"` displays a date in the project's configured calendars. The `age` command returns possible year bounds alongside an age description. Relationships shows the description, so check the underlying date precision before treating it as exact. For an immortal or other ageless character, add `max_age: none` to that person's frontmatter; birth and death consistency checks still apply.
+Gregorian dates work without configuration. Custom calendars need definitions in `lore.json`; arbitrary invented month names are not understood automatically. `lore convert "2025-04-02"` displays a date in the project's configured calendars. The `age` command returns possible year bounds alongside an age description. The Ages view shows the description, so check the underlying date precision before treating it as exact. For an immortal or other ageless character, add `max_age: none` to that person's frontmatter; birth and death consistency checks still apply.
 
 ## Read a continuity report
 

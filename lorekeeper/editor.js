@@ -1,457 +1,1238 @@
-// No dependency or build step. Drafts retain the exact graph snapshot they came from.
+// Lorekeeper's local editor: one module, no dependency or build step. Every change goes
+// through the ops API with the version and values it was read from, so no edit is lost.
 const $ = (id) => document.getElementById(id);
-const token = document.querySelector('meta[name="lore-token"]').content;
-const saga = document.querySelector('meta[name="lore-saga"]').content === 'true';
-const calendars = JSON.parse(document.querySelector('meta[name="lore-calendars"]').content);
-const drafts = new Map(), cells = new Map(), conversions = new Map();
-let graph = {items: [], links: [], types: {}, roles: {}}, selected = '', tab = 'Timeline';
-let range = null, lastStamp = null, refreshing = false, dragging = false, subwayFilter = '';
-let refreshQueue = Promise.resolve();
-const ref = (item) => `path:${item.path}`;
-const person = (item) => graph.types[item.type]?.category === 'person';
-const startKey = (item) => ['born', 'date', 'start'].find(k => item.fields[k]) || (person(item) ? 'born' : 'date');
-const endKey = (item) => ['died', 'end'].find(k => item.fields[k]) || (person(item) ? 'died' : 'end');
-const nameKey = (item) => item.fields.canonical_name != null ? 'canonical_name' : 'name';
-const display = (value) => Array.isArray(value) ? JSON.stringify(value) : String(value ?? '');
-const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-const dated = () => graph.items.filter(i => i.lo != null).sort((a, b) => a.lo - b.lo || a.name.localeCompare(b.name));
-const people = () => graph.items.filter(person).sort((a, b) => a.name.localeCompare(b.name));
-const events = () => dated().filter(i => !person(i));
-const takesPart = (p, e) => graph.links.some(l => l.role === 'participants' && l.from_path === e.path && l.to_path === p.path && l.resolved);
+const meta = (name) => document.querySelector(`meta[name="${name}"]`).content;
+const token = meta('lore-token');
+const saga = meta('lore-saga') === 'true';
+const calendars = JSON.parse(meta('lore-calendars'));
+const worldName = meta('lore-name');
 
-function restoreFocus(id) { if (id) $(id)?.focus({preventScroll: true}); }
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const CATEGORIES = ['person', 'place', 'event', 'group', 'thing', 'narrative'];
+const LIST_KEYS = new Set(['tags', 'aliases']);
+const DRAG_THRESHOLD = 6;   // screen pixels; a click with a small wobble never re-dates an item
+const TITLES = {
+  BAD_ENCODING: 'File is not saved as UTF-8 text', BAD_FRONTMATTER: 'The fields at the top of a file can’t be read',
+  UNSUPPORTED_FRONTMATTER: 'A field line was kept but not understood', DUPLICATE_ID: 'Two items share an ID',
+  DUPLICATE_NAME: 'Two items share a name', UNKNOWN_TYPE: 'Unknown kind of item', BROKEN_LINK: 'Link to something that doesn’t exist',
+  ROLE_TYPE: 'Link to the wrong kind of item', DATE_UNPARSED: 'A date Lorekeeper can’t read', DEPENDENCY_UNDATED: 'Timing link without a date',
+  DEPENDENCY: 'Out of order with a linked item', DEAD_PARTICIPANT: 'Takes part after their death', UNBORN_PARTICIPANT: 'Takes part before their birth',
+  AGE_LIMIT: 'Older than anyone could be', PARENT_AGE: 'Parent too young at the birth', TWO_PLACES: 'In two places at once',
+  ORDER_REGRESSION: 'Goes back in time against its order', MAX_DURATION: 'Lasts longer than allowed', GAP: 'Wrong gap between linked items',
+  STORY_ORDER: 'Story order moves back in time', END_BEFORE_START: 'Ends before it starts',
+};
+const ICONS = {plus: 'M12 5v14M5 12h14', minus: 'M5 12h14', fit: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
+  close: 'M6 6l12 12M18 6 6 18', left: 'M15 6l-6 6 6 6', right: 'M9 6l6 6-6 6'};
 
+const drafts = new Map(), cells = new Map(), conversions = new Map(), ages = new Map(), scrolls = new Map();
+let graph = {items: [], links: [], types: {}, roles: {}, properties: {}};
+let byPath = new Map(), partOf = new Map(), findPaths = new Map(), findText = new Map();
+let selected = '', tab = 'Timeline', range = null, lastStamp = null;
+let refreshing = false, dragging = false, offline = false, renderPending = false;
+let refreshQueue = Promise.resolve(), checkTimer = null;
+const ui = {people: '', hidden: new Set(), sheetText: '', sheetType: '', sort: ['name', 1], findings: null,
+  checking: false, recheck: false, checkError: null, checkedAt: null, flash: null};
+
+// ---- small helpers -----------------------------------------------------------------------
 function el(tag, text, attributes = {}) {
   const node = document.createElement(tag);
   if (text != null) node.textContent = text;
-  for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, value);
+  for (const [key, value] of Object.entries(attributes)) if (value != null) node.setAttribute(key, value);
   return node;
 }
 function svgEl(tag, attributes = {}, text) {
   const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
-  for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, value);
+  for (const [key, value] of Object.entries(attributes)) if (value != null) node.setAttribute(key, value);
   if (text != null) node.textContent = text;
   return node;
 }
-function button(text, action, attributes = {}) {
-  const node = el('button', text, {type: 'button', ...attributes});
-  node.addEventListener('click', () => Promise.resolve().then(action).catch(report));
+const add = (parent, child) => { parent.append(child); return child; };
+function icon(name) {
+  const node = svgEl('svg', {class: 'icon', viewBox: '0 0 24 24', 'aria-hidden': 'true', focusable: 'false'});
+  node.append(svgEl('path', {d: ICONS[name]}));
   return node;
 }
-function status(text) { $('status').textContent = text; }
-function report(error) {
-  status('Not saved. See the message below; your input is kept.');
-  $('error').hidden = false;
-  $('error').textContent = error.message || String(error);
+function button(content, action, attributes = {}) {
+  const node = el('button', null, {type: 'button', ...attributes});
+  node.append(...[content].flat());
+  node.addEventListener('click', () => Promise.resolve().then(action).catch(error => report(error)));
+  return node;
+}
+const words = (key) => { const text = String(key).replace(/_/g, ' ').trim(); return text.charAt(0).toUpperCase() + text.slice(1); };
+const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
+const ref = (item) => `path:${item.path}`;
+const typeInfo = (type) => graph.types[type] || {};
+const typeLabel = (type) => typeInfo(type).label || words(type);
+const typePlural = (type) => { const p = typeInfo(type).plural; return p && p !== type ? p : typeLabel(type); };
+const category = (item) => CATEGORIES.includes(typeInfo(item.type).category) ? typeInfo(item.type).category : 'other';
+const isPerson = (item) => typeInfo(item.type).category === 'person';
+const isRole = (key) => Object.hasOwn(graph.roles, key);
+const isDateKey = (key) => graph.properties[key]?.format === 'date' || ['born', 'died', 'date', 'end', 'start'].includes(key);
+const label = (key) => ({canonical_name: 'Name', name: 'Name', type: 'Type', id: 'ID'})[key]
+  || graph.properties[key]?.label || graph.roles[key]?.label || words(key);
+const startKey = (item) => ['born', 'date', 'start'].find(k => item.fields[k]) || (isPerson(item) ? 'born' : 'date');
+const endKey = (item) => ['died', 'end'].find(k => item.fields[k]) || (isPerson(item) ? 'died' : 'end');
+const nameKey = (item) => item.fields.canonical_name != null ? 'canonical_name' : 'name';
+const display = (value) => Array.isArray(value) ? value.join('\n') : String(value ?? '');
+const byName = (a, b) => a.name.localeCompare(b.name, undefined, {numeric: true, sensitivity: 'base'});
+const typeRank = (type) => { const i = CATEGORIES.indexOf(typeInfo(type).category); return i < 0 ? CATEGORIES.length : i; };
+const typeOrder = (a, b) => typeRank(a) - typeRank(b) || typeLabel(a).localeCompare(typeLabel(b));
+const dated = () => graph.items.filter(i => i.lo != null).sort((a, b) => a.lo - b.lo || byName(a, b));
+const people = () => graph.items.filter(isPerson).sort(byName);
+const events = () => dated().filter(i => !isPerson(i));
+const takesPart = (person, event) => partOf.get(person.path)?.has(event.path) || false;
+const whenText = (item) => item.start ? item.start.text + (item.end ? ` to ${item.end.text}` : '') : 'Undated';
+const narrow = () => matchMedia('(max-width: 900px)').matches;
+const typing = (node) => Boolean(node?.closest?.('input, textarea, select, [contenteditable="true"]'));
+// ponytail: label width from the character count; measure text if long names collide in practice.
+const labelWidth = (text) => text.length * 7 + 6;
+
+// ---- status, messages and the API -------------------------------------------------------
+class ApiError extends Error {
+  constructor(code, message, data) { super(message); this.code = code; this.data = data || {}; }
+}
+function status(text, kind = 'ok') { const node = $('status'); node.textContent = text; node.dataset.kind = kind; }
+const anyDirty = () => [...drafts.values()].some(dirty) || cells.size > 0;
+function idle() {
+  if (offline) status('Lost contact. Retrying…', 'error');
+  else if (anyDirty()) status('Unsaved changes', 'dirty');
+  else status('Up to date', 'ok');
+}
+function toast(message, {kind = 'info', actions = [], timeout} = {}) {
+  const box = el('div', null, {class: `toast ${kind}`, role: kind === 'error' ? 'alert' : 'status'});
+  const row = el('div', null, {class: 'toast-actions'});
+  for (const [text, action] of actions) row.append(button(text, async () => { box.remove(); await action(); }));
+  box.append(el('p', message), button([icon('close')], () => box.remove(), {class: 'quiet icon-only', 'aria-label': 'Dismiss message'}), row);
+  const stack = $('toasts');
+  stack.append(box);
+  while (stack.childElementCount > 3) stack.firstElementChild.remove();
+  // Messages stay while the pointer or focus is on them, so Undo never vanishes mid-reach.
+  const wait = timeout ?? (kind === 'error' ? 0 : actions.length ? 10000 : 5000);
+  let timer;
+  const arm = () => { clearTimeout(timer); if (wait) timer = setTimeout(() => box.remove(), wait); };
+  for (const name of ['pointerenter', 'focusin']) box.addEventListener(name, () => clearTimeout(timer));
+  for (const name of ['pointerleave', 'focusout']) box.addEventListener(name, arm);
+  arm();
+  return box;
+}
+function explain(error) {
+  const message = error.message || String(error);
+  if (error.code === 'CONFLICT' && error.data?.current) {
+    const now = Object.entries(error.data.current).map(([key, value]) =>
+      `${label(key)} is now ${value == null || value === '' ? 'empty' : `“${display(value).replace(/\n/g, ', ')}”`}`).join('; ');
+    return `This item was changed elsewhere while you were editing it (${now}). Your text is still here.`;
+  }
+  if (error.code === 'FORBIDDEN') return `Not allowed here: ${message}`;
+  return message.charAt(0).toUpperCase() + message.slice(1);
+}
+function report(error, actions = [], heading = 'Not saved') {
+  status(heading, 'error');
+  toast(explain(error), {kind: 'error', actions});
 }
 async function api(name, args = {}) {
-  const response = await fetch(`/api/${name}`, {method: 'POST', headers: {
-    'Content-Type': 'application/json', 'X-Lore-Token': token}, body: JSON.stringify(args)});
-  const result = await response.json();
+  let response;
+  try {
+    response = await fetch(`/api/${name}`, {method: 'POST', body: JSON.stringify(args),
+      headers: {'Content-Type': 'application/json', 'X-Lore-Token': token}});
+  } catch {
+    throw new ApiError('OFFLINE', 'The editor has lost contact with Lorekeeper. Check that “lore serve” is still running in its terminal, then reload this page.');
+  }
+  const result = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const err = result.error || {message: response.statusText};
-    throw new Error(`${err.code || response.status}: ${err.message}${err.data ? '\nCurrent values: ' + JSON.stringify(err.data.current ?? err.data, null, 2) : ''}`);
+    const err = result.error || {};
+    throw new ApiError(err.code || String(response.status), err.message || response.statusText, err.data);
   }
   return result;
-}
-function valueOf(text, original) {
-  // Existing list fields stay lists. Other fields remain literal text, including numeric dates.
-  if (!Array.isArray(original)) return text;
-  const value = JSON.parse(text || '[]');
-  if (!Array.isArray(value) || value.some(v => typeof v !== 'string')) throw new Error('List fields need a JSON array of strings.');
-  return value;
-}
-function draftFor(item) {
-  if (!drafts.has(item.path)) drafts.set(item.path, {base: item, values: Object.create(null), note: ''});
-  return drafts.get(item.path);
-}
-function dirty(draft) { return draft && (Object.keys(draft.values).length > 0 || draft.note); }
-function fieldsFor(item) {
-  return [...new Set([nameKey(item), 'type', startKey(item), endKey(item), 'location', ...Object.keys(item.fields)])];
-}
-function addInput(parent, key, value, onInput, attributes = {}) {
-  const id = `field-${key}`;
-  parent.append(el('label', key, {for: id}));
-  const input = el('input', null, {id, name: key, ...attributes});
-  input.value = value;
-  input.addEventListener('input', () => onInput(input.value));
-  parent.append(input);
-  return input;
-}
-function selectItem(path, focus = false) {
-  selected = path;
-  $('item-select').value = path;
-  renderInspector();
-  document.querySelectorAll('svg .item').forEach(node => node.classList.toggle('selected', node.dataset.path === path));
-  if (focus) $('inspector').querySelector('input')?.focus();
-}
-function renderInspector() {
-  const focusId = document.activeElement?.id;
-  const panel = $('inspector'), item = graph.items.find(i => i.path === selected);
-  panel.replaceChildren();
-  if (!item) { panel.append(el('p', 'Select an item to see its fields and connections.')); return; }
-  let draft = draftFor(item);
-  if (!dirty(draft)) { draft = {base: item, values: Object.create(null), note: ''}; drafts.set(item.path, draft); }
-  const form = el('form', null, {id: 'edit-form'});
-  for (const key of fieldsFor(draft.base)) {
-    addInput(form, key, draft.values[key] ?? display(draft.base.fields[key]), value => {
-      if (value === display(draft.base.fields[key])) delete draft.values[key];
-      else draft.values[key] = value;
-    }, key === 'id' ? {readonly: ''} : {});
-  }
-  form.append(el('p', 'List fields use ["value", "value"]. Dates can always be edited here.', {class: 'hint'}));
-  if (saga) {
-    form.append(el('label', 'Change note', {for: 'change-note'}));
-    const note = el('textarea', null, {id: 'change-note', required: ''});
-    note.value = draft.note;
-    note.addEventListener('input', () => { draft.note = note.value; });
-    form.append(note);
-  }
-  form.append(el('button', saga ? 'Propose change' : 'Save', {id: 'save-item', type: 'submit', class: 'primary'}));
-  form.addEventListener('submit', async event => {
-    event.preventDefault();
-    // Link controls also wait for a save's reload, so their selected target cannot
-    // be reset between choosing it and pressing Add link.
-    const controls = [...panel.querySelectorAll('input, select, textarea, button')];
-    try {
-      const field = Object.fromEntries(Object.entries(draft.values).map(([k, v]) => [k, valueOf(v, draft.base.fields[k])]));
-      controls.forEach(c => { c.disabled = true; });
-      if (saga) {
-        const expect = Object.fromEntries(Object.keys(field).map(k => [k, draft.base.fields[k] ?? null]));
-        await api('request', {item: ref(draft.base), field, note: draft.note, version: draft.base.version, expect});
-        status('Change request queued. Canon is unchanged.');
-      } else {
-        await saveFields(draft.base, field);
-      }
-      drafts.delete(item.path);
-      $('error').hidden = true;
-      await refresh();
-      renderInspector();
-    } catch (error) { report(error); }
-    finally { controls.forEach(c => { c.disabled = false; }); }
-  });
-  panel.append(form);
-  renderLinks(panel, item);
-  restoreFocus(focusId);
-}
-async function saveFields(base, field) {
-  if (!Object.keys(field).length) return;
-  const expect = Object.fromEntries(Object.keys(field).map(k => [k, base.fields[k] ?? null]));
-  const result = await api('set', {item: ref(base), field, version: base.version, expect});
-  status(result.merged ? 'Saved; merged with changes to other fields.' : 'Saved.');
-  return result;
-}
-function renderLinks(panel, item) {
-  panel.append(el('h3', 'Links'));
-  const list = el('ul');
-  for (const link of graph.links.filter(l => l.from_path === item.path)) {
-    const target = graph.items.find(i => i.path === link.to_path);
-    const row = el('li', `${link.role} → ${target?.name || link.to}${link.resolved ? '' : ' (unresolved)'}`);
-    if (!saga) row.append(button('Remove link', async () => {
-      await api('unlink', {item: ref(item), role: link.role, target: target ? ref(target) : link.to, version: item.version});
-      await refresh(); renderInspector(); status('Link removed.');
-    }, {id: `unlink-${encodeURIComponent(JSON.stringify([item.path, link.role, link.to_path || link.to]))}`,
-      'aria-label': 'Remove link', title: `${link.role} → ${target?.name || link.to}`}));
-    list.append(row);
-  }
-  panel.append(list.childElementCount ? list : el('p', 'No outgoing links.'));
-  panel.append(el('h3', 'Backlinks'));
-  const backlinks = el('ul');
-  for (const link of graph.links.filter(l => l.to_path === item.path && l.resolved)) {
-    const source = graph.items.find(i => i.path === link.from_path);
-    const row = el('li', `${graph.roles[link.role]?.inverse || link.role}: `);
-    if (source) row.append(button(source.name, () => selectItem(source.path),
-      {id: `backlink-${encodeURIComponent(JSON.stringify([source.path, link.role]))}`}));
-    backlinks.append(row);
-  }
-  panel.append(backlinks.childElementCount ? backlinks : el('p', 'No backlinks.'));
-  if (saga) { panel.append(el('p', 'Propose links using the field inputs or describe them in the change note.', {class: 'hint'})); return; }
-  panel.append(el('label', 'Link role', {for: 'link-role'}));
-  const roles = el('select', null, {id: 'link-role'});
-  for (const [key, role] of Object.entries(graph.roles)) roles.append(el('option', role.label || key, {value: key}));
-  panel.append(roles, el('label', 'Link target', {for: 'link-target'}));
-  const targets = el('select', null, {id: 'link-target'});
-  for (const target of graph.items) targets.append(el('option', target.name, {value: ref(target)}));
-  panel.append(targets, button('Add link', async () => {
-    await api('link', {item: ref(item), role: roles.value, target: targets.value, version: item.version});
-    await refresh(); renderInspector(); status('Link added.');
-  }, {id: 'add-link'}));
 }
 
+// ---- dates -------------------------------------------------------------------------------
 // The axis uses Lorekeeper's integer minutes since 0001-01-01, not Unix milliseconds.
-// This Gregorian inverse mirrors dates.civil_from_days and works beyond JS Date's range.
-function gregorian(minute, precision = 'day') {
-  const n = Math.floor(minute / 1440) + 306;
-  const era = Math.floor(n / 146097), doe = n - era * 146097;
+// civil/daysFromCivil mirror dates.civil_from_days/days_from_civil and work beyond JS Date's range.
+function civil(days) {
+  const n = days + 306, era = Math.floor(n / 146097), doe = n - era * 146097;
   const yoe = Math.floor((doe - Math.floor(doe / 1460) + Math.floor(doe / 36524) - Math.floor(doe / 146096)) / 365);
-  let year = yoe + era * 400;
   const doy = doe - (365 * yoe + Math.floor(yoe / 4) - Math.floor(yoe / 100));
-  const mp = Math.floor((5 * doy + 2) / 153), day = doy - Math.floor((153 * mp + 2) / 5) + 1;
-  const month = mp + (mp < 10 ? 3 : -9);
-  year += month <= 2 ? 1 : 0;
-  const pad = n => String(n).padStart(2, '0');
-  let out = (year < 0 ? '-' : '') + String(Math.abs(year)).padStart(4, '0');
-  if (precision === 'year') return out;
-  out += '-' + pad(month);
+  const mp = Math.floor((5 * doy + 2) / 153), m = mp + (mp < 10 ? 3 : -9);
+  return {y: yoe + era * 400 + (m <= 2 ? 1 : 0), m, d: doy - Math.floor((153 * mp + 2) / 5) + 1};
+}
+function daysFromCivil(y, m, d) {
+  y -= m <= 2 ? 1 : 0;
+  const era = Math.floor(y / 400), yoe = y - era * 400;
+  const doy = Math.floor((153 * (m + (m > 2 ? -3 : 9)) + 2) / 5) + d - 1;
+  return era * 146097 + yoe * 365 + Math.floor(yoe / 4) - Math.floor(yoe / 100) + doy - 306;
+}
+const yearText = (y) => y > 0 ? String(y) : `${1 - y} BC`;
+function gregorian(minute, precision = 'day') {
+  const {y, m, d} = civil(Math.floor(minute / 1440)), pad = (n) => String(n).padStart(2, '0');
+  if (precision === 'year') return y < 1 ? `${1 - y} BC` : String(y).padStart(4, '0');
+  let out = (y < 0 ? '-' : '') + String(Math.abs(y)).padStart(4, '0') + '-' + pad(m);
   if (precision === 'month') return out;
-  out += '-' + pad(day);
+  out += '-' + pad(d);
   if (precision === 'day') return out;
   const time = ((Math.floor(minute) % 1440) + 1440) % 1440;
-  return out + ' ' + pad(Math.floor(time / 60)) + ':' + pad(time % 60);
+  return `${out} ${pad(Math.floor(time / 60))}:${pad(time % 60)}`;
+}
+function dateWords(text) {
+  // Gregorian output reads as words: 1764 · 44 BC · July 1764 · 12 July 1764 · 12 July 1764, 09:30.
+  const m = /^(-?\d{4,})(?:-(\d{2}))?(?:-(\d{2}))?(?:[ T](\d{2}):(\d{2}))?$/.exec(text);
+  if (!m) return text;
+  const year = yearText(Number(m[1]));
+  if (!m[2]) return year;
+  const month = MONTHS[Number(m[2]) - 1];
+  if (!m[3]) return `${month} ${year}`;
+  return `${Number(m[3])} ${month} ${year}` + (m[4] ? `, ${m[4]}:${m[5]}` : '');
+}
+const ISO = /^(-?\d{4,})(?:-(\d{2}))?(?:-(\d{2}))?(?: (\d{2}):(\d{2}))?$/;
+function minuteOf(text) {
+  // The first minute of a Gregorian date as Lorekeeper writes it (1764, 44 BC, 1764-07, 1764-07-12 09:30).
+  const bc = /^(\d+) BC$/.exec(text), m = bc ? [null, String(1 - Number(bc[1]))] : ISO.exec(text);
+  if (!m) return null;
+  return daysFromCivil(Number(m[1]), Number(m[2] || 1), Number(m[3] || 1)) * 1440 + Number(m[4] || 0) * 60 + Number(m[5] || 0);
+}
+function shiftDate(text, precision, delta) {
+  const start = minuteOf(text);
+  if (start == null) return null;
+  const {y, m} = civil(Math.floor(start / 1440));
+  if (precision === 'year') return gregorian(daysFromCivil(y + Math.round(delta / UNIT.year), 1, 1) * 1440, 'year');
+  if (precision === 'month') {
+    const k = y * 12 + m - 1 + Math.round(delta / UNIT.month), ny = Math.floor(k / 12);
+    return gregorian(daysFromCivil(ny, k - ny * 12 + 1, 1) * 1440, 'month');
+  }
+  return gregorian(start + (precision === 'day' ? Math.round(delta / 1440) * 1440 : Math.round(delta)), precision);
+}
+const exact = (when) => when && !when.circa && !when.provisional && !when.note && when.from === when.to;
+const isGregorian = (id) => (calendars.find(c => (c.id || c.type || 'gregorian') === id)?.type || (id === 'gregorian' ? 'gregorian' : '')) === 'gregorian';
+function readBack(result) {
+  const ids = Object.keys(result.calendars).sort((a, b) => (b === result.parsed_by) - (a === result.parsed_by));
+  const parts = ids.map(id => {
+    const {from, to} = result.calendars[id], words = isGregorian(id) ? dateWords : (t) => t;
+    return from === to ? words(from) : `between ${words(from)} and ${words(to)}`;
+  });
+  return parts[0] + (parts.length > 1 ? ` (${parts.slice(1).join('; ')})` : '');
+}
+function convert(text) {
+  if (!conversions.has(text)) {
+    const pending = api('convert', {date: text});
+    pending.catch(error => { if (error.code !== 'INVALID') conversions.delete(text); });
+    conversions.set(text, pending);
+  }
+  return conversions.get(text);
+}
+async function updateReadback(node, text) {
+  const value = text.trim();
+  node.dataset.text = value;
+  node.classList.remove('warn');
+  if (!value) { node.textContent = ''; return; }
+  try {
+    const result = await convert(value);
+    if (node.dataset.text === value) node.textContent = `Reads as ${readBack(result)}`;
+  } catch (error) {
+    if (node.dataset.text !== value || error.code !== 'INVALID') return;
+    node.textContent = 'Lorekeeper can’t read this as a date. Try 1764, 1764-07, 12 July 1764 or ~1764.';
+    node.classList.add('warn');
+  }
+}
+function fuzzy(item) {
+  const s = item.start || {};
+  return Boolean(s.circa || s.provisional || item.fields.status === 'provisional' || s.from !== s.to ||
+    item.fields.date_min || item.fields.date_max || (['year', 'month'].includes(s.precision) && !item.end));
+}
+
+// ---- axis ticks ---------------------------------------------------------------------------
+const UNIT = {minute: 1, hour: 60, day: 1440, month: 43830, year: 525949};
+const LADDER = [[1, 'minute'], [5, 'minute'], [15, 'minute'], [30, 'minute'], [1, 'hour'], [3, 'hour'], [6, 'hour'],
+  [12, 'hour'], [1, 'day'], [2, 'day'], [7, 'day'], [1, 'month'], [3, 'month'], [6, 'month']];
+for (let size = 1; size <= 1e8; size *= 10) for (const k of [1, 2, 5]) LADDER.push([k * size, 'year']);
+function ticks([lo, hi], pixels) {
+  const span = hi - lo;
+  const [n, unit] = LADDER.find(([k, u]) => k * UNIT[u] / span * pixels >= 96) || LADDER.at(-1);
+  const out = [], short = (m) => MONTHS[m - 1].slice(0, 3), pad = (v) => String(v).padStart(2, '0');
+  if (unit === 'year') {
+    const last = civil(Math.floor(hi / 1440)).y + 1;
+    // Round BC years in BC numbering (10 BC, not astronomical -10 = 11 BC).
+    for (let y = civil(Math.floor(lo / 1440)).y; y <= last;) {
+      const r = y <= 0 ? (1 - y) % n : (n - y % n) % n;
+      if (r) { y += r; continue; }
+      out.push({minute: daysFromCivil(y, 1, 1) * 1440, label: yearText(y)});
+      y += n;
+    }
+  } else if (unit === 'month') {
+    const first = civil(Math.floor(lo / 1440));
+    for (let k = Math.ceil((first.y * 12 + first.m - 1) / n) * n; ; k += n) {
+      const y = Math.floor(k / 12), m = k - y * 12 + 1, minute = daysFromCivil(y, m, 1) * 1440;
+      if (minute > hi) break;
+      out.push({minute, label: `${short(m)} ${yearText(y)}`});
+    }
+  } else {
+    const size = n * UNIT[unit];
+    for (let t = Math.ceil(lo / size) * size; t <= hi; t += size) {
+      const {y, m, d} = civil(Math.floor(t / 1440)), clock = ((t % 1440) + 1440) % 1440;
+      out.push({minute: t, label: unit === 'day' ? `${d} ${short(m)} ${yearText(y)}`
+        : `${d} ${short(m)} ${pad(Math.floor(clock / 60))}:${pad(clock % 60)}`});
+    }
+  }
+  return out.filter(t => t.minute >= lo && t.minute <= hi);
+}
+
+// ---- find, create, selection ---------------------------------------------------------------
+function renderFind() {
+  const counts = new Map();
+  for (const item of graph.items) counts.set(item.name, (counts.get(item.name) || 0) + 1);
+  findPaths = new Map(); findText = new Map();
+  const options = [];
+  for (const item of [...graph.items].sort(byName)) {
+    const text = `${item.name} · ${typeLabel(item.type)}${counts.get(item.name) > 1 ? ` · ${item.path}` : ''}`;
+    findPaths.set(text, item.path); findText.set(item.path, text);
+    options.push(el('option', null, {value: text}));
+  }
+  $('find-list').replaceChildren(...options);
+}
+function pickFind(loose) {
+  const input = $('find'), text = input.value.trim(), q = text.toLowerCase();
+  let path = findPaths.get(text);
+  if (!path && loose && q) path = (graph.items.find(i => i.name.toLowerCase() === q) || graph.items.find(i => i.name.toLowerCase().includes(q)))?.path;
+  if (!path) { if (loose && q) toast(`Nothing called “${text}” in this world.`); return; }
+  input.value = '';
+  selectItem(path, {reveal: true, focus: 'title'});
+}
+function renderCreateTypes() {
+  const select = $('create-type'), previous = select.value;
+  select.replaceChildren(...Object.keys(graph.types).sort(typeOrder).map(t => el('option', typeLabel(t), {value: t})));
+  select.value = previous || (graph.types.character ? 'character' : Object.keys(graph.types).sort(typeOrder)[0]);
+}
+function openCreate(type) {
+  // After the current click: the outside-click handler would otherwise close it at once.
+  setTimeout(() => {
+    $('new-item').open = true;
+    if (type && graph.types[type]) $('create-type').value = type;
+    $('create-name').focus();
+  });
+}
+function selectItem(path, {focus = false, reveal = false, show = false} = {}) {
+  selected = path;
+  const item = byPath.get(path);
+  if (reveal && item) revealInView(item);
+  renderInspector();
+  markSelection();
+  if (focus === 'title') $('inspector-title')?.focus();
+  else if (focus) $('inspector').querySelector('input:not([readonly]), select, textarea')?.focus();
+  // On a phone the inspector sits below the view: bring it up when an item is chosen there.
+  if ((reveal || show) && narrow()) $('inspector-panel').scrollIntoView({block: 'start'});
+}
+function markSelection() {
+  const view = $('view');
+  view.querySelectorAll('[data-path]').forEach(node => {
+    const on = node.dataset.path === selected;
+    node.classList.toggle('selected', on);
+    if (node.matches('svg .item')) node.setAttribute('aria-current', String(on));
+  });
+  const svg = view.querySelector('#time-chart');
+  if (svg) {
+    const nodes = [...svg.querySelectorAll('.item')];
+    const current = nodes.find(n => n.dataset.path === selected) || nodes[0];
+    nodes.forEach(n => n.setAttribute('tabindex', n === current ? '0' : '-1'));
+  }
+}
+function revealInView(item) {
+  if (['Timeline', 'Subway'].includes(tab) && item.lo != null) {
+    if (tab === 'Timeline' && ui.hidden.delete(item.type)) range = null;
+    if (!range) fit();
+    if (item.hi < range[0] || item.lo > range[1]) {
+      const span = range[1] - range[0], middle = (item.lo + item.hi) / 2;
+      range = [middle - span / 2, middle + span / 2];
+    }
+    renderView();
+  }
+  requestAnimationFrame(() => $('view').querySelector(`[data-path="${CSS.escape(item.path)}"]`)?.scrollIntoView({block: 'nearest', inline: 'nearest'}));
+}
+
+// ---- inspector ----------------------------------------------------------------------------
+function dirty(draft) { return Boolean(draft && (Object.keys(draft.values).length > 0 || draft.note)); }
+const isList = (key, original) => Array.isArray(original) || (original === undefined && LIST_KEYS.has(key));
+function valueOf(text, original, key) {
+  if (!isList(key, original)) return text.trim();
+  return text.split('\n').map(v => v.trim()).filter(Boolean);
+}
+function changes(draft) {
+  const field = {}, unset = [];
+  for (const [key, text] of Object.entries(draft.values)) {
+    const original = draft.base.fields[key], value = valueOf(text, original, key);
+    if (Array.isArray(value) ? value.length : value) field[key] = value;
+    else if (key === nameKey(draft.base)) throw new ApiError('INVALID', 'An item needs a name.');
+    else if (original !== undefined) unset.push(key);
+  }
+  return {field, unset};
+}
+function fieldsFor(item) {
+  // Local mode edits links through Connections; saga mode proposes them as field text.
+  const keys = [nameKey(item), 'type', startKey(item), endKey(item), ...Object.keys(item.fields)];
+  return [...new Set(keys)].filter(k => k !== 'id' && (saga || !isRole(k)));
+}
+function renderInspector() {
+  const panel = $('inspector'), focusId = panel.contains(document.activeElement) ? document.activeElement.id : null;
+  const item = byPath.get(selected);
+  panel.replaceChildren();
+  if (!item) { panel.append(inspectorWelcome()); return; }
+  let draft = drafts.get(item.path);
+  if (!dirty(draft)) { draft = {base: item, values: Object.create(null), note: '', extra: draft?.extra || []}; drafts.set(item.path, draft); }
+  const base = draft.base;
+
+  const head = el('div', null, {class: 'inspector-head'});
+  head.append(button([icon('left'), 'Back to the view'], () => {
+    $('view').scrollIntoView({block: 'start'});
+    $('view').querySelector(`[data-path="${CSS.escape(item.path)}"]`)?.focus?.();
+  }, {class: 'quiet back-to-view'}));
+  head.append(el('h2', item.name, {id: 'inspector-title', tabindex: '-1'}));
+  const info = el('div', null, {class: 'meta'});
+  info.append(el('span', typeLabel(item.type), {class: `kind cat-${category(item)}`}));
+  if (item.fields.id) info.append(el('span', item.fields.id, {class: 'path', title: 'ID'}));
+  info.append(el('span', item.path, {class: 'path', title: 'File'}));
+  head.append(info);
+  panel.append(head);
+
+  const form = el('form', null, {id: 'edit-form', novalidate: ''});
+  const save = el('button', saga ? 'Propose change' : 'Save', {type: 'submit', class: 'primary', id: 'save-item'});
+  const discard = button('Discard changes', () => { drafts.delete(item.path); renderInspector(); idle(); }, {id: 'discard-item', class: 'quiet'});
+  const sync = () => { save.disabled = discard.disabled = !dirty(draft); idle(); };
+  const keys = [...new Set([...fieldsFor(base), ...draft.extra])];
+  for (const key of keys) form.append(fieldRow(draft, key, sync));
+  form.append(addFieldRow(draft, keys));
+  if (saga) {
+    const wrap = el('div', null, {class: 'field'});
+    const note = el('textarea', null, {id: 'change-note', required: '', 'aria-describedby': 'change-note-hint'});
+    note.value = draft.note;
+    note.addEventListener('input', () => { draft.note = note.value; sync(); });
+    wrap.append(el('label', 'Change note', {for: 'change-note'}), note,
+      el('p', 'Say what should change and why. The pipeline applies it later; the story files stay as they are.', {class: 'hint', id: 'change-note-hint'}));
+    form.append(wrap);
+  }
+  const actions = el('div', null, {class: 'actions'});
+  actions.append(save, discard, el('span', saga ? '' : 'Ctrl+S saves', {class: 'hint'}));
+  form.append(actions);
+  form.addEventListener('submit', event => { event.preventDefault(); saveInspector(draft); });
+  panel.append(form);
+  sync();
+  renderLinks(panel, item);
+  if (focusId) $(focusId)?.focus({preventScroll: true});
+}
+function fieldRow(draft, key, sync) {
+  const original = draft.base.fields[key], id = `field-${key}`;
+  const wrap = el('div', null, {class: 'field'});
+  const current = key in draft.values ? draft.values[key] : display(original);
+  let input;
+  if (key === 'type') {
+    input = el('select', null, {id, name: key});
+    for (const type of Object.keys(graph.types).sort(typeOrder)) input.append(el('option', typeLabel(type), {value: type}));
+    if (!graph.types[original]) input.append(el('option', `${original} (not in this project’s types)`, {value: original}));
+  } else if (isList(key, original)) {
+    input = el('textarea', null, {id, name: key, rows: String(Math.min(8, Math.max(2, current.split('\n').length + 1)))});
+  } else {
+    input = el('input', null, {id, name: key, autocomplete: 'off', spellcheck: isDateKey(key) ? 'false' : null});
+  }
+  input.value = current;
+  wrap.append(el('label', label(key), {for: id}), input);
+  if (input.tagName === 'TEXTAREA') {
+    wrap.append(el('p', 'One per line.', {class: 'hint', id: `${id}-hint`}));
+    input.setAttribute('aria-describedby', `${id}-hint`);
+  }
+  const mark = () => wrap.classList.toggle('changed', key in draft.values);
+  input.addEventListener(key === 'type' ? 'change' : 'input', () => {
+    if (input.value === display(original)) delete draft.values[key];
+    else draft.values[key] = input.value;
+    mark(); sync();
+  });
+  mark();
+  if (isDateKey(key)) {
+    const echo = el('p', null, {class: 'readback', id: `${id}-readback`, 'aria-live': 'polite'});
+    input.setAttribute('aria-describedby', echo.id);
+    wrap.append(echo);
+    let timer;
+    input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => updateReadback(echo, input.value), 350); });
+    updateReadback(echo, input.value);
+  }
+  return wrap;
+}
+function addFieldRow(draft, keys) {
+  const row = el('div', null, {class: 'add-field'});
+  const pick = el('select', null, {id: 'add-field', 'aria-label': 'Add a field'});
+  pick.append(el('option', 'Add a field…', {value: ''}));
+  const candidates = new Set([...Object.keys(graph.properties), ...LIST_KEYS]);
+  for (const key of candidates) if (!keys.includes(key) && key !== 'id' && (saga || !isRole(key))) pick.append(el('option', label(key), {value: key}));
+  pick.append(el('option', 'Another field…', {value: '*'}));
+  const custom = el('input', null, {id: 'add-field-name', placeholder: 'field name, e.g. eye colour', hidden: '', 'aria-label': 'New field name'});
+  const add = (key) => { draft.extra = [...draft.extra, key]; renderInspector(); $(`field-${key}`)?.focus(); };
+  pick.addEventListener('change', () => {
+    if (pick.value === '*') { custom.hidden = false; custom.focus(); }
+    else if (pick.value) add(pick.value);
+  });
+  custom.addEventListener('keydown', event => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    const key = custom.value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+    if (/^[a-z_]+$/.test(key) && !keys.includes(key)) add(key);
+    else {
+      custom.classList.add('failed'); custom.setAttribute('aria-invalid', 'true');
+      toast(keys.includes(key) ? 'That field is already here.' : 'Field names use letters and spaces only.', {kind: 'error'});
+    }
+  });
+  row.append(pick, custom);
+  return row;
+}
+const snapshot = (item, keys) => Object.fromEntries(keys.map(k => [k, item.fields[k] ?? null]));
+async function saveInspector(draft) {
+  const item = draft.base;
+  let field, unset;
+  try { ({field, unset} = changes(draft)); } catch (error) { report(error); return; }
+  if (!Object.keys(field).length && !unset.length && !(saga && draft.note)) return;
+  if (saga && !draft.note.trim()) {
+    toast('Add a change note that says what should change and why.', {kind: 'error'});
+    $('change-note')?.focus();
+    return;
+  }
+  const controls = [...$('inspector').querySelectorAll('input, select, textarea, button')];
+  controls.forEach(c => { c.disabled = true; });
+  status(saga ? 'Sending…' : 'Saving…', 'busy');
+  const keys = [...Object.keys(field), ...unset], before = snapshot(item, keys);
+  try {
+    if (saga) {
+      await api('request', {item: ref(item), field, unset, note: draft.note, version: item.version, expect: before});
+      drafts.delete(item.path);
+      toast(`Change to ${item.name} proposed. The story files stay as they are until the pipeline applies it.`);
+    } else {
+      const result = await api('set', {item: ref(item), field, unset, version: item.version, expect: before});
+      drafts.delete(item.path);
+      offerUndo(item, before, {...field, ...Object.fromEntries(unset.map(k => [k, null]))}, result,
+        result.merged ? `Saved ${item.name}, merged with other changes made on disk.` : `Saved ${item.name}.`);
+    }
+    await refresh();
+    renderInspector();
+    idle();
+  } catch (error) {
+    report(error, error.data?.current ? conflictActions(item.path) : []);
+  } finally {
+    controls.forEach(c => { if (c.isConnected) c.disabled = false; });
+    if ($('save-item')?.isConnected && drafts.has(item.path)) $('save-item').disabled = $('discard-item').disabled = !dirty(drafts.get(item.path));
+  }
+}
+function offerUndo(item, before, after, result, message) {
+  idle();
+  toast(message, {actions: [['Undo', async () => {
+    const field = {}, unset = [];
+    for (const [key, value] of Object.entries(before)) value == null ? unset.push(key) : (field[key] = value);
+    status('Undoing…', 'busy');
+    await api('set', {item: ref(item), field, unset, version: result.version, expect: after});
+    await refresh(); renderInspector(); idle();
+    toast(`Undid the change to ${item.name}.`);
+  }]]});
+}
+function conflictActions(path) {
+  return [
+    ['Load their version', async () => { drafts.delete(path); await refresh(); renderInspector(); idle(); }],
+    ['Keep my text', async () => {
+      const draft = drafts.get(path);
+      await refresh();
+      if (draft && byPath.get(path)) draft.base = byPath.get(path);
+      renderInspector();
+      status('Your text is kept. Review it, then save.', 'dirty');
+    }],
+  ];
+}
+async function linkChange(op, item, role, target, message) {
+  const before = item.fields[role];
+  const result = await api(op, {item: ref(item), role, target, version: item.version});
+  await refresh(); renderInspector();
+  toast(message, {actions: [['Undo', async () => {
+    await api('set', {item: ref(item), ...(before === undefined ? {unset: [role]} : {field: {[role]: before}}), version: result.version});
+    await refresh(); renderInspector();
+    toast('Undone.');
+  }]]});
+}
+function groupBy(list, key) {
+  const out = new Map();
+  for (const entry of list) { const k = key(entry); if (!out.has(k)) out.set(k, []); out.get(k).push(entry); }
+  return out;
+}
+function renderLinks(panel, item) {
+  const section = el('section', null, {'aria-labelledby': 'links-title'});
+  section.append(el('h3', 'Connections', {id: 'links-title'}));
+  const outgoing = graph.links.filter(l => l.from_path === item.path);
+  if (!outgoing.length) section.append(el('p', saga ? 'No connections.' : 'No connections yet.', {class: 'hint'}));
+  for (const [role, links] of groupBy(outgoing, l => l.role)) {
+    section.append(el('h4', label(role), {class: 'role-name'}));
+    const list = el('ul', null, {class: 'links'});
+    for (const link of links) {
+      const target = byPath.get(link.to_path), name = target?.name || link.to, row = el('li'), left = el('span');
+      left.append(target ? button(name, () => selectItem(target.path, {reveal: true}), {class: 'link'}) : el('span', name));
+      if (!link.resolved) left.append(' ', el('span', 'not found', {class: 'missing'}));
+      if (link.lag) left.append(' ', el('span', String(link.lag), {class: 'hint'}));
+      row.append(left);
+      if (!saga) row.append(button([icon('close')], () => linkChange('unlink', item, role, target ? ref(target) : link.to,
+        `Removed ${name} from ${label(role)}.`), {class: 'quiet icon-only', title: 'Remove this connection',
+        'aria-label': `Remove ${name} from ${label(role)}`, id: `unlink-${encodeURIComponent(`${role}\0${link.to_path || link.to}`)}`}));
+      list.append(row);
+    }
+    section.append(list);
+  }
+  panel.append(section);
+  if (saga) panel.append(el('p', 'To propose a connection, edit its field above (for example [[Name]]) or describe it in the change note.', {class: 'hint'}));
+  else panel.append(addLinkForm(item));
+
+  const incoming = graph.links.filter(l => l.to_path === item.path && l.resolved);
+  const back = el('section', null, {'aria-labelledby': 'backlinks-title'});
+  back.append(el('h3', 'Linked from', {id: 'backlinks-title'}));
+  if (!incoming.length) back.append(el('p', 'Nothing links here yet.', {class: 'hint'}));
+  for (const [role, links] of groupBy(incoming, l => l.role)) {
+    const group = el('details', null, links.length <= 6 ? {open: ''} : {});
+    group.append(el('summary', `${graph.roles[role]?.inverse || `${label(role)} (from)`} · ${links.length}`));
+    const list = el('ul', null, {class: 'links'});
+    for (const link of links) {
+      const source = byPath.get(link.from_path);
+      if (source) add(list, el('li')).append(button(source.name, () => selectItem(source.path, {reveal: true}), {class: 'link'}));
+    }
+    group.append(list);
+    back.append(group);
+  }
+  panel.append(back);
+}
+function addLinkForm(item) {
+  const box = el('section', null, {class: 'add-link', 'aria-labelledby': 'add-link-title'});
+  box.append(el('h3', 'Add a connection', {id: 'add-link-title'}));
+  const roles = el('select', null, {id: 'link-role'});
+  for (const [key, role] of Object.entries(graph.roles)) roles.append(el('option', role.label || words(key), {value: key}));
+  const target = el('input', null, {id: 'link-target', list: 'link-targets', placeholder: 'Type a name', autocomplete: 'off', 'aria-describedby': 'link-scope'});
+  const scope = el('p', null, {class: 'hint', id: 'link-scope'});
+  const options = el('datalist', null, {id: 'link-targets'}), choices = new Map();
+  const fill = () => {
+    const allowed = graph.roles[roles.value]?.to || [];
+    choices.clear();
+    options.replaceChildren();
+    for (const other of [...graph.items].sort(byName)) {
+      if (other.path === item.path || (allowed.length && !allowed.includes(other.type))) continue;
+      choices.set(findText.get(other.path), other);
+      options.append(el('option', null, {value: findText.get(other.path)}));
+    }
+    scope.textContent = allowed.length ? `Only ${allowed.map(typePlural).join(' or ').toLowerCase()}.` : '';
+  };
+  const add = async () => {
+    const text = target.value.trim(), q = text.toLowerCase();
+    const other = choices.get(text) || [...choices.values()].find(o => o.name.toLowerCase() === q);
+    if (!other) {
+      target.classList.add('failed'); target.setAttribute('aria-invalid', 'true');
+      toast(text ? `Choose “${text}” from the list, or check its spelling.` : 'Type a name and choose it from the list.', {kind: 'error'});
+      target.focus();
+      return;
+    }
+    await linkChange('link', item, roles.value, ref(other), `Added ${other.name} to ${label(roles.value)}.`);
+    $('link-target')?.focus();
+  };
+  roles.addEventListener('change', () => { fill(); target.value = ''; });
+  target.addEventListener('input', () => { target.classList.remove('failed'); target.removeAttribute('aria-invalid'); });
+  target.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); add().catch(error => report(error)); } });
+  fill();
+  const row = el('div', null, {class: 'row'});
+  row.append(target, button('Add', add, {id: 'add-link'}));
+  box.append(el('label', 'Connection', {for: 'link-role'}), roles, el('label', 'To', {for: 'link-target'}), row, scope, options);
+  return box;
+}
+function inspectorWelcome() {
+  const box = el('div', null, {class: 'welcome'});
+  box.append(el('h2', 'Inspector', {id: 'inspector-title', tabindex: '-1'}),
+    el('p', 'Select an item in any view to see and edit its details here.'),
+    el('p', 'Press / to find an item by name.', {class: 'hint'}));
+  return box;
+}
+
+// ---- views --------------------------------------------------------------------------------
+function scrollBox(kind) { return el('div', null, {class: `scroll ${kind}`, 'data-tab': tab}); }
+function emptyState(title, text, action) {
+  const box = el('div', null, {class: 'empty'});
+  box.append(el('h2', title), el('p', text));
+  if (action) box.append(button(action[0], action[1], {class: 'primary'}));
+  return box;
+}
+function welcome() {
+  return saga ? emptyState(`${worldName} has no items yet`, 'Items appear here once the saga has some.')
+    : emptyState(`Welcome to ${worldName}`, 'Your world is empty. Start with a character, a place or an event. You can add dates and connections afterwards.',
+      ['Create your first item', () => openCreate('character')]);
 }
 function fit() {
-  const items = dated();
-  const lo = items.length ? Math.min(...items.map(i => i.lo)) : 0;
-  const hi = items.length ? Math.max(...items.map(i => i.hi)) : 525600;
-  const pad = Math.max(1440, (hi - lo) * .06);
+  const items = dated().filter(i => tab !== 'Timeline' || !ui.hidden.has(i.type));
+  if (!items.length) { range = [0, 525949]; return; }
+  const lo = Math.min(...items.map(i => i.lo)), hi = Math.max(...items.map(i => i.hi));
+  const pad = Math.max(1440, (hi - lo) * .04);
   range = [lo - pad, hi + pad];
 }
 function zoom(factor, anchor = .5) {
-  const span = Math.max(60, (range[1] - range[0]) * factor), center = range[0] + (range[1] - range[0]) * anchor;
-  range = [center - span * anchor, center + span * (1 - anchor)]; renderView();
-}
-function pan(direction) {
-  const shift = (range[1] - range[0]) * direction;
-  range = range.map(v => v + shift); renderView();
-}
-function chart(height, title) {
   if (!range) fit();
-  const box = el('div', null, {class: 'scroll'});
-  const svg = svgEl('svg', {viewBox: `0 0 1000 ${height}`, role: 'group', 'aria-label': title, id: 'time-chart'});
-  const x = minute => 170 + (minute - range[0]) / (range[1] - range[0]) * 800;
-  const inverse = pos => range[0] + (pos - 170) / 800 * (range[1] - range[0]);
-  const px = event => (event.clientX - svg.getBoundingClientRect().left) / svg.getBoundingClientRect().width * 1000;
-  svg.append(svgEl('text', {x: 12, y: 20}, 'Gregorian axis'));
-  for (let tick = 0; tick <= 5; tick++) {
-    const pos = 170 + tick * 160;
-    svg.append(svgEl('line', {x1: pos, x2: pos, y1: 32, y2: height - 10, class: 'axis'}));
-    svg.append(svgEl('text', {x: pos, y: 20, 'text-anchor': tick === 5 ? 'end' : 'start'}, gregorian(inverse(pos), 'day')));
+  const span = Math.min(5.3e14, Math.max(60, (range[1] - range[0]) * factor));
+  const center = range[0] + (range[1] - range[0]) * anchor;
+  range = [center - span * anchor, center + span * (1 - anchor)];
+  scheduleRender();
+}
+function pan(fraction) {
+  if (!range) fit();
+  const shift = (range[1] - range[0]) * fraction;
+  range = range.map(v => v + shift);
+  scheduleRender();
+}
+function zoomControls() {
+  const group = el('div', null, {class: 'group', role: 'group', 'aria-label': 'Zoom and move'});
+  group.append(
+    button([icon('minus')], () => zoom(2), {id: 'zoom-out', class: 'icon-only', 'aria-label': 'Zoom out', title: 'Zoom out (−)'}),
+    button([icon('plus')], () => zoom(.5), {id: 'zoom-in', class: 'icon-only', 'aria-label': 'Zoom in', title: 'Zoom in (+)'}),
+    button([icon('left')], () => pan(-.25), {id: 'pan-left', class: 'icon-only', 'aria-label': 'Move earlier', title: 'Move earlier'}),
+    button([icon('right')], () => pan(.25), {id: 'pan-right', class: 'icon-only', 'aria-label': 'Move later', title: 'Move later'}),
+    button([icon('fit'), 'Fit'], () => { fit(); renderView(); }, {id: 'fit-all', title: 'Fit everything (0)'}));
+  return group;
+}
+function legend() {
+  const box = el('div', null, {class: 'legend', 'aria-hidden': 'true'});
+  for (const [kind, text] of [['', 'Exact'], ['fuzzy', 'Approximate']]) {
+    const sample = svgEl('svg', {viewBox: '0 0 26 14'}), g = svgEl('g', {class: `cat-event ${kind}`});
+    g.append(svgEl('rect', {x: 1, y: 2, width: 24, height: 10, rx: 3, class: 'mark'}));
+    sample.append(g);
+    const entry = el('span');
+    entry.append(sample, ` ${text}`);
+    box.append(entry);
   }
+  return box;
+}
+function chart(box, width, gutter = 0) {
+  if (!range) fit();
+  const left = gutter + 14, right = width - 14, span = range[1] - range[0];
+  const x = (minute) => left + (minute - range[0]) / span * (right - left);
+  const axis = svgEl('svg', {width, height: 30, 'aria-hidden': 'true'}), marks = ticks(range, right - left);
+  let free = 0;
+  for (const tick of marks) {
+    const px = x(tick.minute), w = labelWidth(tick.label);
+    axis.append(svgEl('line', {x1: px, x2: px, y1: 22, y2: 30, class: 'grid'}));
+    if (px + 4 >= free && px + 4 + w <= width) { axis.append(svgEl('text', {x: px + 4, y: 17, class: 'tick-label'}, tick.label)); free = px + 4 + w + 8; }
+  }
+  const head = el('div', null, {class: 'axis'});
+  head.append(axis);
+  const svg = svgEl('svg', {width, role: 'group', id: 'time-chart'});
+  box.append(head, svg);
+  const px = (event) => event.clientX - svg.getBoundingClientRect().left;
   svg.addEventListener('wheel', event => {
-    if (!event.ctrlKey) return;
-    event.preventDefault(); zoom(event.deltaY > 0 ? 1.25 : .8, Math.max(0, Math.min(1, (px(event) - 170) / 800)));
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      zoom(event.deltaY > 0 ? 1.25 : .8, Math.max(0, Math.min(1, (px(event) - left) / (right - left))));
+    } else if (event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
+      event.preventDefault();
+      pan((event.deltaX || event.deltaY) / (right - left));
+    }
   }, {passive: false});
   svg.addEventListener('pointerdown', event => {
-    if (event.target.closest('.item') || event.button !== 0) return;
-    const start = px(event), initial = [...range];
+    if (event.target.closest('.item') || event.button !== 0 || event.pointerType === 'touch') return;
+    const start = event.clientX, initial = [...range];
     dragging = true; svg.setPointerCapture(event.pointerId);
-    const finish = e => {
-      const shift = (px(e) - start) / 800 * (initial[1] - initial[0]);
-      range = initial.map(v => v - shift); dragging = false;
-      svg.removeEventListener('pointerup', finish); svg.removeEventListener('pointercancel', cancel);
+    const cleanup = () => { dragging = false; svg.removeEventListener('pointerup', finish); svg.removeEventListener('pointercancel', cleanup); };
+    const finish = (e) => {
+      cleanup();
+      if (Math.abs(e.clientX - start) < DRAG_THRESHOLD) return;
+      const shift = (e.clientX - start) / (right - left) * (initial[1] - initial[0]);
+      range = initial.map(v => v - shift);
       renderView();
     };
-    const cancel = () => { dragging = false; svg.removeEventListener('pointerup', finish); svg.removeEventListener('pointercancel', cancel); };
-    svg.addEventListener('pointerup', finish); svg.addEventListener('pointercancel', cancel);
+    svg.addEventListener('pointerup', finish); svg.addEventListener('pointercancel', cleanup);
   });
-  box.append(svg);
-  return {box, svg, x, inverse, px};
+  const grid = (height) => {
+    for (const tick of marks) { const p = x(tick.minute); svg.prepend(svgEl('line', {x1: p, x2: p, y1: 0, y2: height, class: 'grid'})); }
+    svg.setAttribute('height', height);
+  };
+  return {svg, x, left, right, grid, px};
 }
-function timeToolbar(container) {
-  const toolbar = el('div', null, {class: 'toolbar'});
-  toolbar.append(button('Zoom in', () => zoom(.5), {id: 'zoom-in'}), button('Zoom out', () => zoom(2), {id: 'zoom-out'}),
-    button('Pan left', () => pan(-.25), {id: 'pan-left'}), button('Pan right', () => pan(.25), {id: 'pan-right'}),
-    button('Fit all', () => { fit(); renderView(); }, {id: 'fit-all'}));
-  container.append(toolbar);
-}
-function timeline(container) {
-  timeToolbar(container);
-  container.append(el('p', saga ? 'Select an item to propose a change.' : 'Drag a Gregorian item to re-date it. Arrow keys select; Enter opens its fields. Ctrl+wheel zooms; drag the background to pan.', {class: 'hint'}));
-  const items = dated().sort((a, b) => a.type.localeCompare(b.type) || a.lo - b.lo);
-  const c = chart(Math.max(180, items.length * 42 + 64), 'Timeline');
-  items.forEach((item, index) => {
-    const y = 64 + index * 42;
-    c.svg.append(svgEl('text', {x: 12, y: y + 5}, index === 0 || item.type !== items[index - 1].type ? item.type : ''));
-    c.svg.append(svgEl('line', {x1: 160, x2: 980, y1: y + 18, y2: y + 18, class: 'lane'}));
-    const x = c.x(item.lo), width = c.x(item.hi) - x;
-    if (x > 970 || x + width < 170) return;
-    const group = svgEl('g', {class: `item${selected === item.path ? ' selected' : ''}`, role: 'button', tabindex: '0',
-      'aria-label': `${item.name}, ${item.start.text}`, 'data-path': item.path, 'data-item': ref(item), id: `timeline-${encodeURIComponent(ref(item))}`});
-    group.append(svgEl('title', {}, `${item.name}: ${item.start.text}`));
-    if (width < 1) group.append(svgEl('circle', {cx: x, cy: y, r: 6, class: 'mark'}));
-    else group.append(svgEl('rect', {x: Math.max(170, x), y: y - 8, width: Math.max(2, Math.min(970, x + width) - Math.max(170, x)), height: 16, rx: 3, class: 'mark'}));
-    group.append(svgEl('text', {x: Math.max(175, Math.min(x, 785)), y: y - 14}, item.name));
-    group.addEventListener('click', () => selectItem(item.path));
-    group.addEventListener('keydown', event => {
-      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectItem(item.path, true); }
-      if (['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown'].includes(event.key)) {
-        event.preventDefault();
-        const nodes = [...c.svg.querySelectorAll('.item')], current = nodes.indexOf(group);
-        const next = nodes[Math.max(0, Math.min(nodes.length - 1, current + (['ArrowLeft', 'ArrowUp'].includes(event.key) ? -1 : 1)))];
-        next.focus(); selectItem(next.dataset.path);
-      }
+function wireItems(svg) {
+  const nodes = [...svg.querySelectorAll('.item')];
+  for (const node of nodes) {
+    node.addEventListener('click', () => selectItem(node.dataset.path, {show: true}));
+    node.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectItem(node.dataset.path, {focus: true}); return; }
+      const i = nodes.indexOf(node);
+      const next = {ArrowLeft: i - 1, ArrowUp: i - 1, ArrowRight: i + 1, ArrowDown: i + 1, Home: 0, End: nodes.length - 1}[event.key];
+      if (next == null) return;
+      event.preventDefault();
+      const target = nodes[Math.max(0, Math.min(nodes.length - 1, next))];
+      selectItem(target.dataset.path);
+      target.focus();
     });
-    if (!saga) enableRedate(group, item, c);
-    c.svg.append(group);
-  });
-  container.append(c.box);
-  if (!items.length) container.append(el('p', 'No dated items yet. Create one, then enter its date in the inspector.'));
+  }
 }
-function enableRedate(group, item, c) {
-  if (item.start.circa || item.start.provisional || item.start.note || item.start.from !== item.start.to ||
-      item.fields.date_min || item.fields.date_max) return;
-  group.addEventListener('pointerdown', event => {
-    if (event.button !== 0) return;
+function typeChips(types, items) {
+  const box = el('div', null, {class: 'chips', role: 'group', 'aria-label': 'Show kinds of items'});
+  for (const type of types) {
+    const chip = el('label', null, {class: `chip cat-${category({type})}`});
+    const box2 = el('input', null, {type: 'checkbox', id: `show-${type}`});
+    box2.checked = !ui.hidden.has(type);
+    box2.addEventListener('change', () => { box2.checked ? ui.hidden.delete(type) : ui.hidden.add(type); renderView(); });
+    chip.append(box2, el('span', null, {class: 'swatch'}), `${typePlural(type)} · ${items.filter(i => i.type === type).length}`);
+    box.append(chip);
+  }
+  return box;
+}
+function timeline(view) {
+  const all = dated(), types = [...new Set(all.map(i => i.type))].sort(typeOrder);
+  const bar = el('div', null, {class: 'toolbar'});
+  bar.append(zoomControls(), el('span', null, {class: 'spacer'}), legend());
+  view.append(bar);
+  if (!all.length) {
+    view.append(emptyState('Nothing is dated yet', 'Give an item a date, or a person a birth date, in the inspector and it appears here.'));
+    return;
+  }
+  if (types.length > 1) view.append(typeChips(types, all));
+  const box = scrollBox('chart');
+  view.append(box);
+  const width = Math.max(280, box.clientWidth), c = chart(box, width);
+  c.svg.setAttribute('aria-label', 'Timeline. Use the arrow keys to move between items.');
+  const ROW = 36, BAND = 30;
+  let y = 6;
+  for (const type of types) {
+    if (ui.hidden.has(type)) continue;
+    const items = all.filter(i => i.type === type), rows = [], placed = [];
+    for (const item of items) {
+      const x0 = c.x(item.lo), x1 = c.x(item.hi);
+      if (x1 < c.left - 1 || x0 > c.right + 1) continue;
+      const v0 = Math.max(c.left, x0), v1 = Math.min(c.right, x1), w = labelWidth(item.name);
+      const lx = Math.max(c.left, Math.min(v0, c.right - w)), start = Math.min(lx, v0) - 6, end = Math.max(v1, lx + w) + 12;
+      let row = rows.findIndex(e => e <= start);
+      if (row < 0) { row = rows.length; rows.push(0); }
+      rows[row] = end;
+      placed.push({item, row, x0, x1, v0, v1, lx, start, end, w});
+    }
+    const outside = items.length - placed.length;
+    c.svg.append(svgEl('text', {x: c.left, y: y + 18, class: 'band-label'}, typePlural(type)),
+      svgEl('text', {x: c.left + labelWidth(typePlural(type)) + 6, y: y + 18, class: 'band-count'},
+        `${items.length}${outside ? ` · ${outside} outside this view` : ''}`),
+      svgEl('line', {x1: c.left, x2: c.right, y1: y + 25.5, y2: y + 25.5, class: 'band-rule'}));
+    y += BAND;
+    for (const p of placed) {
+      const top = y + p.row * ROW, item = p.item, mid = top + 24;
+      const g = svgEl('g', {class: `item cat-${category(item)}${fuzzy(item) ? ' fuzzy' : ''}`, role: 'button', tabindex: '-1',
+        'data-path': item.path, 'aria-label': `${item.name}, ${typeLabel(item.type)}, ${whenText(item)}`,
+        id: `timeline-${encodeURIComponent(item.path)}`});
+      g.append(svgEl('rect', {class: 'hit', x: p.start, y: top + 1, width: p.end - p.start - 6, height: ROW - 3, rx: 5}),
+        svgEl('text', {x: p.lx, y: top + 14, class: 'item-label'}, item.name),
+        p.x1 - p.x0 < 6 ? svgEl('circle', {cx: Math.max(c.left, Math.min(c.right, p.x0)), cy: mid, r: 5.5, class: 'mark'})
+          : svgEl('rect', {x: p.v0, y: mid - 5, width: Math.max(2, p.v1 - p.v0), height: 10, rx: 3, class: 'mark'}),
+        svgEl('title', {}, `${item.name} · ${whenText(item)}`));
+      if (!saga) enableRedate(g, item, c, {x: p.lx + p.w + 4, y: top + 14});
+      c.svg.append(g);
+    }
+    y += Math.max(1, rows.length) * ROW + 12;
+  }
+  c.grid(y);
+  wireItems(c.svg);
+  const undated = graph.items.length - all.length, note = el('p', null, {class: 'hint'});
+  note.append(saga ? 'Select an item to propose a change. ' : 'Select an item to open it. Drag an exactly dated item sideways to change its date. ');
+  if (undated) note.append(`${plural(undated, 'item')} without a date ${undated === 1 ? 'is' : 'are'} not shown; `,
+    button('see them in the Spreadsheet', () => activateTab($('tab-spreadsheet')), {class: 'link'}), '.');
+  view.append(note);
+}
+function enableRedate(g, item, c, at) {
+  const s = item.start, e = item.end;
+  // A drag moves the whole span; anything it cannot move exactly is edited in the inspector instead.
+  if (!exact(s) || item.fields.date_min || item.fields.date_max || (e && (!exact(e) || minuteOf(e.text) == null))) return;
+  g.addEventListener('pointerdown', event => {
+    if (event.button !== 0 || event.pointerType === 'touch') return;
     event.stopPropagation();
-    selectItem(item.path);
-    const start = c.px(event), origin = c.x(item.lo), initialRange = [...range];
-    // Identify the parser before allowing visual movement, rather than guessing
-    // from the date's spelling (a custom calendar can also display ISO dates).
-    let allowed = false;
-    const conversion = (async () => {
-      if (!conversions.has(item.start.text)) conversions.set(item.start.text, await api('convert', {date: item.start.text}));
-      const converted = conversions.get(item.start.text);
-      const cal = calendars.find(c => (c.id || c.type || 'gregorian') === converted.parsed_by);
-      allowed = Boolean(cal && (cal.type || 'gregorian') === 'gregorian' && ['year', 'month', 'day', 'minute'].includes(item.start.precision));
+    const startX = event.clientX, initial = [...range], origin = c.x(item.lo);
+    let allowed = false, moved = false;
+    // Identify the parser before allowing movement, rather than guessing from the date's spelling.
+    const check = convert(s.text).then(r => {
+      allowed = isGregorian(r.parsed_by) && ['year', 'month', 'day', 'minute'].includes(s.precision);
       return allowed;
-    })();
-    // Attach a rejection handler immediately, even when a pointer is cancelled.
-    conversion.catch(report);
-    dragging = true; group.setPointerCapture(event.pointerId);
-    const move = e => { if (allowed) { group.classList.add('dragging'); group.setAttribute('transform', `translate(${c.px(e) - start},0)`); } };
-    const cleanup = () => {
-      dragging = false; group.removeAttribute('transform'); group.classList.remove('dragging');
-      group.removeEventListener('pointermove', move); group.removeEventListener('pointerup', finish); group.removeEventListener('pointercancel', cleanup);
+    });
+    check.catch(() => {});
+    const target = (ev) => gregorian(Math.round(initial[0] + (origin + ev.clientX - startX - c.left) / (c.right - c.left) * (initial[1] - initial[0])), s.precision);
+    const tip = svgEl('text', {x: at.x, y: at.y, class: 'drag-date'});
+    dragging = true; g.setPointerCapture(event.pointerId);
+    const move = (ev) => {
+      const dx = ev.clientX - startX;
+      if (Math.abs(dx) >= DRAG_THRESHOLD) moved = true;
+      if (!moved || !allowed) return;
+      g.classList.add('dragging'); g.setAttribute('transform', `translate(${dx},0)`);
+      tip.textContent = dateWords(target(ev));
+      if (!tip.isConnected) g.append(tip);
     };
-    const finish = async e => {
-      const dx = c.px(e) - start; cleanup();
-      if (Math.abs(dx) < 3) return;
+    const cleanup = () => {
+      dragging = false; g.removeAttribute('transform'); g.classList.remove('dragging'); tip.remove();
+      g.removeEventListener('pointermove', move); g.removeEventListener('pointerup', finish); g.removeEventListener('pointercancel', cleanup);
+    };
+    const finish = async (ev) => {
+      cleanup();
+      if (!moved || Math.abs(ev.clientX - startX) < DRAG_THRESHOLD) return;
       try {
-        if (!await conversion) {
-          status('Drag is unavailable for this calendar or precision. Edit the date input instead.'); return;
-        }
-        const minute = initialRange[0] + (origin + dx - 170) / 800 * (initialRange[1] - initialRange[0]);
-        const key = startKey(item), value = gregorian(Math.round(minute), item.start.precision);
-        const draft = draftFor(item);
-        if (dirty(draft)) { status('Save your inspector draft before dragging.'); return; }
-        draft.values[key] = value;
-        // Only the start is changed; explicit end dates remain an intentional separate edit.
-        renderInspector();
-        await saveFields(item, {[key]: value});
-        drafts.delete(item.path); $('error').hidden = true; await refresh();
+        if (!await check) { toast('This date can’t be dragged. Edit it in the inspector instead.'); return; }
+        if (dirty(drafts.get(item.path))) { toast('Save or discard your changes in the inspector before dragging this item.', {kind: 'error'}); return; }
+        const key = startKey(item), value = target(ev), field = {[key]: value};
+        if (item.end) field[endKey(item)] = shiftDate(item.end.text, item.end.precision, minuteOf(value) - minuteOf(s.text));
+        const before = snapshot(item, Object.keys(field));
+        status('Saving…', 'busy');
+        const result = await api('set', {item: ref(item), field, version: item.version, expect: before});
+        await refresh();
+        offerUndo(item, before, field, result, `Moved ${item.name} to ${dateWords(value)}.`);
       } catch (error) { report(error); }
     };
-    group.addEventListener('pointermove', move); group.addEventListener('pointerup', finish); group.addEventListener('pointercancel', cleanup);
+    g.addEventListener('pointermove', move); g.addEventListener('pointerup', finish); g.addEventListener('pointercancel', cleanup);
   });
 }
-function subway(container) {
-  timeToolbar(container);
-  const label = el('label', 'Filter people ', {for: 'subway-filter'}), filter = el('input', null, {id: 'subway-filter', type: 'search'});
-  filter.value = subwayFilter;
+function rankedPeople() {
+  const counted = people().map(p => ({p, n: [...(partOf.get(p.path) || [])].filter(path => byPath.get(path)?.lo != null).length}));
+  return counted.sort((a, b) => b.n - a.n || byName(a.p, b.p));
+}
+function peopleFilter(view, hint) {
+  const bar = el('div', null, {class: 'toolbar'});
+  const filter = el('input', null, {id: 'people-filter', type: 'search', placeholder: 'Filter people by name', 'aria-label': 'Filter people by name'});
+  filter.value = ui.people;
   filter.addEventListener('input', () => {
-    const pos = filter.selectionStart; subwayFilter = filter.value; renderView();
-    $('subway-filter').focus(); $('subway-filter').setSelectionRange(pos, pos);
+    const at = filter.selectionStart;
+    ui.people = filter.value; renderView();
+    $('people-filter').focus(); $('people-filter').setSelectionRange(at, at);
   });
-  label.append(filter); container.append(label, el('p', 'The 12 people with the most events. Filter to show all matching people.', {class: 'hint'}));
-  const allEvents = events();
-  const ranked = people().map(p => ({p, count: allEvents.filter(e => takesPart(p, e)).length})).sort((a, b) => b.count - a.count || a.p.name.localeCompare(b.p.name));
-  const lanes = (subwayFilter ? ranked.filter(({p}) => p.name.toLowerCase().includes(subwayFilter.toLowerCase())) : ranked.slice(0, 12)).map(r => r.p);
-  const c = chart(Math.max(170, lanes.length * 56 + 65), 'Subway');
+  bar.append(filter, el('span', hint, {class: 'hint'}));
+  return bar;
+}
+function subway(view) {
+  const bar = peopleFilter(view, 'Each line is a person; stops are the events they take part in.');
+  bar.prepend(zoomControls());
+  view.append(bar);
+  const q = ui.people.toLowerCase(), ranked = rankedPeople().filter(r => r.n > 0);
+  const lanes = (q ? ranked.filter(({p}) => p.name.toLowerCase().includes(q)) : ranked.slice(0, 12)).map(r => r.p);
+  if (!lanes.length) {
+    view.append(q ? emptyState('No one matches', `No person whose name contains “${ui.people}” takes part in a dated event.`)
+      : emptyState('No journeys yet', 'Connect people to dated events with the Participants connection, and their lines appear here.'));
+    return;
+  }
+  const box = scrollBox('chart');
+  view.append(box);
+  const width = Math.max(300, box.clientWidth), gutter = width < 600 ? 104 : 150, c = chart(box, width, gutter), LANE = 46, TOP = 26;
+  c.svg.setAttribute('aria-label', 'Subway. Use the arrow keys to move between stops.');
   lanes.forEach((p, i) => {
-    c.svg.append(svgEl('text', {x: 12, y: 65 + i * 56}, p.name));
-    c.svg.append(svgEl('line', {x1: 170, x2: 970, y1: 60 + i * 56, y2: 60 + i * 56, class: 'rail'}));
+    const y = TOP + i * LANE, cls = `r${i % 8}`, room = Math.floor((gutter - 20) / 7), name = p.name.length > room ? p.name.slice(0, room - 1) + '…' : p.name;
+    const tag = svgEl('text', {x: 14, y: y + 4, class: `lane-name ${cls}`}, name);
+    tag.append(svgEl('title', {}, p.name));
+    c.svg.append(tag, svgEl('line', {x1: c.left, x2: c.right, y1: y, y2: y, class: `rail-dim ${cls}`}));
+    if (p.lo != null) {
+      const a = Math.max(c.left, c.x(p.lo)), b = Math.min(c.right, p.end ? c.x(p.hi) : c.right);
+      if (b > a) c.svg.append(svgEl('line', {x1: a, x2: b, y1: y, y2: y, class: `rail ${cls}`}));
+    }
   });
-  for (const event of allEvents) {
+  for (const event of events()) {
     const stops = lanes.map((p, i) => takesPart(p, event) ? i : -1).filter(i => i >= 0), x = c.x(event.lo);
-    if (!stops.length || x < 170 || x > 970) continue;
-    c.svg.append(svgEl('line', {x1: x, x2: x, y1: 60 + stops[0] * 56, y2: 60 + stops.at(-1) * 56, class: 'connector'}));
+    if (!stops.length || x < c.left || x > c.right) continue;
+    if (stops.length > 1) c.svg.append(svgEl('line', {x1: x, x2: x, y1: TOP + stops[0] * LANE, y2: TOP + stops.at(-1) * LANE, class: 'connector'}));
     for (const lane of stops) {
-      const stop = svgEl('g', {class: 'item', role: 'button', tabindex: '0', 'aria-label': `${event.name}, ${lanes[lane].name}`,
-        id: `subway-${encodeURIComponent(JSON.stringify([event.path, lanes[lane].path]))}`});
-      stop.append(svgEl('circle', {cx: x, cy: 60 + lane * 56, r: 7, class: 'mark'}), svgEl('title', {}, `${event.name} · ${event.start.text}`));
-      stop.addEventListener('click', () => selectItem(event.path));
-      stop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectItem(event.path, true); } });
-      c.svg.append(stop);
+      const g = svgEl('g', {class: `item r${lane % 8}`, role: 'button', tabindex: '-1', 'data-path': event.path,
+        'aria-label': `${event.name}, with ${lanes[lane].name}, ${whenText(event)}`,
+        id: `subway-${encodeURIComponent(`${event.path}\0${lanes[lane].path}`)}`});
+      g.append(svgEl('circle', {cx: x, cy: TOP + lane * LANE, r: 11, class: 'hit'}),
+        svgEl('circle', {cx: x, cy: TOP + lane * LANE, r: 6, class: 'stop'}),
+        svgEl('title', {}, `${event.name} · ${whenText(event)}`));
+      c.svg.append(g);
     }
   }
-  container.append(c.box);
+  c.grid(TOP + lanes.length * LANE);
+  wireItems(c.svg);
+  if (!q && ranked.length > lanes.length) view.append(el('p', `Showing the ${lanes.length} people with the most events. Filter to find the other ${ranked.length - lanes.length}.`, {class: 'hint'}));
 }
-function tableShell(container, caption, columns) {
-  const scroll = el('div', null, {class: 'scroll'}), table = el('table'), head = el('thead'), row = el('tr'), body = el('tbody');
-  table.append(el('caption', caption));
-  for (const col of columns) row.append(el('th', col, {scope: 'col'}));
-  head.append(row); table.append(head, body); scroll.append(table); container.append(scroll);
-  return body;
-}
-function relationships(container) {
-  const es = events(), body = tableShell(container, 'Ages at participating events · chronological order', ['Person', ...es.map(e => `${e.name} · ${e.start.text}`)]);
+function relationships(view) {
+  view.append(peopleFilter(view, 'Ages at the events each person takes part in. Yellow: under 18. Red: before birth or after death.'));
+  const q = ui.people.toLowerCase();
+  const shown = rankedPeople().filter(r => r.n > 0 && (!q || r.p.name.toLowerCase().includes(q))).map(r => r.p).sort(byName);
+  const LIMIT = 150, all = events().filter(e => shown.some(p => takesPart(p, e))), cols = all.slice(0, LIMIT);
+  if (!shown.length) {
+    view.append(q ? emptyState('No one matches', `No person whose name contains “${ui.people}” takes part in a dated event.`)
+      : emptyState('No ages to show yet', 'Connect people to dated events with the Participants connection to see how old they are at each one.'));
+    return;
+  }
+  const box = scrollBox('table'), table = el('table', null, {class: 'ages'}), head = el('tr'), body = el('tbody');
+  table.append(el('caption', 'Age of each person at the events they take part in', {class: 'sr-only'}));
+  head.append(el('th', 'Person', {scope: 'col'}));
+  for (const e of cols) {
+    const th = el('th', null, {scope: 'col', 'data-path': e.path, title: `${e.name} · ${whenText(e)}`});
+    const name = button(e.name, () => selectItem(e.path, {show: true}), {class: 'link ev-name'});
+    th.append(name, el('span', e.start.text, {class: 'ev-date'}));
+    head.append(th);
+  }
+  add(table, el('thead')).append(head);
+  table.append(body);
   const jobs = [];
-  for (const p of people()) {
-    const row = el('tr'), heading = el('th', null, {scope: 'row'});
-    heading.append(button(p.name, () => selectItem(p.path), {id: `person-${encodeURIComponent(p.path)}`})); row.append(heading);
-    for (const e of es) {
-      const cell = el('td', '·', {class: 'age', 'data-person': ref(p), 'data-event': ref(e)});
+  for (const p of shown) {
+    const row = el('tr', null, {'data-path': p.path}), th = el('th', null, {scope: 'row'});
+    th.append(button(p.name, () => selectItem(p.path, {show: true}), {class: 'link', id: `person-${encodeURIComponent(p.path)}`}));
+    row.append(th);
+    for (const e of cols) {
+      const cell = el('td');
       if (takesPart(p, e)) {
-        cell.textContent = 'Loading…';
-        jobs.push(async () => {
-          try { const age = await api('age', {item: ref(p), at: ref(e)}); cell.textContent = age.text; }
-          catch (error) { cell.textContent = 'Age unavailable'; cell.title = error.message; }
-        });
+        cell.classList.add('on');
+        const key = `${p.path}|${p.version}|${e.path}|${e.version}`;
+        if (p.lo == null) cell.textContent = 'No birth date';
+        else if (ages.has(key)) paintAge(cell, ages.get(key));
+        else {
+          cell.textContent = '…';
+          jobs.push(async () => {
+            try { ages.set(key, await api('age', {item: ref(p), at: ref(e)})); paintAge(cell, ages.get(key)); }
+            catch (error) { cell.textContent = 'Unknown'; cell.title = error.message; }
+          });
+        }
       }
       row.append(cell);
     }
     body.append(row);
   }
+  box.append(table);
+  view.append(box);
+  if (all.length > LIMIT) view.append(el('p', `Showing the first ${LIMIT} of ${all.length} events. Filter people to narrow the table.`, {class: 'hint'}));
   // A small worker pool avoids flooding a large world's local server with age requests.
-  for (let n = 0; n < Math.min(4, jobs.length); n++) (async () => {
-    while (jobs.length && body.isConnected) await jobs.shift()();
-  })();
+  for (let n = 0; n < Math.min(4, jobs.length); n++) (async () => { while (jobs.length && body.isConnected) await jobs.shift()(); })();
 }
-function spreadsheet(container) {
-  const body = tableShell(container, saga ? 'Select an item to propose changes in the inspector.' : 'Edit a cell; Enter or leaving the cell saves it.', ['Name', 'Type', 'Date / born', 'End / died', 'Location', 'Inspector']);
-  for (const item of graph.items) {
-    const row = el('tr');
-    for (const key of [nameKey(item), 'type', startKey(item), endKey(item), 'location']) {
-      const cell = el('td'), id = `${item.path}\0${key}`;
-      let base = item;
-      const input = el('input', null, {id: `cell-${encodeURIComponent(id)}`, 'aria-label': `${item.name}: ${key}`, 'data-field': key, 'data-item': ref(item)});
-      input.value = cells.get(id)?.value ?? display(item.fields[key]);
-      input.readOnly = saga;
-      input.addEventListener('input', () => {
-        if (!cells.has(id)) cells.set(id, {base, value: input.value, saving: false});
-        else cells.get(id).value = input.value;
-      });
-      const save = async () => {
-        const draft = cells.get(id);
-        if (!draft || draft.saving) return;
-        draft.saving = true; input.readOnly = true;
-        try {
-          const value = valueOf(draft.value, draft.base.fields[key]);
-          const result = await saveFields(draft.base, {[key]: value});
-          // Enter keeps focus in this cell; a second edit must expect the first saved value.
-          base = {...draft.base, version: result.version, fields: {...draft.base.fields, [key]: value}};
-          cells.delete(id); input.classList.remove('failed'); $('error').hidden = true;
-          await refresh();
-        } catch (error) { input.classList.add('failed'); report(error); }
-        finally { draft.saving = false; input.readOnly = saga; }
-      };
-      input.addEventListener('blur', save);
-      input.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); save(); } });
-      cell.append(input); row.append(cell);
-    }
-    const cell = el('td'); cell.append(button('Inspect', () => selectItem(item.path, true), {id: `inspect-${encodeURIComponent(item.path)}`, 'aria-label': `Inspect ${item.name}`})); row.append(cell); body.append(row);
+function paintAge(cell, age) {
+  cell.textContent = age.text;
+  cell.classList.toggle('bad', age.status !== 'alive');
+  cell.classList.toggle('young', age.status === 'alive' && age.years?.[1] < 18);
+}
+function sortValue(item, key) {
+  if (key === 'name') return item.name.toLowerCase();
+  if (key === 'type') return typeLabel(item.type).toLowerCase();
+  if (key === 'start') return item.lo ?? Infinity;
+  if (key === 'end') return item.end ? item.hi : Infinity;
+  return display(item.fields.location).toLowerCase() || '￿';
+}
+function spreadsheet(view) {
+  const bar = el('div', null, {class: 'toolbar'});
+  const filter = el('input', null, {id: 'sheet-filter', type: 'search', placeholder: 'Filter by name', 'aria-label': 'Filter items by name'});
+  filter.value = ui.sheetText;
+  filter.addEventListener('input', () => {
+    const at = filter.selectionStart;
+    ui.sheetText = filter.value; renderView();
+    $('sheet-filter').focus(); $('sheet-filter').setSelectionRange(at, at);
+  });
+  const kind = el('select', null, {id: 'sheet-type', 'aria-label': 'Show one type'});
+  kind.append(el('option', 'All types', {value: ''}), ...Object.keys(graph.types).sort(typeOrder).map(t => el('option', typePlural(t), {value: t})));
+  kind.value = ui.sheetType;
+  kind.addEventListener('change', () => { ui.sheetType = kind.value; renderView(); });
+  const q = ui.sheetText.toLowerCase(), [sortKey, dir] = ui.sort;
+  const rows = graph.items.filter(i => (!ui.sheetType || i.type === ui.sheetType) && (!q || i.name.toLowerCase().includes(q)));
+  rows.sort((a, b) => { const x = sortValue(a, sortKey), y = sortValue(b, sortKey); return (x < y ? -1 : x > y ? 1 : byName(a, b)) * dir; });
+  bar.append(filter, kind, el('span', `${plural(rows.length, 'item')}${rows.length < graph.items.length ? ` of ${graph.items.length}` : ''}`, {class: 'hint', 'aria-live': 'polite'}),
+    el('span', null, {class: 'spacer'}), el('span', saga ? 'Select a row to propose changes in the inspector.' : 'Enter or leaving a cell saves it. Esc undoes your typing.', {class: 'hint'}));
+  view.append(bar);
+  const box = scrollBox('table'), table = el('table', null, {class: 'sheet'}), head = el('tr'), body = el('tbody');
+  table.append(el('caption', 'All items', {class: 'sr-only'}));
+  for (const [key, text] of [['name', 'Name'], ['type', 'Type'], ['start', 'Date or born'], ['end', 'End or died'], ['location', 'Location']]) {
+    const th = el('th', null, {scope: 'col', 'aria-sort': sortKey === key ? (dir > 0 ? 'ascending' : 'descending') : 'none'});
+    th.append(button(text, () => { ui.sort = [key, sortKey === key ? -dir : 1]; renderView(); }, {id: `sort-${key}`}));
+    head.append(th);
+  }
+  add(head, el('th', null, {scope: 'col'})).append(el('span', 'Open', {class: 'sr-only'}));
+  add(table, el('thead')).append(head);
+  table.append(body);
+  for (const item of rows) {
+    const row = el('tr', null, {'data-path': item.path});
+    row.append(sheetCell(item, nameKey(item)), sheetType(item), sheetCell(item, startKey(item)), sheetCell(item, endKey(item)), sheetLocation(item));
+    const open = el('td', null, {class: 'open'});
+    open.append(button('Open', () => selectItem(item.path, {focus: 'title', show: true}), {class: 'quiet', id: `inspect-${encodeURIComponent(item.path)}`, 'aria-label': `Open ${item.name}`}));
+    row.append(open);
+    body.append(row);
+  }
+  box.append(table);
+  view.append(box);
+  if (!rows.length) view.append(el('p', 'No items match this filter.', {class: 'hint'}));
+}
+async function saveCell(id, input, item, key, value) {
+  input.classList.remove('failed', 'saved');
+  status('Saving…', 'busy');
+  const field = {}, unset = [], original = item.fields[key];
+  if (value === '' || value == null) { if (original === undefined) { cells.delete(id); idle(); return; } unset.push(key); }
+  else field[key] = value;
+  try {
+    await api('set', {item: ref(item), field, unset, version: item.version, expect: {[key]: original ?? null}});
+    cells.delete(id);
+    ui.flash = {id, until: Date.now() + 1600};
+    input.classList.add('saved');
+    setTimeout(() => input.classList.remove('saved'), 1600);
+    await refresh();
+    idle();
+  } catch (error) {
+    input.classList.add('failed');
+    report(error, error.data?.current ? [['Load their version', async () => { cells.delete(id); await refresh(); idle(); }]] : []);
   }
 }
-function narrative(container) {
-  // Cards from hosts use chapter/order/number; natural name order is the fallback.
-  const order = i => Number(i.fields.chapter ?? i.fields.order ?? i.fields.number ?? i.name.match(/\d+/)?.[0] ?? Infinity);
-  const chapters = graph.items.filter(i => ['chapter', 'card'].includes(i.type)).sort((a, b) => order(a) - order(b) || a.name.localeCompare(b.name, undefined, {numeric: true}));
-  const list = el('ol', null, {class: 'narrative'});
+function cellId(item, key) { return `cell-${encodeURIComponent(`${item.path}\0${key}`)}`; }
+function wireCell(input, item, key) {
+  const id = cellId(item, key);
+  if (ui.flash?.id === id && Date.now() < ui.flash.until) input.classList.add('saved');
+  input.addEventListener('focus', () => { if (selected !== item.path) selectItem(item.path); });
+  return id;
+}
+function sheetCell(item, key) {
+  const cell = el('td'), input = el('input', null, {'aria-label': `${item.name}: ${label(key)}`, autocomplete: 'off'});
+  const id = wireCell(input, item, key);
+  input.id = id;
+  const draft = cells.get(id), base = draft?.base || item;
+  input.value = draft?.value ?? display(item.fields[key]);
+  input.readOnly = saga;
+  if (draft?.failed) input.classList.add('failed');
+  input.addEventListener('input', () => { cells.set(id, {base, value: input.value}); idle(); });
+  const save = () => {
+    const d = cells.get(id);
+    if (!d || d.saving) return;
+    d.saving = true;
+    saveCell(id, input, d.base, key, valueOf(d.value, d.base.fields[key], key)).finally(() => { d.saving = false; d.failed = input.classList.contains('failed'); });
+  };
+  input.addEventListener('blur', save);
+  input.addEventListener('keydown', event => {
+    if (event.key === 'Enter') { event.preventDefault(); save(); }
+    if (event.key === 'Escape') { cells.delete(id); input.value = display(item.fields[key]); input.classList.remove('failed'); idle(); }
+  });
+  cell.append(input);
+  return cell;
+}
+function sheetType(item) {
+  const cell = el('td'), select = el('select', null, {'aria-label': `${item.name}: Type`});
+  select.id = wireCell(select, item, 'type');
+  for (const type of Object.keys(graph.types).sort(typeOrder)) select.append(el('option', typeLabel(type), {value: type}));
+  if (!graph.types[item.type]) select.append(el('option', item.type, {value: item.type}));
+  select.value = item.type;
+  select.disabled = saga;
+  select.addEventListener('change', () => saveCell(select.id, select, item, 'type', select.value));
+  cell.append(select);
+  return cell;
+}
+function sheetLocation(item) {
+  if (!isRole('location')) return sheetCell(item, 'location');
+  const cell = el('td'), select = el('select', null, {'aria-label': `${item.name}: Location`});
+  select.id = wireCell(select, item, 'location');
+  const link = graph.links.find(l => l.from_path === item.path && l.role === 'location');
+  const allowed = graph.roles.location.to || [];
+  select.append(el('option', '—', {value: ''}));
+  for (const place of graph.items.filter(i => i.path !== item.path && (!allowed.length || allowed.includes(i.type))).sort(byName))
+    select.append(el('option', place.name, {value: place.path}));
+  if (link && !link.resolved) select.append(el('option', `${link.to} (not found)`, {value: '?'}));
+  select.value = link ? (link.resolved ? link.to_path : '?') : '';
+  select.disabled = saga;
+  select.addEventListener('change', () => {
+    const place = byPath.get(select.value);
+    saveCell(select.id, select, item, 'location', place ? `[[${place.name}]]` : '');
+  });
+  cell.append(select);
+  return cell;
+}
+function narrative(view) {
+  // Hosts' cards use chapter/order/number; natural name order is the fallback.
+  const order = (i) => Number(i.fields.chapter ?? i.fields.order ?? i.fields.number ?? i.name.match(/\d+/)?.[0] ?? Infinity);
+  const chapters = graph.items.filter(i => category(i) === 'narrative' || i.type === 'card')
+    .sort((a, b) => order(a) - order(b) || byName(a, b));
+  if (!chapters.length) {
+    view.append(emptyState('No chapters yet', 'Chapters and other story parts appear here in reading order, with a flag wherever the story steps back in time.',
+      saga || !graph.types.chapter ? null : ['Create a chapter', () => openCreate('chapter')]));
+    return;
+  }
+  const kinds = new Set(chapters.map(c => c.type)).size > 1, box = scrollBox('pad'), list = el('ol', null, {class: 'cards'});
   let latest = null;
   chapters.forEach((item, index) => {
-    const row = el('li'); row.append(button(`${index + 1}. ${item.name}`, () => selectItem(item.path), {id: `narrative-${encodeURIComponent(item.path)}`}));
-    const backwards = latest != null && item.lo != null && item.lo < latest;
-    row.append(el('span', `${item.start?.text || 'Undated'} · ${item.lo == null ? 'Chronology unknown' : backwards ? '↶ Story vs chronology: moves backwards' : '→ Story and chronology aligned'}`));
+    const row = el('li', null, {'data-path': item.path}), main = el('div');
+    main.append(button(item.name, () => selectItem(item.path, {show: true}), {class: 'link', id: `narrative-${encodeURIComponent(item.path)}`}),
+      el('div', `${kinds ? typeLabel(item.type) + ' · ' : ''}${item.start ? whenText(item) : 'No date'}`, {class: 'when'}));
+    const back = latest != null && item.lo != null && item.lo < latest;
+    row.append(el('span', String(index + 1), {class: 'num'}), main,
+      back ? el('span', 'Earlier than the part before', {class: 'flag warn', title: 'The story steps back in time here. A flashback may be intentional.'})
+        : item.lo == null ? el('span', 'Undated', {class: 'flag muted'}) : el('span'));
     if (item.lo != null) latest = Math.max(latest ?? item.lo, item.lo);
     list.append(row);
   });
-  container.append(list.childElementCount ? list : el('p', 'No chapters or cards yet. Create a chapter to begin your narrative.'));
+  box.append(list);
+  view.append(el('p', 'Story parts in reading order, by their chapter, order or number field.', {class: 'hint'}), box);
+}
+async function runCheck() {
+  if (ui.checking) { ui.recheck = true; return; }
+  ui.checking = true;
+  if (tab === 'Continuity') renderView();
+  try { ui.findings = await api('check'); ui.checkError = null; ui.checkedAt = new Date(); }
+  catch (error) { ui.checkError = error; }
+  finally {
+    ui.checking = false;
+    updateBadge();
+    if (tab === 'Continuity') renderView();
+    if (ui.recheck) { ui.recheck = false; runCheck(); }
+  }
+}
+function scheduleCheck() { clearTimeout(checkTimer); checkTimer = setTimeout(runCheck, 500); }
+function updateBadge() {
+  const badge = $('check-badge'), result = ui.findings, tabNode = $('tab-continuity');
+  if (!result) { badge.hidden = true; return; }
+  badge.hidden = !result.fail && !result.warn;
+  badge.textContent = String(result.fail || result.warn);
+  badge.className = `badge ${result.fail ? 'fail' : 'warn'}`;
+  tabNode.setAttribute('aria-label', `Continuity: ${plural(result.fail, 'definite problem')}, ${plural(result.warn, 'possible problem')}`);
+}
+function continuity(view) {
+  const bar = el('div', null, {class: 'toolbar'});
+  bar.append(button('Check again', runCheck, {id: 'check-again'}),
+    el('span', ui.checking ? 'Checking…' : ui.checkedAt ? `Checked at ${ui.checkedAt.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}` : '', {class: 'hint'}));
+  view.append(bar);
+  if (ui.checkError) { view.append(emptyState('The check could not run', explain(ui.checkError))); return; }
+  const result = ui.findings;
+  if (!result) { view.append(emptyState('Checking your world…', 'Lorekeeper is comparing dates, ages, deaths, places and links.')); return; }
+  if (!result.findings.length) {
+    view.append(emptyState('No continuity problems found', `Lorekeeper checked ${plural(graph.items.length, 'item')}: dates, ages, deaths, places and links all agree.`));
+    return;
+  }
+  const summary = el('div', null, {class: 'summary'});
+  summary.append(el('strong', `${plural(result.fail, 'definite problem')}, ${plural(result.warn, 'possible one')}`),
+    el('span', 'Definite problems contradict your dates. Possible ones depend on uncertain or missing information. Lorekeeper never changes your files to fix them.', {class: 'hint'}));
+  view.append(summary);
+  const box = scrollBox('pad');
+  for (const [severity, title] of [['FAIL', 'Definite problems'], ['WARN', 'Possible problems']]) {
+    const found = result.findings.filter(f => f.severity === severity);
+    if (!found.length) continue;
+    box.append(el('h3', `${title} · ${found.length}`, {class: 'section-title'}));
+    const list = el('ol', null, {class: 'cards findings'});
+    for (const f of found) {
+      const row = el('li', null, f.path && byPath.has(f.path) ? {'data-path': f.path} : {});
+      const item = byPath.get(f.path), where = el('div', null, {class: 'where'});
+      if (item) where.append(button(`Open ${item.name}`, () => selectItem(item.path, {reveal: true, focus: 'title'}), {class: 'link'}));
+      where.append(el('span', `${f.path}${f.line ? `:${f.line}` : ''}`, {class: 'path'}));
+      row.append(el('span', severity === 'FAIL' ? 'Definite' : 'Possible', {class: `flag ${severity === 'FAIL' ? 'fail' : 'warn'}`}),
+        el('strong', TITLES[f.code] || words(f.code.toLowerCase())), el('span', f.detail, {class: 'detail'}), where);
+      list.append(row);
+    }
+    box.append(list);
+  }
+  view.append(box);
+}
+const VIEWS = {Timeline: timeline, Subway: subway, Relationships: relationships, Spreadsheet: spreadsheet, Narrative: narrative, Continuity: continuity};
+function rememberScroll() {
+  const box = $('view').querySelector('.scroll');
+  if (box) scrolls.set(box.dataset.tab, [box.scrollTop, box.scrollLeft]);
 }
 function renderView() {
-  const focusId = document.activeElement?.id;
-  const view = $('view'); view.replaceChildren();
-  ({Timeline: timeline, Subway: subway, Relationships: relationships, Spreadsheet: spreadsheet, Narrative: narrative})[tab](view);
-  restoreFocus(focusId);
+  const view = $('view'), focusId = view.contains(document.activeElement) ? document.activeElement.id : null;
+  rememberScroll();
+  view.replaceChildren();
+  if (!graph.items.length && tab !== 'Continuity') view.append(welcome());
+  else VIEWS[tab](view);
+  const box = view.querySelector('.scroll'), memory = box && scrolls.get(box.dataset.tab);
+  if (memory) [box.scrollTop, box.scrollLeft] = memory;
+  markSelection();
+  if (focusId) $(focusId)?.focus({preventScroll: true});
+}
+function scheduleRender() {
+  if (renderPending) return;
+  renderPending = true;
+  requestAnimationFrame(() => { renderPending = false; renderView(); });
+}
+
+// ---- loading and live reload ----------------------------------------------------------------
+function indexGraph() {
+  graph.properties ||= {};
+  byPath = new Map(graph.items.map(i => [i.path, i]));
+  partOf = new Map();
+  for (const link of graph.links) {
+    if (link.role !== 'participants' || !link.resolved) continue;
+    if (!partOf.has(link.to_path)) partOf.set(link.to_path, new Set());
+    partOf.get(link.to_path).add(link.from_path);
+  }
 }
 function refresh() {
   // A mutation's reload must run after any poll already in flight, not be skipped.
@@ -464,61 +1245,103 @@ async function loadGraph() {
   try {
     // Stamp before graph: a concurrent file edit during graph loading is caught on the next poll.
     const stampResponse = await fetch('/api/stamp');
-    if (!stampResponse.ok) throw new Error('Could not read the project stamp.');
+    if (!stampResponse.ok) throw new ApiError('IO_ERROR', 'Could not read the project stamp.');
     const stamp = (await stampResponse.json()).stamp;
-    const next = await api('graph'); graph = next; lastStamp = stamp;
-    const focusId = document.activeElement?.id;
-    const selector = $('item-select');
-    selector.replaceChildren(el('option', 'Select an item', {value: ''}));
-    for (const item of graph.items) selector.append(el('option', `${item.name} (${item.type})`, {value: item.path}));
-    selector.value = selected;
-    const types = $('create-type'), previous = types.value;
-    types.replaceChildren(...Object.keys(graph.types).map(type => el('option', type, {value: type})));
-    types.value = previous || (graph.types.event ? 'event' : Object.keys(graph.types)[0]);
-    // Keep focused spreadsheet controls and all failed cells alive through polling.
-    if (!(tab === 'Spreadsheet' && $('view').contains(document.activeElement)) && !dragging) renderView();
-    if (!$('inspector').contains(document.activeElement)) renderInspector();
-    restoreFocus(focusId);
+    graph = await api('graph');
+    lastStamp = stamp;
+    indexGraph(); renderFind(); renderCreateTypes();
+    $('world').textContent = `${worldName} · ${plural(graph.items.length, 'item')}`;
+    const active = document.activeElement;
+    if (!($('view').contains(active) && typing(active)) && !dragging) renderView();
+    if (!$('inspector').contains(active)) renderInspector();
+    scheduleCheck();
   } finally { refreshing = false; }
 }
 
 const tabs = [...document.querySelectorAll('[role="tab"]')];
 function activateTab(node) {
-  tab = node.textContent;
+  rememberScroll();
+  tab = node.dataset.view;
   tabs.forEach(t => { t.setAttribute('aria-selected', String(t === node)); t.tabIndex = t === node ? 0 : -1; });
-  $('view').setAttribute('aria-labelledby', node.id); renderView();
+  $('view').setAttribute('aria-labelledby', node.id);
+  renderView();
+  if (tab === 'Continuity' && !ui.checking) runCheck();
 }
 tabs.forEach((node, index) => {
   node.addEventListener('click', () => activateTab(node));
   node.addEventListener('keydown', event => {
-    let next;
-    if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
-    if (event.key === 'ArrowLeft') next = (index + tabs.length - 1) % tabs.length;
-    if (event.key === 'Home') next = 0;
-    if (event.key === 'End') next = tabs.length - 1;
+    const next = {ArrowRight: (index + 1) % tabs.length, ArrowLeft: (index + tabs.length - 1) % tabs.length, Home: 0, End: tabs.length - 1}[event.key];
     if (next != null) { event.preventDefault(); tabs[next].focus(); activateTab(tabs[next]); }
   });
 });
-$('item-select').addEventListener('change', event => selectItem(event.target.value));
-$('mode').textContent = saga ? 'Saga · changes by request' : 'Local world editor';
-$('create-form').hidden = saga;
+$('find').addEventListener('input', () => { if (findPaths.has($('find').value)) pickFind(false); });
+$('find').addEventListener('keydown', event => {
+  if (event.key === 'Enter') { event.preventDefault(); pickFind(true); }
+  if (event.key === 'Escape') { $('find').value = ''; $('find').blur(); }
+});
 $('create-form').addEventListener('submit', async event => {
   event.preventDefault();
-  const submit = event.target.querySelector('button'); submit.disabled = true;
+  const submit = event.target.querySelector('button'), name = $('create-name').value.trim();
+  if (!name) { $('create-name').focus(); return; }
+  submit.disabled = true;
   try {
-    const item = await api('create', {type: $('create-type').value, name: $('create-name').value});
-    $('create-name').value = ''; selected = item.path;
-    await refresh(); selectItem(item.path, true); $('error').hidden = true; status('Created. Add dates and links in the inspector.');
-  } catch (error) { report(error); }
+    const item = await api('create', {type: $('create-type').value, name});
+    $('create-name').value = ''; $('new-item').open = false;
+    await refresh();
+    selectItem(item.path, {reveal: true});
+    const created = byPath.get(item.path);
+    (created && $(`field-${startKey(created)}`) || $('inspector-title'))?.focus();
+    toast(`Created ${name}. Add a date and connections in the inspector.`);
+  } catch (error) { report(error, [], 'Not created'); }
   finally { submit.disabled = false; }
 });
-try { await refresh(); status(`${graph.items.length} items · changes on disk appear automatically.`); }
-catch (error) { report(error); }
-setInterval(async () => {
-  if (refreshing || dragging) return;
+document.addEventListener('click', event => {
+  for (const node of document.querySelectorAll('details.new-item[open], details.shortcuts[open]')) if (!node.contains(event.target)) node.open = false;
+});
+document.addEventListener('keydown', event => {
+  const target = event.target;
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+    event.preventDefault();
+    if ($('view').contains(target) && target.matches('.sheet input')) target.blur();
+    else $('edit-form')?.requestSubmit();
+    return;
+  }
+  if (event.key === 'Escape') {
+    const open = document.querySelector('details.new-item[open], details.shortcuts[open]');
+    if (open) { open.open = false; open.querySelector('summary').focus(); }
+    else if (typing(target)) target.blur();
+    else $('toasts').lastElementChild?.remove();
+    return;
+  }
+  if (typing(target) || event.ctrlKey || event.metaKey || event.altKey) return;
+  if (event.key === '/') { event.preventDefault(); $('find').focus(); return; }
+  if (!['Timeline', 'Subway'].includes(tab)) return;
+  const action = {'+': () => zoom(.5), '=': () => zoom(.5), '-': () => zoom(2), '_': () => zoom(2), '0': () => { fit(); renderView(); }}[event.key];
+  if (action) { event.preventDefault(); action(); }
+});
+window.addEventListener('beforeunload', event => { if (anyDirty()) { event.preventDefault(); event.returnValue = ''; } });
+// Charts are drawn at the box's real width; redraw when it changes (window resize, a scrollbar appearing).
+new ResizeObserver(() => {
+  const box = $('view').querySelector('.scroll.chart'), svg = box?.querySelector('#time-chart');
+  if (svg && Math.abs(box.clientWidth - Number(svg.getAttribute('width'))) > 1 && !dragging) scheduleRender();
+}).observe($('view'));
+
+document.title = `${worldName} · Lorekeeper`;
+$('mode').hidden = !saga;
+$('new-item').hidden = saga;
+try { await refresh(); idle(); }
+catch (error) { report(error, [], 'Could not load'); }
+async function poll() {
+  if (refreshing || dragging || document.hidden) return;
   try {
     const response = await fetch('/api/stamp');
-    if (!response.ok) throw new Error('Live reload could not read the project stamp.');
-    if ((await response.json()).stamp !== lastStamp) await refresh();
-  } catch (error) { report(error); }
-}, 2000);
+    if (!response.ok) throw new Error('stamp');
+    const {stamp} = await response.json();
+    if (offline) { offline = false; idle(); }
+    if (stamp !== lastStamp) await refresh();
+  } catch {
+    if (!offline) { offline = true; idle(); }
+  }
+}
+setInterval(poll, 2000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
