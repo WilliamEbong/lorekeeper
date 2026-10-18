@@ -21,6 +21,12 @@ def compare_ge(x, y, lag_minutes=0):
     return "FAIL" if b < c + lag_minutes else "WARN" if a < d + lag_minutes else None
 
 
+def order_check(x, y):
+    """Story order: a later item x must not start before an earlier item y. Identical or
+    nested-from-the-same-start intervals (two chapters on one day) are not a finding."""
+    return "FAIL" if x.hi - 1 < y.lo else "WARN" if x.lo < y.lo else None
+
+
 def compare_eq(x, y, lag_minutes=0):
     a, b = possible(x)
     c, d = (n + lag_minutes for n in possible(y))
@@ -195,7 +201,7 @@ def run(project):
                 for candidate in (committed[0], prior[0], committed[1], prior[1]):
                     if candidate:
                         other = candidate
-                        severity = compare_ge(start, times[other][0])
+                        severity = order_check(start, times[other][0])
                         if severity == "FAIL":
                             break
                 if severity and (not definite_only or severity == "FAIL"):

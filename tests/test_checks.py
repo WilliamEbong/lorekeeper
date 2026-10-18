@@ -360,3 +360,13 @@ class Checks(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OrderCheck(unittest.TestCase):
+    def test_same_day_is_not_a_regression_but_earlier_is(self):
+        from lorekeeper import checks, dates
+        cals = dates.calendars(None)
+        day, year, before = (dates.parse(t, cals) for t in ("2036-11-20", "2036", "2036-11-19"))
+        self.assertIsNone(checks.order_check(day, day))
+        self.assertEqual(checks.order_check(year, day), "WARN")       # the later card might start in January
+        self.assertEqual(checks.order_check(before, day), "FAIL")
