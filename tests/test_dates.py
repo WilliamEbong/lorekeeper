@@ -1,5 +1,6 @@
 """Date arithmetic and grammar vectors; no external saga files are needed."""
 
+import math
 import unittest
 from unittest.mock import patch
 
@@ -76,6 +77,27 @@ class GregorianTests(unittest.TestCase):
             w = parse("May 3,2071")
             self.assertEqual((w.lo, w.hi, w.precision, w.note),
                              (self.cal.to_axis(2071, 5, 3), self.cal.to_axis(2071, 5, 4), "day", ""))
+
+    def test_month_and_bare_number_is_a_day_not_a_year(self):
+        # "June 21" has no year; it must be unparsed (and warned), never June of year 21.
+        for text in ("June 21", "May 5", "~June 21", "June 21, at dawn", "May 5 in Leeds"):
+            with self.subTest(text=text):
+                self.assertIsNone(dates.parse(text, [self.cal]))
+        # A comma inside "Month D, YYYY" belongs to the date; words after the year are the note.
+        for text, ymd, precision, note in (
+                ("May 5, 1990 in Leeds", (1990, 5, 5), "day", "in Leeds"),
+                ("May 5, 1990 at 9:30", (1990, 5, 5), "day", "at 9:30"),
+                ("May 5,1990 in Leeds, Yorkshire", (1990, 5, 5), "day", "in Leeds, Yorkshire"),
+                ("March 15, 44 BC in Rome", (-43, 3, 15), "day", "in Rome"),
+                ("June 1990", (1990, 6, 1), "month", ""),
+                ("21 June 1990", (1990, 6, 21), "day", ""),
+                ("June 21, 1990", (1990, 6, 21), "day", ""),
+                ("June 33 AD", (33, 6, 1), "month", ""),
+                ("June 100", (100, 6, 1), "month", ""),
+                ("44 BC", (-43, 1, 1), "year", "")):
+            with self.subTest(text=text):
+                w = dates.parse(text, [self.cal])
+                self.assertEqual((w.lo, w.precision, w.note), (self.cal.to_axis(*ymd), precision, note))
 
     def test_invalid_clock_in_note_is_preserved(self):
         for note in ("note 13:00 pm", "note 24:00", "note 12:60"):
@@ -263,8 +285,13 @@ class ArithmeticTests(unittest.TestCase):
         start = self.cal.to_axis(2023, 1, 31)
         self.assertEqual(dates.span(start, self.cal.to_axis(2023, 2, 28), self.cal)["months"], 1)
         self.assertEqual(dates.span(self.cal.to_axis(2020, 2, 29), self.cal.to_axis(2021, 2, 28), self.cal)["years"], 1)
+        # Months count from the true start, not the clamped year step: 2020-02-29 + 47 months
+        # is 2024-01-29, leaving 30 days (12 whole months would mean a 4th year).
         leap_span = dates.span(self.cal.to_axis(2020, 2, 29), self.cal.to_axis(2024, 2, 28), self.cal)
-        self.assertEqual((leap_span["years"], leap_span["months"], leap_span["days"]), (3, 12, 0))
+        self.assertEqual((leap_span["years"], leap_span["months"], leap_span["weeks"], leap_span["days"]),
+                         (3, 11, 4, 2))
+        self.assertEqual(dates.span_text(dates.span(self.cal.to_axis(2000, 2, 29), self.cal.to_axis(2004, 2, 28),
+                                                    self.cal)), "3 years, 11 months")
         with self.assertRaises(ValueError):
             dates.span(1, 0, self.cal)
 
@@ -284,7 +311,18 @@ class ArithmeticTests(unittest.TestCase):
         self.assertEqual(result["years"], [47, 50])
         overlap = dates.age(self.cal.parse("2000-06-01"), self.cal.parse("2000"), None, self.cal)
         self.assertEqual(overlap, dict(text="0 minutes", status="alive", years=[0, 0]))
-        self.assertEqual(dates.age(birth, birth, birth, self.cal)["text"], "0 minutes after death")
+        # "After death" only when the death is certainly at or before the moment (death.hi <= at.lo).
+        self.assertEqual(dates.age(birth, birth, birth, self.cal)["status"], "alive")
+        born = self.cal.parse("2000-03-01")
+        for death, at, expected in (("2050-06-01", "2050-06-01", "50 years, 3 months"),
+                                    ("2050", "2050-03-01", "50 years"),
+                                    ("2050-06-01", "2050-06-02", "1 day after death"),
+                                    ("2050-06-01 12:00", "2050-06-01 12:01", "1 minute after death"),
+                                    ("2050-06-01 12:00", "2050-06-01 12:00", "50 years, 3 months")):
+            with self.subTest(death=death, at=at):
+                result = dates.age(born, self.cal.parse(at), self.cal.parse(death), self.cal)
+                self.assertEqual(result["text"], expected)
+                self.assertEqual(result["status"], "after_death" if "after" in expected else "alive")
 
 
 class CustomCalendarTests(unittest.TestCase):
@@ -329,7 +367,28 @@ class CustomCalendarTests(unittest.TestCase):
                     self.assertEqual(cal.from_axis(w.lo)["year"], year)
                     self.assertEqual(cal.from_axis(w.lo - 1)["year"], year - 1)
                 self.assertLess(lengths.call_count, 20)
-            self.assertEqual(len(cal.year_starts), max(cycles, default=1) + 1)
+            self.assertEqual(len(cal.year_starts), math.lcm(*cycles) + 1)
+
+    def test_leap_cycles_repeat_over_their_least_common_multiple(self):
+        months = [{"name": "Frost", "days": 30}, {"name": "Thaw", "days": 30, "leap_days": 31}]
+        for cycles in ([3, 10], [4, 6], [2, 5], [4, 100, 400], [4]):
+            cal = dates.Calendar({"type": "months", "epoch": "2000-01-01", "months": months, "leap_cycles": cycles})
+            with self.subTest(cycles=cycles):
+                for year in range(-50, 60):
+                    for month, length in enumerate(cal._lengths(year), 1):
+                        for day in (1, length):
+                            p = cal.from_axis(cal.to_axis(year, month, day))
+                            self.assertEqual((p["year"], p["month"], p["day"]), (year, month, day))
+
+    def test_month_calendar_year_display_uses_offset(self):
+        cal = dates.Calendar({"type": "months", "epoch": "2000-01-01", "display_year_offset": 1000,
+                              "months": [{"name": "Frost", "days": 30}, {"name": "Thaw", "days": 30}],
+                              "display": "{display_year} {month}/{day}",
+                              "formats": [r"(?P<display_year>\d+) (?P<month>\d+)/(?P<day>\d+)",
+                                          r"Year (?P<display_year>\d+)"]})
+        for text, expected in (("Year 1005", "1005"), ("1005 2/3", "1005 2/3")):
+            w = cal.parse(text)
+            self.assertEqual(cal.format(w.lo, w.precision), expected)
 
     def test_srd_parked_vectors(self):
         cal = dates.calendars([SRD])[0]

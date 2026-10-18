@@ -149,16 +149,18 @@ class Checks(unittest.TestCase):
                     p = project(*(item(name, **f) for name, f in fields.items()))
                     self.assertSeverity(p, "DEPENDENCY", "WARN")
 
-    def test_dead_and_unborn_participants_and_learns(self):
-        for role in ("participants", "learns"):
-            for code, field, values in (
-                ("DEAD_PARTICIPANT", "died", (("2019", "FAIL"), ("2020", "WARN"), ("2021", None))),
-                ("UNBORN_PARTICIPANT", "born", (("2021", "FAIL"), ("2020", "WARN"), ("2019", None)))):
-                for value, expected in values:
-                    with self.subTest(role=role, code=code, date=value):
-                        person = item("Person", "hero", **{field: value})
-                        event = item("Event", date="2020-06-01 00:00", end="2020-06-02 00:00", **{role: "[[Person]]"})
-                        self.assertSeverity(project(person, event, types={"hero": {"category": "person"}}), code, expected)
+    def test_dead_and_unborn_participants_but_not_what_is_learned(self):
+        for code, field, values in (
+            ("DEAD_PARTICIPANT", "died", (("2019", "FAIL"), ("2020", "WARN"), ("2021", None))),
+            ("UNBORN_PARTICIPANT", "born", (("2021", "FAIL"), ("2020", "WARN"), ("2019", None)))):
+            for value, expected in values:
+                with self.subTest(code=code, date=value):
+                    person = item("Person", "hero", **{field: value})
+                    event = item("Event", date="2020-06-01 00:00", end="2020-06-02 00:00", participants="[[Person]]")
+                    self.assertSeverity(project(person, event, types={"hero": {"category": "person"}}), code, expected)
+                    # A learns target is the thing learned (a dead victim, an unborn heir), not a learner.
+                    event = item("Event", date="2020-06-01 00:00", end="2020-06-02 00:00", learns="[[Person]]")
+                    self.assertSeverity(project(person, event, types={"hero": {"category": "person"}}), code, None)
         person = item("Person", "character", born="2020-01-01 00:00", died="2020-01-02 00:00")
         for value in ("2020-01-01 00:00", "2020-01-02 00:00"):
             self.assertEqual(checks.run(project(person, item("E", date=value, participants="[[Person]]"))), [])
@@ -203,7 +205,10 @@ class Checks(unittest.TestCase):
     def test_two_places_certainty_locations_and_switch(self):
         person, a, b = item("P", "character"), item("A", "location"), item("B", "location")
         for start, end, expected in (("2020-01-01 10:30", "2020-01-01 12:00", "FAIL"),
-                                     ("~2020-01-01 11:15", "~2020-01-01 11:30", "WARN"),
+                                     ("~2020-01-01 11:00", "~2020-01-01 11:30", "WARN"),
+                                     # Its earliest start (11:00) is X's latest end: touching, not overlapping.
+                                     ("~2020-01-01 11:15", "~2020-01-01 11:30", None),
+                                     ("2020-01-01 11:00", "2020-01-01 11:30", None),
                                      ("2020-01-01 12:00", "2020-01-01 13:00", None),
                                      ("2020-01-01", "2020-01-01", None)):
             x = item("X", date="2020-01-01 10:00", end="2020-01-01 11:00", participants="[[P]]", location="[[A]]")
@@ -220,15 +225,106 @@ class Checks(unittest.TestCase):
         y = item("Y", date="2020-01-03", end="2020-01-06", participants="[[P]]", location="[[B]]")
         self.assertSeverity(project(person, a, b, x, y), "TWO_PLACES", "FAIL")
 
+    def test_two_places_back_to_back_stays_and_moments(self):
+        person, inn, dock = item("P", "character"), item("Inn", "location"), item("Dock", "location")
+        meeting = item("Meeting", date="2020-01-01 10:00", end="2020-01-01 11:00", participants="[[P]]", location="[[Inn]]")
+        walk = item("Walk", date="2020-01-01 11:00", end="2020-01-01 11:30", participants="[[P]]",
+                    location="[[Dock]]", after="[[Meeting]]")
+        self.assertEqual(checks.run(project(person, inn, dock, meeting, walk)), [])
+        # A moment (no end) lasts a minute: at the meeting's last minute it clashes, at its end it does not.
+        for date, expected in (("2020-01-01 10:59", "FAIL"), ("2020-01-01 11:00", None), ("2020-01-01 10:00", "FAIL")):
+            with self.subTest(moment=date):
+                call = item("Call", date=date, participants="[[P]]", location="[[Dock]]")
+                self.assertSeverity(project(person, inn, dock, meeting, call), "TWO_PLACES", expected)
+        first = item("First", date="2020-01-01 10:00", participants="[[P]]", location="[[Inn]]")
+        second = item("Second", date="2020-01-01 10:00", participants="[[P]]", location="[[Dock]]")
+        self.assertSeverity(project(person, inn, dock, first, second), "TWO_PLACES", "FAIL")
+        # A short event inside a stay elsewhere that is certain for days is a definite clash.
+        siege = item("Siege", date="2020-01-01", end="2020-01-05", participants="[[P]]", location="[[Inn]]")
+        for date in ("2020-01-03", "2020-01-03 12:00"):
+            with self.subTest(wedding=date):
+                wedding = item("Wedding", date=date, participants="[[P]]", location="[[Dock]]")
+                found = self.assertSeverity(project(person, inn, dock, siege, wedding), "TWO_PLACES", "FAIL")
+                self.assertIn("Dock", found[0]["detail"])
+                self.assertIn("Inn", found[0]["detail"])
+        wedding = item("Wedding", date="2020-01-05", participants="[[P]]", location="[[Dock]]")
+        self.assertSeverity(project(person, inn, dock, siege, wedding), "TWO_PLACES", None)
+
+    def test_two_places_sweep_is_fast_for_coarse_overlaps(self):
+        # One hero in 3,000 scenes all dated "2036" across 30 places: no clash is certain, so no pairwise work.
+        items = [item("Hero", "character", born="2000")] + [item(f"L{n}", "location") for n in range(30)]
+        items += [item(f"E{n}", date="2036", participants="[[Hero]]", location=f"[[L{n % 30}]]") for n in range(3000)]
+        p = project(*items)
+        start = time.perf_counter()
+        found = checks.run(p)
+        elapsed = time.perf_counter() - start
+        self.assertEqual(found, [])
+        self.assertLess(elapsed, 2, f"3,000 coarse scenes checked in {elapsed:.3f}s")
+
+    def test_end_before_start(self):
+        for start, end, expected in (("2020-05-10", "2020-05-01", "FAIL"), ("2020-05-10", "2020-05", "WARN"),
+                                     ("2020-05-10", "2020-05-10", None), ("2020-05", "2020-05-10", None),
+                                     ("2020-05-10 10:00", "2020-05-10 09:59", "FAIL")):
+            with self.subTest(start=start, end=end):
+                event = item("Journey", date=start, end=end)
+                found = self.assertSeverity(project(event), "END_BEFORE_START", expected)
+                if found:
+                    self.assertEqual((found[0]["path"], found[0]["line"]), (event.path, event.line("end")))
+        ghost = item("Ghost", "character", born="1990", died="1980")
+        f = self.assertSeverity(project(ghost), "END_BEFORE_START", "FAIL")[0]
+        self.assertEqual(f["line"], ghost.line("died"))
+        self.assertSeverity(project(item("Ghost", "character", born="1990", died="1980 (provisional)")),
+                            "END_BEFORE_START", "WARN")
+        # Ends that come from a duration or from the start itself are never reported.
+        for fields in ({"date": "2020-05-10"}, {"date": "~2020", "duration": "1d"}, {"date": "2020-05-10", "duration": "-2d"},
+                       {"born": "1990"}, {"date": "2020-05-10", "end": "nonsense"}):
+            with self.subTest(fields=fields):
+                self.assertSeverity(project(item("X", **fields)), "END_BEFORE_START", None)
+
+    def test_lone_date_bound_leaves_an_item_undated(self):
+        y = item("Y", date="2023")
+        for bound in ("date_min", "date_max"):
+            with self.subTest(bound=bound):
+                x = item("X", after="[[Y]]", **{bound: "2020"})
+                p = project(x, y)
+                self.assertEqual(item_dates(p, x)[:2], (None, None))
+                self.assertSeverity(p, "DEPENDENCY", None)
+                self.assertSeverity(p, "DEPENDENCY_UNDATED", "WARN")
+        # Both bounds still make the interval; a lone bound still narrows a stated date.
+        x = item("X", date_min="2024", date_max="2025", after="[[Y]]")
+        p = project(x, y)
+        self.assertEqual(show_when(p, item_dates(p, x)[0])["from"], "2024")
+        self.assertEqual(item_dates(p, x)[0].hi, dates.parse("2025", p.calendars).hi)
+        self.assertSeverity(p, "DEPENDENCY", None)
+        x = item("X", date="2020", date_min="2020-06")
+        p = project(x)
+        self.assertEqual(item_dates(p, x)[0].lo, dates.parse("2020-06", p.calendars).lo)
+        x = item("X", date_min="2025", date_max="2024")
+        self.assertEqual(item_dates(project(x), x)[2], [("date_max", "2024 is before date_min 2025")])
+
+    def test_max_age_none_at_project_level(self):
+        person = item("M", "character", born="1800")
+        event = item("E", date="2025", participants="[[M]]")
+        for setting in ("none", None, "unlimited"):
+            with self.subTest(setting=setting):
+                self.assertSeverity(project(person, event, checks={"max_age": setting}), "AGE_LIMIT", None)
+        own = item("M", "character", born="1800", max_age="150")
+        self.assertSeverity(project(own, event, checks={"max_age": "none"}), "AGE_LIMIT", "FAIL")
+
     def test_max_duration_vectors_and_selection(self):
         rule = {"rule": "max_duration", "max": "1d", "select": {"type": "event", "tag": "duel", "rail": "A"}}
         for end, expected in (("2020-01-03 00:00", "FAIL"), ("2020-01-02", "WARN"),
                               ("2020-01-01 23:59", None)):
             event = item("E", date="2020-01-01 00:00", end=end, tags=["duel"], rail="A")
             self.assertSeverity(project(event, rules=[rule]), "MAX_DURATION", expected)
-        # The half-open hull includes a minute beyond the exact endpoint: at max is WARN.
-        event = item("E", date="2020-01-01 00:00", duration="1d")
-        self.assertSeverity(project(event, rules=[{"rule": "max_duration", "max": "1d"}]), "MAX_DURATION", "WARN")
+        # Exactly the maximum is allowed; one possible minute more is a warning.
+        for fields, expected in (({"duration": "1d"}, None), ({"end": "2020-01-02 00:00"}, None),
+                                 ({"end": "2020-01-02 00:01"}, "FAIL"), ({"end": "~2020-01-02 00:00"}, "WARN")):
+            with self.subTest(fields=fields):
+                event = item("E", date="2020-01-01 00:00", **fields)
+                self.assertSeverity(project(event, rules=[{"rule": "max_duration", "max": "1d"}]), "MAX_DURATION", expected)
+        duel = item("Duel", date="2020-01-01 10:00", end="2020-01-02 10:00")
+        self.assertSeverity(project(duel, rules=[{"rule": "max_duration", "max": "1d"}]), "MAX_DURATION", None)
         for fields in ({"tags": ["other"], "rail": "A"}, {"tags": "duel", "rail": "B"},
                        {"type": "chapter", "tags": "duel", "rail": "A"}):
             event = item("E", date="2020-01-01", end="2020-02-01", **fields)
@@ -275,6 +371,16 @@ class Checks(unittest.TestCase):
         c = item("C", date="1900", chapter="1.0")
         self.assertEqual(checks.run(project(a, c, rules=[rule])), [])
 
+    def test_monotonic_keeps_the_worst_severity(self):
+        # A wide peer (B, all of 2020) must not hide the regression against A (June 2020).
+        rule = {"rule": "monotonic", "order": "n"}
+        a, b = item("A", date="2020-06-01", n="1"), item("B", date="2020", n="1")
+        c = item("C", date="2020-05-01..2020-07-31", n="2")
+        for peers in ((a, c), (a, b, c), (b, a, c)):
+            with self.subTest(peers=[i.name for i in peers]):
+                found = self.assertSeverity(project(*peers, rules=[rule]), "ORDER_REGRESSION", "WARN")
+                self.assertIn("; A (", found[0]["detail"])
+
     def test_monotonic_provisional_predecessor_keeps_committed_evidence(self):
         rule = {"rule": "monotonic", "order": "chapter"}
         for fields in ({"date": "2030", "status": "provisional"},
@@ -298,10 +404,25 @@ class Checks(unittest.TestCase):
             self.assertSeverity(project(a, b, rules=[rule]), rule["code"], "FAIL")
             self.assertSeverity(project(a, b, rules=[{**rule, "severity": "warn"}]), rule["code"], "WARN")
 
+    def test_story_order_counts_only_first_mentions_of_narrative_items(self):
+        chapter1, chapter2 = item("Chapter 1", "chapter", date="2025-04-01"), item("Chapter 2", "chapter", date="2025-04-10")
+        mira, harbour = item("Mira Vale", "character", born="1995-02-11"), item("Harbour", "location")
+        flood = item("Flood", date="1990")
+        text = ("- [[Chapter 1]]: [[Mira Vale]] arrives\n- [[Chapter 2]]: [[Mira Vale]] leaves [[Harbour]] "
+                "after the [[Flood]]\n- back to [[Chapter 1]]")
+        with patch("lorekeeper.checks.open", mock_open(read_data=text)):
+            self.assertEqual(checks.run(project(chapter1, chapter2, mira, harbour, flood, checks={"story_order": True})), [])
+        # Any type whose category is narrative takes part (a series' books, a campaign's sessions).
+        book = item("Book", "book", date="2000")
+        with patch("lorekeeper.checks.open", mock_open(read_data="[[Chapter 1]] [[Book]]")):
+            found = self.assertSeverity(project(chapter1, book, checks={"story_order": True},
+                                                types={"book": {"category": "narrative"}}), "STORY_ORDER", "WARN")
+            self.assertEqual(found[0]["path"], "Book.md")
+
     def test_story_order_opt_in_definite_only_and_fileless_projects(self):
-        a = item("A", date="2020")
-        b = item("B", date="1900..2100")
-        c = item("C", date="2000")
+        a = item("A", "chapter", date="2020")
+        b = item("B", "chapter", date="1900..2100")
+        c = item("C", "chapter", date="2000")
         source = mock_open(read_data="[[A|First]]\n[[Unknown]] [[ ]] [[B]]\n[[C]]")
         with patch("lorekeeper.checks.open", source):
             self.assertEqual(checks.run(project(a, b, c)), [])

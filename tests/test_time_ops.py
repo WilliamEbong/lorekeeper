@@ -31,6 +31,16 @@ class TimeOps(unittest.TestCase):
         with self.assertRaises(LoreError):
             run("age", item="Saltmarsh", at="2020")
 
+    def test_unreadable_at_is_invalid_not_a_missing_item(self):
+        for op in ("age", "where", "knows"):
+            with self.subTest(op=op), self.assertRaises(LoreError) as caught:
+                run(op, item="Mara Quell", at="2025-02-30")
+            self.assertEqual((caught.exception.code, caught.exception.message),
+                             ("INVALID", "'2025-02-30' is neither a date Lorekeeper can read nor an item name"))
+        with self.assertRaises(LoreError) as caught:
+            run("timeline", since="next spring")
+        self.assertEqual(caught.exception.code, "INVALID")
+
     def test_timeline_is_chronological(self):
         names = [i["name"] for i in run("timeline")["items"]]
         self.assertEqual(names, ["Ivo Brandt", "Mara Quell", "Tess Varga", "The flood at Saltmarsh",

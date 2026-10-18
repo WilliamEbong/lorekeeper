@@ -1,5 +1,6 @@
 """Integer-minute dates, configured calendars, and uncertainty intervals."""
 
+import math
 import re
 from bisect import bisect_right
 from typing import NamedTuple
@@ -75,7 +76,7 @@ class Calendar:
             self.cycles = config.get("leap_cycles", [])
             if any(c <= 0 for c in self.cycles):
                 raise ValueError("leap cycles must be positive")
-            self.cycle_years = max(self.cycles, default=1)
+            self.cycle_years = math.lcm(*self.cycles)     # the leap pattern's true period (1 when none)
             self.year_starts = [0]
             for year in range(self.cycle_years):
                 self.year_starts.append(self.year_starts[-1] + sum(self._lengths(year)))
@@ -168,7 +169,7 @@ class Calendar:
                 result += f'-{p["day"]:02}'
         else:
             if precision == "year":
-                return str(p.get("display_year", p["year"]))
+                return str(p["year"] + self.offset)
             default = "Y{year} D{day:03}" if self.type == "days" else "{year}-{month:02}-{day:02}"
             p.setdefault("display_year", p["year"] + self.offset)
             template = self.config.get("display", default)
@@ -214,8 +215,8 @@ class Calendar:
             else:
                 return None
             month = _MONTHS.get(name.lower().rstrip("."))
-            if month is None:
-                return None
+            if month is None or not day and not era and len(year.lstrip("-")) < 3:
+                return None            # "June 21" is a day without a year, not June of year 21
             precision = "day" if day else "month"
             year, day = int(year), int(day or 1)
         if era:
@@ -281,8 +282,13 @@ class Calendar:
         source = text.strip()
         # Longest complete expression wins: commas inside dates/configured
         # formats belong to the grammar before they can introduce a note.
-        cuts = [len(source)] + [m.start() for m in reversed(list(re.finditer(r"[,;(]", source)))]
-        for cut in cuts:
+        cuts = {len(source)} | {m.start() for m in re.finditer(r"[,;(]", source)}
+        # "May 5, 1990 in Leeds": that comma is the date's own, so the note starts after the year.
+        written = re.match(r"(?:" + _MARKER + r")?[A-Za-z]+\.?\s+\d{1,2}\s*,\s*-?\d+(?:\s+(?:BC|BCE|AD|CE))?(?=\s)",
+                           source, re.I)
+        if written:
+            cuts.add(written.end())
+        for cut in sorted(cuts, reverse=True):
             expression = source[:cut].strip()
             leading = timed = 0
             # In A..B, circa belongs to its endpoint, not the entire range.
@@ -294,7 +300,7 @@ class Calendar:
             if result is None:
                 continue
             note = source[cut:].strip()
-            if note:
+            if note[:1] in (",", ";", "("):
                 note = note[1:].strip()
                 if source[cut] == "(" and note.endswith(")"):
                     note = note[:-1].strip()
@@ -390,14 +396,16 @@ def span(lo, hi, cal):
         # of 12 cannot fit, even when a very long year fits many 30-day months.
         if months and months % 12 == 0:
             months -= 1
+        start = cal.add_months(start, months)
     else:
         months = 0
-        # Do not cap at 11: clamping a leap-day start can leave 12 whole
-        # months after the greedy year step (2020-02-29 to 2024-02-28).
-        while cal.add_months(start, months + 1) <= hi:
+        # Count months from lo itself, not from the clamped year step, so a
+        # leap-day start (2020-02-29 to 2024-02-28) gives 3 years, 11 months.
+        while cal.add_months(lo, count * low + months + 1) <= hi:
             months += 1
+        start = cal.add_months(lo, count * low + months)
     result["months"] = months
-    rest = hi - cal.add_months(start, months)
+    rest = hi - start
     for name, size in (("weeks", 10080), ("days", 1440), ("hours", 60), ("minutes", 1)):
         result[name], rest = divmod(rest, size)
     return result
@@ -412,7 +420,7 @@ def span_text(parts):
 def age(birth, at, death, cal):
     if at.hi <= birth.lo:
         status, text = "before_birth", span_text(span(at.lo, birth.lo, cal)) + " before birth"
-    elif death is not None and death.lo <= at.lo:
+    elif death is not None and death.hi <= at.lo:      # only a certain death; otherwise still alive
         status, text = "after_death", span_text(span(death.lo, at.lo, cal)) + " after death"
     else:
         # Overlapping uncertainty can put at.lo before birth.lo: use zero.
