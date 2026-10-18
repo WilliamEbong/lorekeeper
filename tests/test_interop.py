@@ -79,7 +79,7 @@ def sample(version=14):
     else:
         data.update(customOrder={"c": 0, "b": 1, "a": 2}, superById={"a": "b", "b": None, "c": None})
     return {"fileVersion": version, "core": {"coreFileVersion": version, "definitions": {
-        "calendar": interop._calendar(), "types": {"byId": {"ev": {"label": "Occurrence", "canHaveDate": True}}},
+        "calendar": interop._calendar(), "types": {"byId": {"ev": {"label": "Event", "canHaveDate": True}}},
         "references": {"byId": {}}, "properties": {"byId": {}}}, "data": data}}
 
 
@@ -131,6 +131,14 @@ class InteropTests(unittest.TestCase):
                                                  by_id[ident]["start"])
                                 continue
                             self.assertIsNotNone(dates.parse(by_id[ident][dest], self.project.calendars))
+                with tempfile.TemporaryDirectory() as folder:   # outside the repository: Aeon content never enters it
+                    store.atomic_write(Path(folder, "lore.json"), json.dumps({"lorekeeper": 1}))
+                    self.assertEqual(interop.import_into(store.Project(folder), result)["created"], len(result["items"]))
+                    loaded = store.Project(folder)
+                    nested = sum(len(loaded.links(i).get(role, [])) for i in loaded.items for role in ("part_of", "located_in"))
+                    self.assertGreaterEqual(nested, sum(1 for item in result["items"] if item["parent"]))
+                    self.assertEqual([f for f in loaded.findings() if f["code"] in ("BROKEN_LINK", "ROLE_TYPE")
+                                      and f["detail"].startswith(("part_of ", "located_in "))], [])
 
     def test_sc2_aeon_roundtrip_and_import(self):
         store.atomic_write(self.world / "narrative.md", "# Narrative\n- [[Crossing Harrow Pass]]\n- [[The flood at Saltmarsh]]\n")
@@ -224,6 +232,7 @@ class InteropTests(unittest.TestCase):
                     self.assertEqual(next(i for i in result["items"] if i["id"] == "a")["start"], "2004-02-29 16:23")
                     self.assertEqual(result["narrative"], ["b", "a"])
                     self.assertEqual(result["attachments"], ["ours.txt"])
+                    self.assertEqual({i["id"]: i["parent"] for i in result["items"]}, {"a": "b", "b": None, "c": None})
 
     def test_invalid_container_and_file_versions(self):
         path = self.root / "invalid.aeon"
@@ -266,6 +275,114 @@ class InteropTests(unittest.TestCase):
             doc["core"]["data"]["itemDatesById"]["a"]["startDate"]["precision"] = precision
             result = self.read_document(doc)
             self.assertEqual(next(i for i in result["items"] if i["id"] == "a")["start"], text)
+        # BC dates finer than a year import in the era form, and export as Aeon's BC era.
+        for text, imported, parts in (("March 15, 44 BC", "0044-03-15 BC", (0, 44, 3, 15, 0, 0, 5)),
+                                      ("0044-03-15 09:30 BC", "0044-03-15 09:30 BC", (0, 44, 3, 15, 9, 30, 7)),
+                                      ("-0043-03", "0044-03 BC", (0, 44, 3, 1, 0, 0, 3))):
+            with self.subTest(text=text):
+                encoded = interop._aeon_date(interop.GREGORIAN.parse(text))
+                self.assertEqual(tuple(encoded[k] for k in ("era", "year", "month", "day", "hour", "minute", "precision")),
+                                 parts)
+                self.assertEqual(interop._date_text(encoded, interop._calendar()), imported)
+                self.assertEqual(interop.GREGORIAN.parse(imported).lo, interop.GREGORIAN.parse(text).lo)
+
+    def test_csv_derived_bc_end_reads_back(self):
+        target = self.empty()
+        target.create("event", "Ides", {"date": "March 15, 44 BC", "duration": "2d"})
+        path = self.root / "bc.csv"
+        interop.write_csv(store.Project(target.root), path)
+        record = interop.read_csv(path)["items"][0]
+        self.assertEqual((record["start"], record["end"]), ("March 15, 44 BC", "0044-03-17 BC"))
+        self.assertEqual(interop.GREGORIAN.parse(record["end"]).lo, interop.GREGORIAN.to_axis(-43, 3, 17))
+
+    def test_nesting_imports_as_links_and_exports_back(self):
+        doc = sample()   # sample() nests First (a) inside Second (b), both events
+        defs, data = doc["core"]["definitions"], doc["core"]["data"]
+        defs["types"]["byId"].update(place={"label": "Location", "category": "LOCATION"},
+                                      person={"label": "Person", "category": "PERSON", "canHaveDate": True},
+                                      group={"label": "Character Group"})
+        for key, type_, label in (("city", "place", "City"), ("inn", "place", "Inn"),
+                                  ("ann", "person", "Ann"), ("crew", "group", "Crew")):
+            data["itemsById"][key] = {"id": key, "type": type_, "label": label, "tags": {}, "propertyValues": {}}
+        data["superAndChildOrderById"].update(city={"super": None, "childOrder": {"inn": 0}},
+                                              inn={"super": "city", "childOrder": {}},
+                                              crew={"super": None, "childOrder": {"ann": 0}},
+                                              ann={"super": "crew", "childOrder": {}})
+        target = self.empty()
+        self.assertEqual(interop.import_into(target, self.read_document(doc))["warnings"], [])
+        loaded = store.Project(target.root)
+        self.assertEqual(loaded.find("Inn").fields["located_in"], ["[[City]]"])
+        self.assertEqual(loaded.find("Ann").fields["part_of"], ["[[Crew]]"])
+        self.assertEqual(loaded.find("First").fields["part_of"], ["[[Second]]"])
+        self.assertNotIn("part_of", loaded.find("City").fields)
+        self.assertEqual(loaded.config["roles"]["part_of"], {"label": "Part of", "inverse": "Includes", "to": []})
+        self.assertEqual([f for f in loaded.findings() if f["code"] in ("ROLE_TYPE", "BROKEN_LINK")], [])
+        # Export turns the links back into Aeon nesting, declaring each child type's parent types.
+        path = self.root / "nested.aeon"
+        interop.write_aeon(loaded, path)
+        back = interop.read_aeon(path)
+        names = {item["id"]: item["name"] for item in back["items"]}
+        self.assertEqual({names[i["id"]]: names.get(i["parent"]) for i in back["items"] if i["parent"]},
+                         {"Inn": "City", "Ann": "Crew", "First": "Second"})
+        self.assertEqual(back["relationships"], [])
+        types = {key: spec["label"] for key, spec in back["types"].items()}
+        kinds = {types[i["type"]]: i["type"] for i in back["items"]}
+        self.assertEqual({types[t] for t in back["types"][kinds["Character"]]["superTypes"]}, {"Character Group"})
+        self.assertEqual({types[t] for t in back["types"][kinds["Location"]]["superTypes"]}, {"Location"})
+        # Only a location inside a location is located_in; part_of is declared only when used.
+        del data["superAndChildOrderById"]["a"], data["superAndChildOrderById"]["ann"]
+        target = self.empty("places")
+        interop.import_into(target, self.read_document(doc))
+        self.assertNotIn("part_of", store.Project(target.root).config.get("roles", {}))
+
+    def test_nesting_export_never_makes_a_loop(self):
+        target = self.empty()
+        target.create("event", "A", {"part_of": "[[B]]"})
+        target.create("event", "B", {"part_of": "[[A]]"})
+        path = self.root / "loop.aeon"
+        interop.write_aeon(store.Project(target.root), path)
+        parents = {item["name"]: item["parent"] for item in interop.read_aeon(path)["items"]}
+        self.assertEqual(sorted(parent is None for parent in parents.values()), [False, True])
+
+    def test_dated_types_keep_their_names(self):
+        doc = sample()
+        defs, data = doc["core"]["definitions"], doc["core"]["data"]
+        defs["types"]["byId"].update(back={"label": "Backstory", "canHaveDate": True},
+                                      task={"label": "Task", "canHaveDate": True},
+                                      clue={"label": "Clue", "canHaveDate": False})
+        for key, type_ in (("a", "back"), ("b", "task"), ("c", "clue")):
+            data["itemsById"][key]["type"] = type_
+        data["itemsById"]["d"] = {"id": "d", "type": "ev", "label": "Fourth", "tags": {}, "propertyValues": {}}
+        target = self.empty()
+        interop.import_into(target, self.read_document(doc))
+        loaded = store.Project(target.root)
+        self.assertEqual({i.name: i.type for i in loaded.items},
+                         {"First": "backstory", "Second": "task", "Third": "clue", "Fourth": "event"})
+        self.assertEqual(loaded.config["types"]["backstory"],
+                         {"label": "Backstory", "plural": "backstory", "category": "event", "id_prefix": "BACKSTORY"})
+        self.assertEqual(loaded.config["types"]["clue"]["category"], "thing")
+        self.assertNotIn("event", loaded.config["types"])
+        for key, spec in loaded.config["types"].items():
+            self.assertTrue(all(spec.get(k) for k in ("label", "plural", "category", "id_prefix")), key)
+        self.assertEqual(loaded.find("First").fields["date"], "2004-02-29 16:23")
+        path = self.root / "typed.aeon"
+        interop.write_aeon(loaded, path)
+        back = {spec["label"]: spec["canHaveDate"] for spec in interop.read_aeon(path)["types"].values()}
+        self.assertEqual((back["Backstory"], back["Task"], back["Clue"]), (True, True, False))
+
+    def test_multitext_survives_a_round_trip(self):
+        doc = sample()
+        doc["core"]["definitions"]["properties"]["byId"] = {"m": {"label": "Motivation", "format": "multitext"}}
+        text = 'Hiding his past.\nHe says "never".'
+        doc["core"]["data"]["itemsById"]["a"]["propertyValues"] = {"m": text}
+        target = self.empty()
+        interop.import_into(target, self.read_document(doc))
+        path = self.root / "multitext.aeon"
+        interop.write_aeon(store.Project(target.root), path)
+        back = interop.read_aeon(path)
+        first = next(i for i in back["items"] if i["name"] == "First")
+        self.assertEqual({back["properties"][pid]["label"]: value for pid, value in first["fields"].items()}["motivation"],
+                         text)
 
     def test_import_schema_and_into_and_repeated_import(self):
         doc = sample()

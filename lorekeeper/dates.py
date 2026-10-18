@@ -155,14 +155,16 @@ class Calendar:
         if precision not in UNITS:
             raise ValueError("invalid precision")
         p = self.from_axis(minutes)
-        template = ""
+        template, era = "", ""
         if precision == "hour":
             p["minute"] = 0
         if self.type == "gregorian":
             y = p["year"]
-            if precision == "year" and y < 1:
-                return f"{1 - y} BC"
-            result = f"{y:04}" if y >= 0 else f"-{abs(y):04}"
+            if y < 1:                    # year 0 is 1 BC: "44 BC", "0044-03-15 09:30 BC"
+                y, era = 1 - y, " BC"
+                if precision == "year":
+                    return f"{y}{era}"
+            result = f"{y:04}"
             if precision != "year":
                 result += f'-{p["month"]:02}'
             if precision not in ("year", "month"):
@@ -176,7 +178,7 @@ class Calendar:
             result = template.format(**p)
         if precision in ("hour", "minute") and "{hour" not in template and "{minute" not in template:
             result += (" " if self.type == "gregorian" else ", ") + f'{p["hour"]:02}:{p["minute"]:02}'
-        return result
+        return result + era
 
     def _interval(self, year, month, day, hour, minute, precision):
         lo = self.to_axis(year, month, day, hour, minute)
@@ -196,10 +198,15 @@ class Calendar:
         era = re.search(r"\s+(BC|BCE|AD|CE)$", text, re.I)
         if era:
             text = text[:era.start()].strip()
-        decade = re.fullmatch(r"(\d{2,})0s", text)        # "2040s": the ten years 2040-2049
+            if not time:                                   # "0044-03-15 09:30 BC": the era follows the time
+                time = _TIME.search(text)
+                if time:
+                    text = text[:time.start()].strip()
+        decade = re.fullmatch(r"(\d{2,}0)s", text)        # "2040s": 2040-2049; "1800s", "200s": a hundred years
         if decade and not era and not time:
-            year = int(decade[1]) * 10
-            return self._interval(year, 1, 1, 0, 0, "year")._replace(hi=self.to_axis(year + 10, 1, 1))
+            year = int(decade[1])
+            return self._interval(year, 1, 1, 0, 0, "year")._replace(
+                hi=self.to_axis(year + (100 if year % 100 == 0 else 10), 1, 1))
         iso = re.fullmatch(r"(-?\d+)(?:-(\d{2})(?:-(\d{2}))?)?", text)
         if iso:
             year = int(iso[1])
