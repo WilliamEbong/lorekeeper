@@ -251,7 +251,9 @@ class Project:
 
     def _index(self):
         self.by_id, self.by_name, self.by_stem, self.by_alias = {}, {}, {}, {}
+        self.by_path = {}
         for item in self.items:
+            self.by_path[item.path] = item
             if item.id:
                 if item.id.lower() in self.by_id:
                     first = self.by_id[item.id.lower()]
@@ -313,9 +315,12 @@ class Project:
         return self.by_name.get(key) or self.by_stem.get(key) or self.by_alias.get(key)
 
     def find(self, ref):
-        item = self.resolve(fm.link_target(ref) or ref) or self.by_id.get(str(ref).lower())
+        if str(ref).startswith("path:"):
+            item = self.by_path.get(ref[5:])
+        else:
+            item = self.by_id.get(str(ref).lower()) or self.resolve(fm.link_target(ref) or ref)
         if item is None:
-            raise LoreError("NOT_FOUND", f"no item named or with id {ref!r}")
+            raise LoreError("NOT_FOUND", f"no item with reference {ref!r}")
         return item
 
     def links(self, item):

@@ -1,5 +1,6 @@
 """Real loopback requests against a disposable copy, never the fixture itself."""
 import contextlib
+from concurrent.futures import ThreadPoolExecutor
 import io
 import json
 from pathlib import Path
@@ -115,6 +116,94 @@ class ServeTests(unittest.TestCase):
                            ("/../lore.json", None), ("/lore.json", None), ("/api/set", None)):
             self.assertEqual(self.request(path, args)[0], 404)
 
+    def test_deep_json_and_oversized_integer_return_invalid(self):
+        bodies = [b'{"text":' + b'[' * 100000 + b'0' + b']' * 100000 + b'}']
+        import sys
+        limit = sys.get_int_max_str_digits()
+        if limit:
+            bodies.append(b'{"text":' + b'9' * (limit + 1) + b'}')
+        for body in bodies:
+            with self.subTest(size=len(body)):
+                status, result, _ = self.request("/api/query", raw=body)
+                self.assertEqual(status, 400)
+                self.assertEqual(result["error"]["code"], "INVALID")
+        self.assertEqual(self.request("/api/graph", {})[0], 200)
+
+    def test_path_operations_target_the_selected_item_despite_id_name_collision(self):
+        first = ops.run("create", {"type": "event", "name": "Identity A"}, root=self.root)
+        second = ops.run("create", {"type": "event", "name": first["id"]}, root=self.root)
+        ref = "path:" + first["path"]
+        self.assertEqual(self.request("/api/show", {"item": first["id"]})[1]["path"], first["path"])
+        status, saved, _ = self.request("/api/set", {"item": ref, "field": {"date": "2071"},
+                                                   "version": first["version"], "expect": {"date": None}})
+        self.assertEqual(status, 200)
+        self.assertNotIn("date", self.request("/api/show", {"item": "path:" + second["path"]})[1]["fields"])
+        person = ops.run("show", {"item": "Mara Quell"}, root=self.root)
+        args = {"item": ref, "target": "path:" + person["path"], "role": "participants", "version": saved["version"]}
+        status, linked, _ = self.request("/api/link", args)
+        self.assertEqual(status, 200)
+        links = self.request("/api/graph", {})[1]["links"]
+        self.assertTrue(any(l["from_path"] == first["path"] and l["to_path"] == person["path"] for l in links))
+        self.assertIn("years", self.request("/api/age", {"item": args["target"], "at": ref})[1])
+        self.assertEqual(self.request("/api/unlink", {**args, "version": linked["version"]})[0], 200)
+        self.assertEqual(self.request("/api/request", {"item": ref, "note": "Correct date", "field": {"date": "2072"}})[0], 200)
+        self.assertEqual(self.request("/api/requests", {})[1]["requests"][0]["path"], first["path"])
+
+    def test_link_and_unlink_reject_stale_versions_even_for_noop(self):
+        item = ops.run("show", {"item": "Crossing Harrow Pass"}, root=self.root)
+        target = ops.run("show", {"item": "The flood at Saltmarsh"}, root=self.root)
+        ref = "path:" + item["path"]
+        changed = ops.run("set", {"item": ref, "field": {"after": "[[The flood at Saltmarsh]] +3d"}}, root=self.root)
+        path = self.root / item["path"]
+        before = path.read_bytes()
+        args = {"item": ref, "target": "path:" + target["path"], "role": "after", "version": item["version"]}
+        for name in ("link", "unlink"):
+            status, result, _ = self.request("/api/" + name, args)
+            self.assertEqual(status, 409)
+            self.assertEqual(result["error"]["code"], "CONFLICT")
+            self.assertEqual(result["error"]["data"]["version"], changed["version"])
+            self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(self.request("/api/unlink", {**args, "version": changed["version"]})[0], 200)
+
+    def test_requests_preserve_draft_baselines_and_mark_stale(self):
+        item = ops.run("show", {"item": "Mara Quell"}, root=self.root)
+        ref = "path:" + item["path"]
+        base = {"born": item["fields"]["born"], "died": None}
+        changed = ops.run("set", {"item": ref, "field": {"born": "2042"}}, root=self.root)
+        before = (self.root / item["path"]).read_bytes()
+        for supplied, stale in (({"version": item["version"], "expect": base}, True),
+                                ({"version": item["version"]}, True), ({"expect": base}, True),
+                                ({"version": changed["version"], "expect": {"born": "2042", "died": None}}, False),
+                                ({}, False)):
+            with self.subTest(supplied=supplied):
+                status, result, _ = self.request("/api/request", {"item": ref, "note": "Correction",
+                                                                "field": {"born": "2043"}, "unset": ["died"], **supplied})
+                self.assertEqual(status, 200)
+                queued = next(r for r in self.request("/api/requests", {})[1]["requests"] if r["id"] == result["request"])
+                self.assertEqual(queued["current"], {"born": "2042", "died": None})
+                self.assertEqual(queued["version"], changed["version"])
+                self.assertEqual(queued["base_version"], supplied.get("version", changed["version"]))
+                self.assertEqual(queued["base"], supplied.get("expect", queued["current"]))
+                self.assertEqual(queued.get("stale", False), stale)
+        self.assertEqual((self.root / item["path"]).read_bytes(), before)
+
+    def test_concurrent_requests_have_unique_ids_and_creation_is_exclusive(self):
+        args = {"item": "Mara Quell", "note": "Concurrent proposal", "field": {"born": "2042"}}
+        with patch.object(ops.time, "strftime", return_value="20261017T120000"):
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                results = list(pool.map(lambda _: self.request("/api/request", args), range(8)))
+            self.assertTrue(all(status == 200 for status, _, _ in results))
+            ids = [result["request"] for _, result, _ in results]
+            self.assertEqual(len(set(ids)), 8)
+            for rid in ids:
+                self.assertRegex(rid, r"^20261017T120000-mara-quell-[0-9a-f]{6}$")
+            with patch.object(ops.secrets, "token_hex", return_value="abcdef") as random:
+                self.assertEqual(self.request("/api/request", args)[0], 200)
+                before = self.request("/api/requests", {})[1]
+                self.assertEqual(self.request("/api/request", {**args, "note": "Must not overwrite"})[0], 409)
+                self.assertEqual(self.request("/api/requests", {})[1], before)
+                random.assert_called_with(3)
+
     def test_create_set_link_unlink_and_age(self):
         status, item, _ = self.request("/api/create", {"type": "event", "name": "New crossing"})
         self.assertEqual(status, 200)
@@ -210,6 +299,38 @@ class ServeTests(unittest.TestCase):
             self.assertIn("CH002", [item["id"] for item in result["items"]])
         self.assertEqual(len(calls), 2)
         self.assertIsNot(calls[0], calls[1])
+
+    def test_stamp_scopes_paths_excludes_folders_and_deduplicates_roots(self):
+        config = {"paths": ["Characters"], "exclude": ["Archive"]}
+        (self.root / "lore.json").write_text(json.dumps(config), encoding="utf-8")
+        for name in ("Archive", "node_modules", "_TEMPLATES", "__pycache__", ".hidden"):
+            folder = self.root / "Characters" / name
+            folder.mkdir()
+            (folder / "ignored.md").write_text("Ignored", encoding="utf-8")
+        scanned = []
+        real_scan = serve.os.scandir
+
+        def scan(path):
+            scanned.append(Path(path).relative_to(self.root).as_posix())
+            return real_scan(path)
+
+        with patch.object(serve.os, "scandir", side_effect=scan):
+            before = serve.stamp(self.root)
+        self.assertEqual(scanned, ["Characters"])
+        for path in (self.root / "notes" / "Draft.md", self.root / "Characters" / "Archive" / "ignored.md",
+                     self.root / "Characters" / "~$lock.md"):
+            path.write_text("Unrelated change", encoding="utf-8")
+        self.assertEqual(serve.stamp(self.root), before)
+        self.assertEqual(serve.stamp(self.root, {**config, "paths": ["Characters", "Characters/."]}), before)
+        person = self.root / "Characters" / "Mara Quell.md"
+        person.write_text(person.read_text(encoding="utf-8") + "\nEdit", encoding="utf-8")
+        self.assertNotEqual(serve.stamp(self.root), before)
+        self.assertEqual(serve.stamp(self.root, {"paths": [".", "Characters"]}), serve.stamp(self.root, {"paths": ["."]}))
+        before = serve.stamp(self.root)
+        (self.root / "lore.json").write_text(json.dumps({**config, "name": "Changed"}), encoding="utf-8")
+        self.assertNotEqual(serve.stamp(self.root), before)
+        self.start(config=config)
+        self.assertEqual(self.request("/api/stamp")[1]["stamp"], serve.stamp(self.root, config))
 
     def test_serve_closes_on_interrupt_and_prints_url(self):
         with patch.object(serve.ThreadingHTTPServer, "serve_forever", side_effect=KeyboardInterrupt), \

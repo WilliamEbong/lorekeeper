@@ -53,6 +53,33 @@ class Loading(WorldCase):
         self.assertEqual(sorted(i.name for i in back["participants"]),
                          ["Crossing Harrow Pass", "The flood at Saltmarsh"])
 
+    def test_exact_id_precedes_name_stem_and_alias(self):
+        original = store.Item.from_fields("Events/original.md", {"id": "EVENT-A", "type": "event", "name": "Original"})
+        collisions = [
+            store.Item.from_fields("Events/named.md", {"type": "event", "name": "EVENT-A"}),
+            store.Item.from_fields("Events/EVENT-A.md", {"type": "event", "name": "Stem"}),
+            store.Item.from_fields("Events/alias.md", {"type": "event", "aliases": ["EVENT-A"]}),
+        ]
+        for collision in collisions:
+            with self.subTest(path=collision.path):
+                project = Project.from_items(self.root, {}, [collision, original])
+                self.assertIs(project.find("EVENT-A"), original)
+                self.assertIs(project.find("event-a"), original)
+                self.assertIs(project.find("path:" + collision.path), collision)
+
+    def test_path_refs_disambiguate_duplicate_ids_names_and_missing_ids(self):
+        items = [store.Item.from_fields(path, {"type": "event", "name": "Same", "id": ident})
+                 for path, ident in (("Events/one.md", "DUP"), ("Events/two.md", "DUP"),
+                                     ("Events/no-id.md", ""), ("architecture#CH002", "CH002"))]
+        project = Project.from_items(self.root, {}, items)
+        for item in items:
+            self.assertIs(project.find("path:" + item.path), item)
+        for ref in ("path:Events/ONE.md", "path:Events\\one.md", "path:../Events/one.md",
+                    "path:Events/./one.md", "path:/Events/one.md", "path:missing.md"):
+            with self.subTest(ref=ref), self.assertRaises(LoreError) as cm:
+                project.find(ref)
+            self.assertEqual(cm.exception.code, "NOT_FOUND")
+
     def test_crlf_file_loads(self):
         tess = self.p.find("Tess Varga")
         self.assertEqual(tess.fields["born"], "1990")

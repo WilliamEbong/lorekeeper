@@ -7,7 +7,7 @@ const drafts = new Map(), cells = new Map(), conversions = new Map();
 let graph = {items: [], links: [], types: {}, roles: {}}, selected = '', tab = 'Timeline';
 let range = null, lastStamp = null, refreshing = false, dragging = false, subwayFilter = '';
 let refreshQueue = Promise.resolve();
-const ref = (item) => item.id || item.name;
+const ref = (item) => `path:${item.path}`;
 const person = (item) => graph.types[item.type]?.category === 'person';
 const startKey = (item) => ['born', 'date', 'start'].find(k => item.fields[k]) || (person(item) ? 'born' : 'date');
 const endKey = (item) => ['died', 'end'].find(k => item.fields[k]) || (person(item) ? 'died' : 'end');
@@ -17,7 +17,9 @@ const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const dated = () => graph.items.filter(i => i.lo != null).sort((a, b) => a.lo - b.lo || a.name.localeCompare(b.name));
 const people = () => graph.items.filter(person).sort((a, b) => a.name.localeCompare(b.name));
 const events = () => dated().filter(i => !person(i));
-const takesPart = (p, e) => graph.links.some(l => l.role === 'participants' && l.from === ref(e) && l.to === ref(p) && l.resolved);
+const takesPart = (p, e) => graph.links.some(l => l.role === 'participants' && l.from_path === e.path && l.to_path === p.path && l.resolved);
+
+function restoreFocus(id) { if (id) $(id)?.focus({preventScroll: true}); }
 
 function el(tag, text, attributes = {}) {
   const node = document.createElement(tag);
@@ -84,6 +86,7 @@ function selectItem(path, focus = false) {
   if (focus) $('inspector').querySelector('input')?.focus();
 }
 function renderInspector() {
+  const focusId = document.activeElement?.id;
   const panel = $('inspector'), item = graph.items.find(i => i.path === selected);
   panel.replaceChildren();
   if (!item) { panel.append(el('p', 'Select an item to see its fields and connections.')); return; }
@@ -104,7 +107,7 @@ function renderInspector() {
     note.addEventListener('input', () => { draft.note = note.value; });
     form.append(note);
   }
-  form.append(el('button', saga ? 'Propose change' : 'Save', {type: 'submit', class: 'primary'}));
+  form.append(el('button', saga ? 'Propose change' : 'Save', {id: 'save-item', type: 'submit', class: 'primary'}));
   form.addEventListener('submit', async event => {
     event.preventDefault();
     // Link controls also wait for a save's reload, so their selected target cannot
@@ -114,7 +117,8 @@ function renderInspector() {
       const field = Object.fromEntries(Object.entries(draft.values).map(([k, v]) => [k, valueOf(v, draft.base.fields[k])]));
       controls.forEach(c => { c.disabled = true; });
       if (saga) {
-        await api('request', {item: ref(draft.base), field, note: draft.note});
+        const expect = Object.fromEntries(Object.keys(field).map(k => [k, draft.base.fields[k] ?? null]));
+        await api('request', {item: ref(draft.base), field, note: draft.note, version: draft.base.version, expect});
         status('Change request queued. Canon is unchanged.');
       } else {
         await saveFields(draft.base, field);
@@ -128,6 +132,7 @@ function renderInspector() {
   });
   panel.append(form);
   renderLinks(panel, item);
+  restoreFocus(focusId);
 }
 async function saveFields(base, field) {
   if (!Object.keys(field).length) return;
@@ -139,22 +144,24 @@ async function saveFields(base, field) {
 function renderLinks(panel, item) {
   panel.append(el('h3', 'Links'));
   const list = el('ul');
-  for (const link of graph.links.filter(l => l.from === ref(item))) {
-    const target = graph.items.find(i => ref(i) === link.to);
+  for (const link of graph.links.filter(l => l.from_path === item.path)) {
+    const target = graph.items.find(i => i.path === link.to_path);
     const row = el('li', `${link.role} → ${target?.name || link.to}${link.resolved ? '' : ' (unresolved)'}`);
     if (!saga) row.append(button('Remove link', async () => {
-      await api('unlink', {item: ref(item), role: link.role, target: target?.name || link.to});
+      await api('unlink', {item: ref(item), role: link.role, target: target ? ref(target) : link.to, version: item.version});
       await refresh(); renderInspector(); status('Link removed.');
-    }, {'aria-label': 'Remove link', title: `${link.role} → ${target?.name || link.to}`}));
+    }, {id: `unlink-${encodeURIComponent(JSON.stringify([item.path, link.role, link.to_path || link.to]))}`,
+      'aria-label': 'Remove link', title: `${link.role} → ${target?.name || link.to}`}));
     list.append(row);
   }
   panel.append(list.childElementCount ? list : el('p', 'No outgoing links.'));
   panel.append(el('h3', 'Backlinks'));
   const backlinks = el('ul');
-  for (const link of graph.links.filter(l => l.to === ref(item) && l.resolved)) {
-    const source = graph.items.find(i => ref(i) === link.from);
+  for (const link of graph.links.filter(l => l.to_path === item.path && l.resolved)) {
+    const source = graph.items.find(i => i.path === link.from_path);
     const row = el('li', `${graph.roles[link.role]?.inverse || link.role}: `);
-    if (source) row.append(button(source.name, () => selectItem(source.path)));
+    if (source) row.append(button(source.name, () => selectItem(source.path),
+      {id: `backlink-${encodeURIComponent(JSON.stringify([source.path, link.role]))}`}));
     backlinks.append(row);
   }
   panel.append(backlinks.childElementCount ? backlinks : el('p', 'No backlinks.'));
@@ -166,9 +173,9 @@ function renderLinks(panel, item) {
   const targets = el('select', null, {id: 'link-target'});
   for (const target of graph.items) targets.append(el('option', target.name, {value: ref(target)}));
   panel.append(targets, button('Add link', async () => {
-    await api('link', {item: ref(item), role: roles.value, target: targets.value});
+    await api('link', {item: ref(item), role: roles.value, target: targets.value, version: item.version});
     await refresh(); renderInspector(); status('Link added.');
-  }));
+  }, {id: 'add-link'}));
 }
 
 // The axis uses Lorekeeper's integer minutes since 0001-01-01, not Unix milliseconds.
@@ -242,8 +249,9 @@ function chart(height, title) {
 }
 function timeToolbar(container) {
   const toolbar = el('div', null, {class: 'toolbar'});
-  toolbar.append(button('Zoom in', () => zoom(.5)), button('Zoom out', () => zoom(2)),
-    button('Pan left', () => pan(-.25)), button('Pan right', () => pan(.25)), button('Fit all', () => { fit(); renderView(); }));
+  toolbar.append(button('Zoom in', () => zoom(.5), {id: 'zoom-in'}), button('Zoom out', () => zoom(2), {id: 'zoom-out'}),
+    button('Pan left', () => pan(-.25), {id: 'pan-left'}), button('Pan right', () => pan(.25), {id: 'pan-right'}),
+    button('Fit all', () => { fit(); renderView(); }, {id: 'fit-all'}));
   container.append(toolbar);
 }
 function timeline(container) {
@@ -280,6 +288,8 @@ function timeline(container) {
   if (!items.length) container.append(el('p', 'No dated items yet. Create one, then enter its date in the inspector.'));
 }
 function enableRedate(group, item, c) {
+  if (item.start.circa || item.start.provisional || item.start.note || item.start.from !== item.start.to ||
+      item.fields.date_min || item.fields.date_max) return;
   group.addEventListener('pointerdown', event => {
     if (event.button !== 0) return;
     event.stopPropagation();
@@ -346,7 +356,8 @@ function subway(container) {
     if (!stops.length || x < 170 || x > 970) continue;
     c.svg.append(svgEl('line', {x1: x, x2: x, y1: 60 + stops[0] * 56, y2: 60 + stops.at(-1) * 56, class: 'connector'}));
     for (const lane of stops) {
-      const stop = svgEl('g', {class: 'item', role: 'button', tabindex: '0', 'aria-label': `${event.name}, ${lanes[lane].name}`});
+      const stop = svgEl('g', {class: 'item', role: 'button', tabindex: '0', 'aria-label': `${event.name}, ${lanes[lane].name}`,
+        id: `subway-${encodeURIComponent(JSON.stringify([event.path, lanes[lane].path]))}`});
       stop.append(svgEl('circle', {cx: x, cy: 60 + lane * 56, r: 7, class: 'mark'}), svgEl('title', {}, `${event.name} · ${event.start.text}`));
       stop.addEventListener('click', () => selectItem(event.path));
       stop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectItem(event.path, true); } });
@@ -367,7 +378,7 @@ function relationships(container) {
   const jobs = [];
   for (const p of people()) {
     const row = el('tr'), heading = el('th', null, {scope: 'row'});
-    heading.append(button(p.name, () => selectItem(p.path))); row.append(heading);
+    heading.append(button(p.name, () => selectItem(p.path), {id: `person-${encodeURIComponent(p.path)}`})); row.append(heading);
     for (const e of es) {
       const cell = el('td', '·', {class: 'age', 'data-person': ref(p), 'data-event': ref(e)});
       if (takesPart(p, e)) {
@@ -393,7 +404,7 @@ function spreadsheet(container) {
     for (const key of [nameKey(item), 'type', startKey(item), endKey(item), 'location']) {
       const cell = el('td'), id = `${item.path}\0${key}`;
       let base = item;
-      const input = el('input', null, {'aria-label': `${item.name}: ${key}`, 'data-field': key, 'data-item': ref(item)});
+      const input = el('input', null, {id: `cell-${encodeURIComponent(id)}`, 'aria-label': `${item.name}: ${key}`, 'data-field': key, 'data-item': ref(item)});
       input.value = cells.get(id)?.value ?? display(item.fields[key]);
       input.readOnly = saga;
       input.addEventListener('input', () => {
@@ -418,7 +429,7 @@ function spreadsheet(container) {
       input.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); save(); } });
       cell.append(input); row.append(cell);
     }
-    const cell = el('td'); cell.append(button('Inspect', () => selectItem(item.path, true), {'aria-label': `Inspect ${item.name}`})); row.append(cell); body.append(row);
+    const cell = el('td'); cell.append(button('Inspect', () => selectItem(item.path, true), {id: `inspect-${encodeURIComponent(item.path)}`, 'aria-label': `Inspect ${item.name}`})); row.append(cell); body.append(row);
   }
 }
 function narrative(container) {
@@ -428,7 +439,7 @@ function narrative(container) {
   const list = el('ol', null, {class: 'narrative'});
   let latest = null;
   chapters.forEach((item, index) => {
-    const row = el('li'); row.append(button(`${index + 1}. ${item.name}`, () => selectItem(item.path)));
+    const row = el('li'); row.append(button(`${index + 1}. ${item.name}`, () => selectItem(item.path), {id: `narrative-${encodeURIComponent(item.path)}`}));
     const backwards = latest != null && item.lo != null && item.lo < latest;
     row.append(el('span', `${item.start?.text || 'Undated'} · ${item.lo == null ? 'Chronology unknown' : backwards ? '↶ Story vs chronology: moves backwards' : '→ Story and chronology aligned'}`));
     if (item.lo != null) latest = Math.max(latest ?? item.lo, item.lo);
@@ -437,8 +448,10 @@ function narrative(container) {
   container.append(list.childElementCount ? list : el('p', 'No chapters or cards yet. Create a chapter to begin your narrative.'));
 }
 function renderView() {
+  const focusId = document.activeElement?.id;
   const view = $('view'); view.replaceChildren();
   ({Timeline: timeline, Subway: subway, Relationships: relationships, Spreadsheet: spreadsheet, Narrative: narrative})[tab](view);
+  restoreFocus(focusId);
 }
 function refresh() {
   // A mutation's reload must run after any poll already in flight, not be skipped.
@@ -454,6 +467,7 @@ async function loadGraph() {
     if (!stampResponse.ok) throw new Error('Could not read the project stamp.');
     const stamp = (await stampResponse.json()).stamp;
     const next = await api('graph'); graph = next; lastStamp = stamp;
+    const focusId = document.activeElement?.id;
     const selector = $('item-select');
     selector.replaceChildren(el('option', 'Select an item', {value: ''}));
     for (const item of graph.items) selector.append(el('option', `${item.name} (${item.type})`, {value: item.path}));
@@ -464,6 +478,7 @@ async function loadGraph() {
     // Keep focused spreadsheet controls and all failed cells alive through polling.
     if (!(tab === 'Spreadsheet' && $('view').contains(document.activeElement)) && !dragging) renderView();
     if (!$('inspector').contains(document.activeElement)) renderInspector();
+    restoreFocus(focusId);
   } finally { refreshing = false; }
 }
 

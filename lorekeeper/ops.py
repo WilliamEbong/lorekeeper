@@ -1,6 +1,7 @@
 """The one operations table. The CLI, MCP server and HTTP API are generated from OPS."""
 import json
 import os
+import secrets
 import time
 from collections import namedtuple
 
@@ -82,8 +83,18 @@ def _role_values(it, role):
     return [] if value in (None, "") else value if isinstance(value, list) else [value]
 
 
-def op_link(p, item, role, target):
+def _check_link_version(p, it, role, version):
+    if version is not None:
+        current = store.file_sha(os.path.join(p.root, it.path))
+        if version != current or version != it.version:
+            raise LoreError("CONFLICT", f"{it.path} changed since it was read",
+                            {"path": it.path, "version": current,
+                             "current": {role: it.fields.get(role)}})
+
+
+def op_link(p, item, role, target, version=None):
     it, other = p.find(item), p.find(target)
+    _check_link_version(p, it, role, version)
     if not store.KEY.match(role) or role in store.RESERVED:
         raise LoreError("INVALID", f"{role!r} cannot be used as a role")
     current = _role_values(it, role)
@@ -96,13 +107,21 @@ def op_link(p, item, role, target):
     if single and current:
         raise LoreError("CONFLICT", f"{it.name} already has {role} {current[0]}; unlink it first")
     value = link if single else current + [link]
-    version, merged = p.update(it, {role: value}, (), None, it.version, {role: it.fields.get(role)})
+    version, merged = p.update(it, {role: value}, (), None,
+                              version if version is not None else it.version,
+                              None if version is not None else {role: it.fields.get(role)})
     return {"path": it.path, "version": version, "merged": merged}
 
 
-def op_unlink(p, item, role, target):
+def op_unlink(p, item, role, target, version=None):
     it = p.find(item)
-    other = p.resolve(store.fm.link_target(target) or target)   # None: the link may point nowhere
+    _check_link_version(p, it, role, version)
+    try:
+        other = p.find(target)
+    except LoreError as exc:
+        if exc.code != "NOT_FOUND":
+            raise
+        other = None   # The link may point nowhere.
     current = _role_values(it, role)
     wanted = (store.fm.link_target(target) or target).strip().lower()
     keep = [v for v, t in zip(current, _targets(p, current))
@@ -111,7 +130,9 @@ def op_unlink(p, item, role, target):
         raise LoreError("NOT_FOUND", f"{it.name} has no {role} link to {target}")
     single = p.schema["roles"].get(role, {}).get("single") or not isinstance(it.fields.get(role), list)
     sets, unsets = ({}, [role]) if not keep else ({role: keep[0] if single and len(keep) == 1 else keep}, [])
-    version, merged = p.update(it, sets, unsets, None, it.version, {role: it.fields.get(role)})
+    version, merged = p.update(it, sets, unsets, None,
+                              version if version is not None else it.version,
+                              None if version is not None else {role: it.fields.get(role)})
     return {"path": it.path, "version": version, "merged": merged}
 
 
@@ -208,6 +229,7 @@ def op_graph(p):
                       "lo": start.lo if start else None, "hi": (end or start).hi if start else None})
         for role, targets in p.links(it).items():
             links += [{"from": it.id or it.name, "role": role, "to": (o.id or o.name) if o else t,
+                       "from_path": it.path, "to_path": o.path if o else None,
                        "resolved": o is not None, "lag": lag} for t, o, lag in targets]
     return {"items": items, "links": links, "roles": p.schema["roles"], "types": p.schema["types"]}
 
@@ -217,15 +239,20 @@ def requests_dir(p):
     return folder if os.path.isabs(folder) else os.path.join(p.root, folder)
 
 
-def op_request(p, item, note, field=None, unset=None):
+def op_request(p, item, note, field=None, unset=None, version=None, expect=None):
     """Queue a change request instead of editing (saga mode): the pipeline applies it later."""
     it = p.find(item)
     stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
-    rid = f"{stamp}-{store.slug(it.name)[:40].lower()}"
+    rid = f"{stamp}-{store.slug(it.name)[:40].lower()}-{secrets.token_hex(3)}"
     body = {"id": rid, "item": it.name, "path": it.path, "version": it.version, "note": note,
             "set": store.clean_fields(field or {}), "unset": list(unset or []),
             "current": {k: it.fields.get(k) for k in list(field or {}) + list(unset or [])},
             "created_utc": stamp, "status": "open"}
+    body["base_version"] = it.version if version is None else version
+    body["base"] = body["current"].copy() if expect is None else dict(expect)
+    if body["base_version"] != it.version or any(
+            value != it.fields.get(key) for key, value in body["base"].items()):
+        body["stale"] = True
     store.atomic_write(os.path.join(requests_dir(p), rid + ".json"), to_json(body) + "\n", create=True)
     return {"request": rid, "queued": True}
 
@@ -238,6 +265,24 @@ def op_requests(p):
             with open(os.path.join(folder, name), encoding="utf-8") as fh:
                 out.append(json.load(fh))
     return {"requests": out, "count": len(out)}
+
+
+def op_import(p, file, into=None):
+    """Bring an Aeon Timeline (.aeon) or CSV file into this project; existing names are never overwritten."""
+    from . import interop
+    csv_file = os.path.splitext(file)[1].lower() == ".csv"
+    data = interop.read_csv(file) if csv_file else interop.read_aeon(file)   # read_aeon refuses non-Aeon files
+    return {"file": file, **interop.import_into(p, data, into)}
+
+
+def op_export(p, format, out):
+    """Write the project as .aeon (Aeon Timeline), CSV (Aeon column ids) or one Markdown document."""
+    from . import interop
+    writer = {"aeon": interop.write_aeon, "csv": interop.write_csv, "md": interop.write_markdown}.get(format)
+    if writer is None:
+        raise LoreError("INVALID", "format must be aeon, csv or md")
+    writer(p, out)
+    return {"written": os.path.abspath(out), "format": format, "count": len(p.items)}
 
 
 def op_check(p):
@@ -273,10 +318,10 @@ OPS = [
        True, op_set),
     Op("link", "Link an item to another under a role (e.g. participants, location).",
        [Param("item", S, True, "subject item"), Param("role", S, True, "role key"),
-        Param("target", S, True, "target item")], True, op_link),
+        Param("target", S, True, "target item"), Param("version", S, False, "version you read")], True, op_link),
     Op("unlink", "Remove a role link.",
        [Param("item", S, True, "subject item"), Param("role", S, True, "role key"),
-        Param("target", S, True, "target item")], True, op_unlink),
+        Param("target", S, True, "target item"), Param("version", S, False, "version you read")], True, op_unlink),
     Op("when", "Show an item's start and end as date intervals.",
        [Param("item", S, True, "item name or id")], False, op_when),
     Op("age", "Age of a person (or any dated item) at a date or at another item's start.",
@@ -294,9 +339,15 @@ OPS = [
        [], False, op_graph),
     Op("request", "Queue a change request for an item instead of editing it (saga mode).",
        [Param("item", S, True, "item name or id"), Param("note", S, True, "what should change and why"),
-        Param("field", D, False, "proposed values key=value"), Param("unset", L, False, "fields to remove")],
+        Param("field", D, False, "proposed values key=value"), Param("unset", L, False, "fields to remove"),
+        Param("version", S, False, "version you read"), Param("expect", D, False, "draft baseline values")],
        True, op_request),
     Op("requests", "List queued change requests.", [], False, op_requests),
+    Op("import", "Import an Aeon Timeline .aeon or a CSV file into this project (never overwrites).",
+       [Param("file", S, True, "path to a .aeon or .csv file"),
+        Param("into", S, False, "folder for the new items")], True, op_import),
+    Op("export", "Export the project as aeon, csv or md.",
+       [Param("format", S, True, "aeon | csv | md"), Param("out", S, True, "output file path")], True, op_export),
     Op("check", "Check the project; FAIL lines are definite problems, WARN lines possible ones.",
        [], False, op_check),
 ]

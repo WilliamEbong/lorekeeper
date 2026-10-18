@@ -7,31 +7,56 @@ import secrets
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
-from . import ops
+from . import ops, store
 from .store import LoreError
 
 
-def stamp(root):
-    """Hash metadata, never file contents; ignore hidden folders and symlinks."""
-    rows = []
+def stamp(root, config=None):
+    """Hash metadata in configured roots, plus lore.json; skip excluded folders."""
+    root = os.path.abspath(root)
+    config_path = os.path.join(root, store.CONFIG)
+    if config is None:
+        config = {}
+        if os.path.isfile(config_path):
+            with open(config_path, encoding="utf-8") as fh:
+                try:
+                    config = json.load(fh)
+                except (ValueError, RecursionError) as exc:
+                    raise LoreError("INVALID", f"{store.CONFIG} is not valid JSON: {exc}") from exc
+    rows, visited = [], set()
+    skip = store.SKIP_DIRS | set(config.get("exclude", []))
+
+    def record(path):
+        try:
+            info = os.stat(path, follow_symlinks=False)
+        except FileNotFoundError:  # A replacement or deletion can overlap a scan.
+            return
+        rows.append((os.path.relpath(path, root).replace(os.sep, "/"),
+                     info.st_mtime_ns, info.st_size))
 
     def scan(folder):
+        key = os.path.normcase(os.path.realpath(folder))
+        if key in visited or os.path.islink(folder) or not store.inside(root, folder):
+            return
+        visited.add(key)
+        if not os.path.isdir(folder):
+            return
         with os.scandir(folder) as entries:
             for entry in entries:
                 if entry.is_symlink():
                     continue
                 if entry.is_dir(follow_symlinks=False):
-                    if not entry.name.startswith("."):
+                    if entry.name not in skip and not entry.name.startswith("."):
                         scan(entry.path)
-                elif entry.name.endswith(".md") or (folder == root and entry.name == "lore.json"):
-                    try:
-                        info = entry.stat(follow_symlinks=False)
-                    except FileNotFoundError:  # Atomic replacement can overlap a scan; the next poll catches it.
-                        continue
-                    rows.append((os.path.relpath(entry.path, root).replace(os.sep, "/"),
-                                 info.st_mtime_ns, info.st_size))
+                elif entry.name.endswith(".md") and not entry.name.startswith("~$"):
+                    record(entry.path)
 
-    scan(root)
+    for base in config.get("paths", ["."]):
+        top = os.path.normpath(os.path.join(root, base))
+        if not store.inside(root, top):
+            raise LoreError("INVALID", f"{store.CONFIG} path {base!r} is outside the project folder")
+        scan(top)
+    record(config_path)
     return hashlib.sha256(ops.to_json(sorted(rows)).encode("utf-8")).hexdigest()
 
 
@@ -85,7 +110,7 @@ def make_server(root, port=0, saga=False, config=None, factory=None):
                     result = {"ops": [{"name": op.name, "summary": op.summary, "writes": op.writes,
                                        "params": [p._asdict() for p in op.params]} for op in ops.OPS]}
                 elif path == "/api/stamp":
-                    result = {"stamp": stamp(root)}
+                    result = {"stamp": stamp(root, config)}
                 elif path in ("/", "/editor.js", "/editor.css"):
                     name = "editor.html" if path == "/" else path[1:]
                     with open(os.path.join(assets, name), encoding="utf-8") as fh:
@@ -140,7 +165,7 @@ def make_server(root, port=0, saga=False, config=None, factory=None):
                 self.send(200, ops.to_json(result))
             except LoreError as exc:
                 self.fail(exc)
-            except (ValueError, TypeError, UnicodeError) as exc:
+            except (ValueError, TypeError, UnicodeError, RecursionError) as exc:
                 self.fail(LoreError("INVALID", str(exc)))
             except OSError as exc:
                 self.fail(LoreError("IO_ERROR", str(exc)))
