@@ -5,7 +5,8 @@ import sys
 from . import __version__, fm, ops, store
 from .store import LoreError
 
-ADAPTERS = {"mcp": "Run the MCP server on stdin/stdout for AI agents."}
+ADAPTERS = {"mcp": "Run the MCP server on stdin/stdout for AI agents.",
+            "serve": "Open the local interactive editor."}
 
 
 def key_value(text):
@@ -38,7 +39,10 @@ def build_parser():
             else:
                 sp.add_argument(flag, dest=p.name, type=int if p.kind == "int" else str, help=p.help)
     for name, summary in ADAPTERS.items():
-        sub.add_parser(name, parents=[common], help=summary, description=summary)
+        sp = sub.add_parser(name, parents=[common], help=summary, description=summary)
+        if name == "serve":
+            sp.add_argument("--port", type=int, default=0, help="local port (default: choose a free port)")
+            sp.add_argument("--saga", action="store_true", help="queue change requests instead of editing canon")
     return ap
 
 
@@ -60,6 +64,9 @@ def main(argv=None):
         if ns.op == "mcp":
             from . import mcp
             return mcp.serve(root or store.find_root("."))
+        if ns.op == "serve":
+            from . import serve
+            return serve.serve(root or store.find_root("."), port=ns.port, saga=ns.saga)
         op = ops.BY_NAME[ns.op]
         args = {p.name: getattr(ns, p.name, None) for p in op.params}
         for p in op.params:

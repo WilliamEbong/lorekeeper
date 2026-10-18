@@ -1,0 +1,58 @@
+:root { color-scheme: light dark; --bg: #f6f5f0; --panel: #fffef9; --ink: #202d2a; --muted: #52635b; --line: #7b897e; --accent: #21604c; --soft: #e0ece4; --danger: #9a2525; --focus: #9c4100; }
+@media (prefers-color-scheme: dark) { :root { --bg: #18211e; --panel: #202c27; --ink: #f0f3e9; --muted: #b8c8bc; --line: #657b6d; --accent: #a4d9bd; --soft: #324d3e; --danger: #ffb3ab; --focus: #ffd08a; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, sans-serif; }
+header { display: flex; align-items: center; justify-content: space-between; padding: 22px 30px 12px; }
+h1 { margin: 0; font: 32px Georgia, serif; letter-spacing: -.6px; }
+h2 { margin: 0 0 14px; font: 23px Georgia, serif; }
+h3 { font-size: 16px; margin: 22px 0 8px; }
+header p { margin: 2px 0; color: var(--muted); }
+#mode { color: var(--accent); font-weight: 650; }
+#status, #error { margin: 8px 30px; }
+#error { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--danger); border: 1px solid var(--danger); padding: 12px; }
+nav { display: flex; flex-wrap: wrap; gap: 5px; padding: 12px 30px 0; border-bottom: 1px solid var(--line); }
+button, input, select, textarea { font: inherit; color: var(--ink); border: 1px solid var(--line); border-radius: 4px; background: var(--panel); padding: 7px 10px; }
+button { cursor: pointer; }
+button:hover { background: var(--soft); }
+button[aria-selected="true"], button.primary { background: var(--accent); color: var(--panel); border-color: var(--accent); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+button:disabled { cursor: default; opacity: .65; }
+nav button { border-bottom-left-radius: 0; border-bottom-right-radius: 0; padding: 10px 18px; }
+main { display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: 22px; padding: 22px 30px; }
+.workspace { min-width: 0; }
+aside { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 18px; min-width: 0; }
+aside input, aside select, aside textarea { width: 100%; }
+aside label { display: block; margin: 12px 0 4px; overflow-wrap: anywhere; }
+aside textarea { min-height: 90px; resize: vertical; }
+aside button { margin: 9px 5px 0 0; }
+aside ul { padding-left: 18px; overflow-wrap: anywhere; }
+aside li button { padding: 3px 6px; }
+#create-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 0 0 20px; }
+#create-name { min-width: 100px; flex: 1; }
+.toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.hint { color: var(--muted); font-size: 13px; }
+.scroll { overflow: auto; border: 1px solid var(--line); background: var(--panel); border-radius: 6px; max-height: 72vh; }
+svg { display: block; width: 100%; min-width: 650px; touch-action: none; }
+svg text { fill: var(--ink); font: 12px system-ui, sans-serif; }
+svg .axis, svg .lane { stroke: var(--line); stroke-width: 1; }
+svg .rail { stroke: var(--accent); stroke-width: 3; opacity: .7; }
+svg .connector { stroke: var(--muted); stroke-width: 2; }
+svg .mark { fill: var(--accent); stroke: var(--panel); stroke-width: 1; }
+svg .item { cursor: pointer; }
+svg .item.selected .mark { stroke: var(--focus); stroke-width: 4; }
+svg .item:focus-visible { outline: none; }
+svg .item:focus-visible .mark { stroke: var(--focus); stroke-width: 4; }
+svg .dragging { opacity: .65; }
+table { border-collapse: collapse; width: 100%; }
+caption { text-align: left; padding: 12px; font-weight: 600; }
+th, td { text-align: left; border-bottom: 1px solid var(--line); padding: 9px; vertical-align: top; }
+th { background: var(--soft); }
+thead th { position: sticky; top: 0; z-index: 1; }
+td input { width: 100%; min-width: 135px; }
+.age { min-width: 145px; }
+.failed { border-color: var(--danger); }
+.narrative { padding: 0; list-style: none; }
+.narrative li { padding: 14px; margin: 8px 0; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+.narrative li span { display: block; margin-top: 7px; }
+[hidden] { display: none !important; }
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } header, main { padding: 18px; } nav { padding-left: 18px; } #status, #error { margin-left: 18px; margin-right: 18px; } aside { max-width: none; } }
