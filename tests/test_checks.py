@@ -370,3 +370,19 @@ class OrderCheck(unittest.TestCase):
         self.assertIsNone(checks.order_check(day, day))
         self.assertEqual(checks.order_check(year, day), "WARN")       # the later card might start in January
         self.assertEqual(checks.order_check(before, day), "FAIL")
+
+
+class AgelessPeople(unittest.TestCase):
+    def test_max_age_override(self):
+        from lorekeeper import checks
+        from lorekeeper.store import Item, Project
+        def world(max_age):
+            extra = {"max_age": max_age} if max_age else {}
+            people = Item.from_fields("Elder.md", {"id": "E", "type": "character", "canonical_name": "Elder",
+                                                   "born": "~3000 BC", **extra})
+            event = Item.from_fields("Meet.md", {"id": "M", "type": "event", "canonical_name": "Meet",
+                                                 "date": "2036-11-20", "participants": ["[[Elder]]"]})
+            return [f["code"] for f in checks.run(Project.from_items(".", {}, [people, event]))]
+        self.assertIn("AGE_LIMIT", world(None))
+        self.assertNotIn("AGE_LIMIT", world("none"))
+        self.assertNotIn("AGE_LIMIT", world("6000"))

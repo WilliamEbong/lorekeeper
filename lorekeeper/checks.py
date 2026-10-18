@@ -132,11 +132,13 @@ def run(project):
                          end, birth, "before birth")
                 if role == "participants":
                     appearances.setdefault(person, set()).add(item)
-                    if start and birth:
+                    # a person's own max_age wins: "none" for the ageless (immortals, gods, AIs)
+                    own = str(person.fields.get("max_age", "")).strip().lower()
+                    if start and birth and own not in ("none", "unlimited", "ageless"):
                         cal = calendar_of(p, birth)
                         count = len(cal.months) if cal.type == "months" else 12
-                        limit = (count * int(settings.get("max_age", 130)), 0)
-                        emit(compare_ge(shift(birth, limit, cal), start),
+                        years = int(own) if own.isdigit() else int(settings.get("max_age", 130))
+                        emit(compare_ge(shift(birth, (count * years, 0), cal), start),
                              "AGE_LIMIT", item, role, person, start, birth, "exceeds maximum age")
         if item in people and start:
             for _, parent, _ in links.get("parent", []):
