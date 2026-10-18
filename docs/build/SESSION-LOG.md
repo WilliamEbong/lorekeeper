@@ -156,3 +156,5 @@ Append-only. Newest entries at the bottom. Each entry gives: date/time (UTC if k
 - Backfill: 3 parallel general-purpose agents (brief `lk-scratch/snap/backfill_brief.md`), one per clone, editing only frontmatter, Provenance bullets and agent_decisions rows.
 - 005: added ops `graph`, `request`, `requests` (change-request queue, default `.lore/requests`, host may pass an absolute `requests_dir`). Codex is building serve.py and the editor UI.
 - Perf note: the load test hit 1.93 s while 3 suites and 6 agents were running; re-check when idle.
+- Clone suites green (Realm 219, Space 216, Zombies 211; parity included). Committed `system: lorekeeper chronology (warn mode)` in each clone (Realm 1bd7f16, Space a5799be, Zombies dd98943) with an explicit allowlist (`lk-scratch/snap/commit_system.sh`), so nothing protected was staged.
+- build-continuously skill adopted: keep-awake requested; a PushNotification goes out at the end. Decisions: Lorekeeper stays on `main` (fresh repo; the kickoff names the private push as the end state, which outranks the skill's no-push default).
