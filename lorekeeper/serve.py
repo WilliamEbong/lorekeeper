@@ -26,13 +26,14 @@ def stamp(root, config=None):
     rows, visited = [], set()
     skip = store.SKIP_DIRS | set(config.get("exclude", []))
 
-    def record(path):
+    def record(path, entry=None):
         try:
-            info = os.stat(path, follow_symlinks=False)
+            # A directory entry's stat is cached from the listing on Windows: no call per file.
+            info = entry.stat(follow_symlinks=False) if entry else os.stat(path, follow_symlinks=False)
         except FileNotFoundError:  # A replacement or deletion can overlap a scan.
             return
-        rows.append((os.path.relpath(path, root).replace(os.sep, "/"),
-                     info.st_mtime_ns, info.st_size))
+        rel = path[len(root) + 1:] if path.startswith(root + os.sep) else os.path.relpath(path, root)
+        rows.append((rel.replace(os.sep, "/"), info.st_mtime_ns, info.st_size))
 
     def scan(folder):
         key = os.path.normcase(os.path.realpath(folder))
@@ -49,7 +50,7 @@ def stamp(root, config=None):
                     if entry.name not in skip and not entry.name.startswith("."):
                         scan(entry.path)
                 elif entry.name.endswith(".md") and not entry.name.startswith("~$"):
-                    record(entry.path)
+                    record(entry.path, entry)
 
     for base in config.get("paths", ["."]):
         top = os.path.normpath(os.path.join(root, base))
