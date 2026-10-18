@@ -81,7 +81,9 @@ const dated = () => graph.items.filter(i => i.lo != null).sort((a, b) => a.lo - 
 const people = () => graph.items.filter(isPerson).sort(byName);
 const events = () => dated().filter(i => !isPerson(i));
 const takesPart = (person, event) => partOf.get(person.path)?.has(event.path) || false;
-const whenText = (item) => item.start ? item.start.text + (item.end ? ` to ${item.end.text}` : '') : 'Undated';
+// The engine gives every dated event an end (its start, if none is written); only a written one counts here.
+const hasEnd = (item) => Boolean(item.fields[endKey(item)] || item.fields.duration);
+const whenText = (item) => item.start ? item.start.text + (hasEnd(item) && item.end ? ` to ${item.end.text}` : '') : 'Undated';
 const narrow = () => matchMedia('(max-width: 900px)').matches;
 const typing = (node) => Boolean(node?.closest?.('input, textarea, select, [contenteditable="true"]'));
 // ponytail: label width from the character count; measure text if long names collide in practice.
@@ -235,7 +237,7 @@ async function updateReadback(node, text) {
 function fuzzy(item) {
   const s = item.start || {};
   return Boolean(s.circa || s.provisional || item.fields.status === 'provisional' || s.from !== s.to ||
-    item.fields.date_min || item.fields.date_max || (['year', 'month'].includes(s.precision) && !item.end));
+    item.fields.date_min || item.fields.date_max || (['year', 'month'].includes(s.precision) && !hasEnd(item)));
 }
 
 // ---- axis ticks ---------------------------------------------------------------------------
@@ -353,10 +355,14 @@ function valueOf(text, original, key) {
   if (!isList(key, original)) return text.trim();
   return text.split('\n').map(v => v.trim()).filter(Boolean);
 }
+// An inspector draft is {base: the item when editing began (its version guards the save), seen: each edited
+// key's value when its edit began (the expectation sent), values: the edited text}. Unedited fields show the
+// latest copy, so live reloads stay visible without weakening the conflict check.
+const seenOr = (draft, key) => Object.hasOwn(draft.seen, key) ? draft.seen[key] : latestOf(draft.base).fields[key];
 function changes(draft) {
   const field = {}, unset = [];
   for (const [key, text] of Object.entries(draft.values)) {
-    const original = draft.base.fields[key], value = valueOf(text, original, key);
+    const original = seenOr(draft, key), value = valueOf(text, original, key);
     if (Array.isArray(value) ? value.length : value) field[key] = value;
     else if (key === nameKey(draft.base)) throw new ApiError('INVALID', 'An item needs a name.');
     else if (original !== undefined) unset.push(key);
@@ -374,8 +380,7 @@ function renderInspector() {
   panel.replaceChildren();
   if (!item) { panel.append(inspectorWelcome()); return; }
   let draft = drafts.get(item.path);
-  if (!dirty(draft)) { draft = {base: item, values: Object.create(null), note: '', extra: draft?.extra || []}; drafts.set(item.path, draft); }
-  const base = draft.base;
+  if (!dirty(draft)) { draft = {base: item, seen: {}, values: Object.create(null), note: '', extra: draft?.extra || []}; drafts.set(item.path, draft); }
 
   const head = el('div', null, {class: 'inspector-head'});
   head.append(button([icon('left'), 'Back to the view'], () => {
@@ -394,7 +399,7 @@ function renderInspector() {
   const save = el('button', saga ? 'Propose change' : 'Save', {type: 'submit', class: 'primary', id: 'save-item'});
   const discard = button('Discard changes', () => { drafts.delete(item.path); renderInspector(); idle(); }, {id: 'discard-item', class: 'quiet'});
   const sync = () => { save.disabled = discard.disabled = !dirty(draft); idle(); };
-  const keys = [...new Set([...fieldsFor(base), ...draft.extra])];
+  const keys = [...new Set([...fieldsFor(item), ...draft.extra])];
   for (const key of keys) form.append(fieldRow(draft, key, sync));
   form.append(addFieldRow(draft, keys));
   if (saga) {
@@ -416,7 +421,7 @@ function renderInspector() {
   if (focusId) $(focusId)?.focus({preventScroll: true});
 }
 function fieldRow(draft, key, sync) {
-  const original = draft.base.fields[key], id = `field-${key}`;
+  const original = seenOr(draft, key), id = `field-${key}`;
   const wrap = el('div', null, {class: 'field'});
   const current = key in draft.values ? draft.values[key] : display(original);
   let input;
@@ -437,7 +442,8 @@ function fieldRow(draft, key, sync) {
   }
   const mark = () => wrap.classList.toggle('changed', key in draft.values);
   input.addEventListener(key === 'type' ? 'change' : 'input', () => {
-    if (input.value === display(original)) delete draft.values[key];
+    if (!Object.hasOwn(draft.seen, key)) draft.seen[key] = original;
+    if (input.value === display(draft.seen[key])) { delete draft.values[key]; delete draft.seen[key]; }
     else draft.values[key] = input.value;
     mark(); sync();
   });
@@ -469,10 +475,12 @@ function addFieldRow(draft, keys) {
     if (event.key !== 'Enter') return;
     event.preventDefault();
     const key = custom.value.trim().toLowerCase().replace(/[\s-]+/g, '_');
-    if (/^[a-z_]+$/.test(key) && !keys.includes(key)) add(key);
+    const managed = ['id', 'type', 'canonical_name', 'name'].includes(key);
+    if (/^[a-z_]+$/.test(key) && !keys.includes(key) && !managed) add(key);
     else {
       custom.classList.add('failed'); custom.setAttribute('aria-invalid', 'true');
-      toast(keys.includes(key) ? 'That field is already here.' : 'Field names use letters and spaces only.', {kind: 'error'});
+      toast(managed ? 'Lorekeeper manages that field itself.' : keys.includes(key) ? 'That field is already here.'
+        : 'Field names use letters and spaces only.', {kind: 'error'});
     }
   });
   row.append(pick, custom);
@@ -481,6 +489,7 @@ function addFieldRow(draft, keys) {
 const snapshot = (item, keys) => Object.fromEntries(keys.map(k => [k, item.fields[k] ?? null]));
 async function saveInspector(draft) {
   const item = draft.base;
+  if (draft.saving) return;   // a second Ctrl+S would send the old version and conflict with the first
   let field, unset;
   try { ({field, unset} = changes(draft)); } catch (error) { report(error); return; }
   if (!Object.keys(field).length && !unset.length && !(saga && draft.note)) return;
@@ -490,9 +499,11 @@ async function saveInspector(draft) {
     return;
   }
   const controls = [...$('inspector').querySelectorAll('input, select, textarea, button')];
+  const focusId = $('inspector').contains(document.activeElement) ? document.activeElement.id : null;
+  draft.saving = true;
   controls.forEach(c => { c.disabled = true; });
   status(saga ? 'Sending…' : 'Saving…', 'busy');
-  const keys = [...Object.keys(field), ...unset], before = snapshot(item, keys);
+  const keys = [...Object.keys(field), ...unset], before = Object.fromEntries(keys.map(k => [k, draft.seen[k] ?? null]));
   try {
     if (saga) {
       await api('request', {item: ref(item), field, unset, note: draft.note, version: item.version, expect: before});
@@ -510,8 +521,10 @@ async function saveInspector(draft) {
   } catch (error) {
     report(error, error.data?.current ? conflictActions(item.path) : []);
   } finally {
+    draft.saving = false;
     controls.forEach(c => { if (c.isConnected) c.disabled = false; });
     if ($('save-item')?.isConnected && drafts.has(item.path)) $('save-item').disabled = $('discard-item').disabled = !dirty(drafts.get(item.path));
+    if (focusId && !$('inspector').contains(document.activeElement)) $(focusId)?.focus({preventScroll: true});
   }
 }
 function offerUndo(item, before, after, result, message) {
@@ -531,7 +544,8 @@ function conflictActions(path) {
     ['Keep my text', async () => {
       const draft = drafts.get(path);
       await refresh();
-      if (draft && byPath.get(path)) draft.base = byPath.get(path);
+      const latest = byPath.get(path);
+      if (draft && latest) { draft.base = latest; for (const key of Object.keys(draft.values)) draft.seen[key] = latest.fields[key]; }
       renderInspector();
       status('Your text is kept. Review it, then save.', 'dirty');
     }],
@@ -541,8 +555,11 @@ async function linkChange(op, item, role, target, message) {
   const before = item.fields[role];
   const result = await api(op, {item: ref(item), role, target, version: item.version});
   await refresh(); renderInspector();
+  const after = byPath.get(item.path)?.fields[role];
+  if (!$('inspector').contains(document.activeElement)) ($('link-target') || $('inspector-title'))?.focus({preventScroll: true});
   toast(message, {actions: [['Undo', async () => {
-    await api('set', {item: ref(item), ...(before === undefined ? {unset: [role]} : {field: {[role]: before}}), version: result.version});
+    await api('set', {item: ref(item), ...(before === undefined ? {unset: [role]} : {field: {[role]: before}}),
+      version: result.version, expect: {[role]: after ?? null}});
     await refresh(); renderInspector();
     toast('Undone.');
   }]]});
@@ -829,9 +846,9 @@ function timeline(view) {
   view.append(note);
 }
 function enableRedate(g, item, c, at) {
-  const s = item.start, e = item.end;
-  // A drag moves the whole span; anything it cannot move exactly is edited in the inspector instead.
-  if (!exact(s) || item.fields.date_min || item.fields.date_max || (e && (!exact(e) || minuteOf(e.text) == null))) return;
+  const s = item.start, e = item.fields[endKey(item)] ? item.end : null;
+  // A drag moves the whole written span; anything it cannot move exactly is edited in the inspector instead.
+  if (!exact(s) || item.fields.date_min || item.fields.date_max || (e && (!exact(e) || minuteOf(e.from) == null))) return;
   g.addEventListener('pointerdown', event => {
     if (event.button !== 0 || event.pointerType === 'touch') return;
     event.stopPropagation();
@@ -865,7 +882,8 @@ function enableRedate(g, item, c, at) {
         if (!await check) { toast('This date can’t be dragged. Edit it in the inspector instead.'); return; }
         if (dirty(drafts.get(item.path))) { toast('Save or discard your changes in the inspector before dragging this item.', {kind: 'error'}); return; }
         const key = startKey(item), value = target(ev), field = {[key]: value};
-        if (item.end) field[endKey(item)] = shiftDate(item.end.text, item.end.precision, minuteOf(value) - minuteOf(s.text));
+        // Shift by minutes from the start's interval, not its spelling ("April 1747" is not ISO).
+        if (e) field[endKey(item)] = shiftDate(e.from, e.precision, minuteOf(value) - item.lo);
         const before = snapshot(item, Object.keys(field));
         status('Saving…', 'busy');
         const result = await api('set', {item: ref(item), field, version: item.version, expect: before});
@@ -913,7 +931,7 @@ function subway(view) {
     tag.append(svgEl('title', {}, p.name));
     c.svg.append(tag, svgEl('line', {x1: c.left, x2: c.right, y1: y, y2: y, class: `rail-dim ${cls}`}));
     if (p.lo != null) {
-      const a = Math.max(c.left, c.x(p.lo)), b = Math.min(c.right, p.end ? c.x(p.hi) : c.right);
+      const a = Math.max(c.left, c.x(p.lo)), b = Math.min(c.right, hasEnd(p) ? c.x(p.hi) : c.right);
       if (b > a) c.svg.append(svgEl('line', {x1: a, x2: b, y1: y, y2: y, class: `rail ${cls}`}));
     }
   });
@@ -998,7 +1016,7 @@ function sortValue(item, key) {
   if (key === 'name') return item.name.toLowerCase();
   if (key === 'type') return typeLabel(item.type).toLowerCase();
   if (key === 'start') return item.lo ?? Infinity;
-  if (key === 'end') return item.end ? item.hi : Infinity;
+  if (key === 'end') return hasEnd(item) ? item.hi : Infinity;
   return display(item.fields.location).toLowerCase() || '￿';
 }
 function spreadsheet(view) {
@@ -1052,10 +1070,10 @@ function spreadsheet(view) {
     () => { ui.sheetLimit += 300; renderView(); }, {class: 'quiet', id: 'sheet-more'}));
   if (!rows.length) view.append(el('p', 'No items match this filter.', {class: 'hint'}));
 }
-async function saveCell(id, input, item, key, value) {
+// A cell draft is {base: the item as it was when typing began, value: the text}; base guards the save.
+async function saveCell(id, input, draft, key, value) {
+  const item = draft.base, sent = draft.value, field = {}, unset = [], original = item.fields[key];
   input.classList.remove('failed', 'saved');
-  status('Saving…', 'busy');
-  const field = {}, unset = [], original = item.fields[key];
   if ((value === '' || value == null) && key === nameKey(item)) {
     input.classList.add('failed');
     report(new ApiError('INVALID', 'An item needs a name. Type one, or press Esc to put the old name back.'));
@@ -1063,14 +1081,22 @@ async function saveCell(id, input, item, key, value) {
   }
   if (value === '' || value == null) { if (original === undefined) { cells.delete(id); idle(); return; } unset.push(key); }
   else field[key] = value;
+  status('Saving…', 'busy');
   try {
-    await api('set', {item: ref(item), field, unset, version: item.version, expect: {[key]: original ?? null}});
-    cells.delete(id);
+    const result = await api('set', {item: ref(item), field, unset, version: item.version, expect: {[key]: original ?? null}});
+    // Text typed while this save was in flight is a newer draft: keep it, based on what was just saved.
+    if (cells.get(id) === draft) {
+      if (draft.value === sent) cells.delete(id);
+      else {
+        const fields = {...item.fields, ...field};
+        for (const k of unset) delete fields[k];
+        draft.base = {...item, version: result.version, fields};
+      }
+    }
     ui.flash = {id, until: Date.now() + 1600};
     input.classList.add('saved');
     setTimeout(() => input.classList.remove('saved'), 1600);
-    await refresh();
-    idle();
+    refresh().then(idle, error => report(error, [], 'Could not reload'));
   } catch (error) {
     input.classList.add('failed');
     report(error, error.data?.current ? [['Load their version', async () => { cells.delete(id); await refresh(); idle(); }]] : []);
@@ -1083,27 +1109,43 @@ function wireCell(input, item, key) {
   input.addEventListener('focus', () => { if (selected !== item.path) selectItem(item.path); });
   return id;
 }
-function sheetCell(item, key) {
-  const cell = el('td'), input = el('input', null, {'aria-label': `${item.name}: ${label(key)}`, autocomplete: 'off'});
-  const id = wireCell(input, item, key);
+// The sheet is not redrawn while a cell has focus, so cells read the latest copy of their item.
+const latestOf = (item) => byPath.get(item.path) || item;
+function editableCell(input, item, key, {shown, toValue}) {
+  const id = wireCell(input, item, key), draft = cells.get(id);
   input.id = id;
-  const draft = cells.get(id), base = draft?.base || item;
-  input.value = draft?.value ?? display(item.fields[key]);
+  input.value = draft?.value ?? shown();
   input.readOnly = saga;
   if (draft?.failed) input.classList.add('failed');
-  input.addEventListener('input', () => { cells.set(id, {base, value: input.value}); idle(); });
+  input.addEventListener('input', () => {
+    const d = cells.get(id);
+    if (d) d.value = input.value; else cells.set(id, {base: latestOf(item), value: input.value});
+    idle();
+  });
   const save = () => {
     const d = cells.get(id);
-    if (!d || d.saving) return;
+    if (!d) return;
+    if (d.saving) { d.again = true; return; }   // Enter or leaving the cell mid-save: save the newer text next
+    if (d.value.trim() === shown()) { cells.delete(id); input.classList.remove('failed'); idle(); return; }
+    const value = toValue(d);
+    if (value === undefined) { input.classList.add('failed'); d.failed = true; return; }
     d.saving = true;
-    saveCell(id, input, d.base, key, valueOf(d.value, d.base.fields[key], key)).finally(() => { d.saving = false; d.failed = input.classList.contains('failed'); });
+    saveCell(id, input, d, key, value).finally(() => {
+      d.saving = false; d.failed = input.classList.contains('failed');
+      if (d.again && !d.failed) { d.again = false; save(); }
+    });
   };
   input.addEventListener('blur', save);
   input.addEventListener('keydown', event => {
     if (event.key === 'Enter') { event.preventDefault(); save(); }
-    if (event.key === 'Escape') { cells.delete(id); input.value = display(item.fields[key]); input.classList.remove('failed'); idle(); }
+    if (event.key === 'Escape') { cells.delete(id); input.value = shown(); input.classList.remove('failed'); idle(); }
   });
-  cell.append(input);
+  return input;
+}
+function sheetCell(item, key) {
+  const cell = el('td'), input = el('input', null, {'aria-label': `${item.name}: ${label(key)}`, autocomplete: 'off'});
+  cell.append(editableCell(input, item, key, {shown: () => display(latestOf(item).fields[key]),
+    toValue: (d) => valueOf(d.value, d.base.fields[key], key)}));
   return cell;
 }
 function sheetType(item) {
@@ -1113,42 +1155,25 @@ function sheetType(item) {
   if (!graph.types[item.type]) select.append(el('option', item.type, {value: item.type}));
   select.value = item.type;
   select.disabled = saga;
-  select.addEventListener('change', () => saveCell(select.id, select, item, 'type', select.value));
+  select.addEventListener('change', () => saveCell(select.id, select, {base: latestOf(item), value: select.value}, 'type', select.value));
   cell.append(select);
   return cell;
 }
 function sheetLocation(item, places) {
   // One shared list of places for every row: a select per row would repeat it thousands of times.
   if (!isRole('location')) return sheetCell(item, 'location');
-  const link = graph.links.find(l => l.from_path === item.path && l.role === 'location');
-  const current = link ? (byPath.get(link.to_path)?.name || link.to) : '';
-  const cell = el('td'), input = el('input', null, {list: 'sheet-places', 'aria-label': `${item.name}: Location`, autocomplete: 'off'});
-  const id = wireCell(input, item, 'location');
-  input.id = id;
-  const draft = cells.get(id);
-  input.value = draft?.value ?? current;
-  input.readOnly = saga;
-  if (draft?.failed) input.classList.add('failed');
-  input.addEventListener('input', () => { cells.set(id, {base: draft?.base || item, value: input.value}); idle(); });
-  const save = () => {
-    const d = cells.get(id);
-    if (!d || d.saving) return;
-    const text = d.value.trim(), place = places.get(text.toLowerCase());
-    if (text === current) { cells.delete(id); input.classList.remove('failed'); idle(); return; }
-    if (text && !place) {
-      input.classList.add('failed'); d.failed = true;
-      report(new ApiError('INVALID', `There is no place called “${text}”. Choose one from the list, or press Esc.`));
-      return;
-    }
-    d.saving = true;
-    saveCell(id, input, d.base, 'location', place ? `[[${place.name}]]` : '').finally(() => { d.saving = false; d.failed = input.classList.contains('failed'); });
+  const shown = () => {
+    const link = graph.links.find(l => l.from_path === item.path && l.role === 'location');
+    return link ? (byPath.get(link.to_path)?.name || link.to) : '';
   };
-  input.addEventListener('blur', save);
-  input.addEventListener('keydown', event => {
-    if (event.key === 'Enter') { event.preventDefault(); save(); }
-    if (event.key === 'Escape') { cells.delete(id); input.value = current; input.classList.remove('failed'); idle(); }
-  });
-  cell.append(input);
+  const cell = el('td'), input = el('input', null, {list: 'sheet-places', 'aria-label': `${item.name}: Location`, autocomplete: 'off'});
+  cell.append(editableCell(input, item, 'location', {shown, toValue: (d) => {
+    const text = d.value.trim(), place = places.get(text.toLowerCase());
+    if (!text) return '';
+    if (place) return `[[${place.name}]]`;
+    report(new ApiError('INVALID', `There is no place called “${text}”. Choose one from the list, or press Esc.`));
+    return undefined;
+  }}));
   return cell;
 }
 function narrative(view) {
