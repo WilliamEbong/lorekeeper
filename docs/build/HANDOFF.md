@@ -1,8 +1,13 @@
 # HANDOFF — Lorekeeper build
 
-**Last updated:** 2026-10-18, session 2, end of Phase 0.
-**Current position:** Phase 0 is done: git repo, Spec Kit (claude default plus codex), constitution, and continuity hooks live with `docs/build/ACTIVE` present. **Next: Phase 1** (re-extract the Aeon bundle into `C:\Users\Owner\lk-scratch\aeon_extract`, make sample `.aeon` fixtures in Aeon, write AEON-SPEC.md).
-**Speckit skills:** the Skill tool doesn't list them in this session. Read `.claude/skills/speckit-<x>/SKILL.md` and follow it by hand. A fresh session should list them.
+**Last updated:** 2026-10-18, session 2, during feature 001.
+**Current position:** Phases 0 and 1 are done. Feature 001 core is implemented and committed (`840b7fb`): fm.py (Codex), store.py, ops.py, cli.py, and 48 tests green. **Next:** T008 `lorekeeper/mcp.py` + `tests/test_mcp.py` (Codex, dual-era MCP: legacy `initialize` plus modern 2026-07-28 `server/discover`), then the 001 converge, ponytail-review and Codex adversarial review. After that comes feature 002 time.
+**Key facts from this session:**
+- The Skill tool can't see the speckit skills here; read `.claude/skills/speckit-*/SKILL.md` and follow it by hand.
+- context7 is out of quota; use WebFetch.
+- Aeon computer-use access was declined once; ask again once, at 006.
+- Repo-state snapshots: `C:\Users\Owner\lk-scratch\snap\snap.sh <name>`.
+- Aeon spec: `docs/research/AEON-SPEC.md`. The writer emits fileVersion 14 core.
 **Read order for any new or resumed session:** this file → `BUILD-PLAN.md` (plan + checklist) → the tail of `SESSION-LOG.md`.
 
 ---
