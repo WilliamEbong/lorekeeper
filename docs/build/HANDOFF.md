@@ -1,13 +1,20 @@
 # HANDOFF — Lorekeeper build
 
-**Last updated:** 2026-10-18, session 2. URGENT FIX IN PROGRESS for the live sagas (see SESSION-LOG, last entries).
-**Problem:** after landing, Realm CH004 and Space CH005 (in progress, at READY_FOR_HUMAN) fail `validate` with "PROFILE_CONTEXT stale or altered packet". Zombies CH004 is still being checked. Their profile packet receipts hash PROJECT_MANIFEST.json and the roster Wiki pages, which our landing changed.
-**Fix plan (in the clones `C:\Users\Owner\lk-scratch\sagas\*`, which equal the live HEADs Realm 7737f58, Space 75bd3ee, Zombies f1b4e1c):**
-1. In `chrono.py`, `settings()` reads `_system/lorekeeper.json` (`fsio.rpath("_system", "lorekeeper.json")`) and `enabled()` = that file exists. Update the saga.py SKIP messages, the docs ("manifest `lorekeeper`" becomes "`_system/lorekeeper.json`") and `test_chrono.enable()`.
-2. Write `_system/lorekeeper.json` from the manifest block. Restore PROJECT_MANIFEST.json to its pre-integration bytes: `git show <base>:PROJECT_MANIFEST.json` with base Realm 974a7bf, Space 0861be8, Zombies 06f14f0. The Space manifest also carried the SRD year format, which moves into the json.
-3. For each in-progress chapter, revert the Wiki pages listed in its packet "inputs" (live `_system/runtime/CH00N/profile_packet.json`) to `git show <base>:<page>`, and list the reverted keys in `_system/knowledge/chronology_deferred.md` ("apply after CH00N freezes").
-4. Commit `system:` (chrono + docs + config move) and `wiki:` (deferral) in the clones; suites; land again with `land.sh` (expected HEADs as above); probe again (copy the live repos to `lk-scratch\probe3`, run `baseline.sh` into `docs/build/baselines/probe-after2`); diff status/validate against `probe-before`. They MUST be identical.
-**Then:** commit 007 (pending in the Lorekeeper working tree), re-vendor the final engine, private repo, close-out.
+**Last updated:** 2026-10-18, session 2, after the regression fix landed.
+**Done:**
+- 001 to 006.
+- The sagas are integrated, landed and FIXED. Live HEADs: Realm 8a4c594, Space 0f02dcf, Zombies 3114c1d.
+- The in-progress chapters' status and validate are identical to the pre-integration baseline (proven on probe copies).
+- Chronology config is in `_system/lorekeeper.json`, not the manifest.
+**Running:** full probe-after2 (`docs/build/baselines/probe-after2`). Check that all suites are OK and that no status/validate diffs exist against probe-before.
+**Next:**
+1. Review and commit 007, which Codex left uncommitted in the Lorekeeper tree:
+   - templates.py, the ops `init --template`, pyproject.toml, README.md, docs/user-guide.md, docs/agent-skill.md, tests.
+   - Fix anything still referring to the manifest `lorekeeper` key in the docs: it is now `_system/lorekeeper.json`.
+   - Test `uv tool install .`, then `lore --version`.
+2. Final re-vendor of the engine (with the editor fixes) into the clones, run the suites, commit `system: update vendored Lorekeeper`, land with land.sh (expected HEADs as above), probe again.
+3. `gh repo create lorekeeper --private --source . --push`; check visibility PRIVATE.
+4. Close-out: final HANDOFF, `rm docs/build/ACTIVE`, remove the hooks from `.claude/settings.json`, update memory, PushNotification, final report.
 **Read order for any new or resumed session:** this file → `BUILD-PLAN.md` (plan + checklist) → the tail of `SESSION-LOG.md`.
 
 ---
