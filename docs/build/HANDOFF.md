@@ -1,99 +1,111 @@
 # HANDOFF — Lorekeeper
 
-Transferred from: Lorekeeper autonomous build (session 2), 2026-10-18.
-This document is authoritative — including over memory and older summaries. Replace
-any older HANDOFF.md with this one.
+Transferred from: Lorekeeper run 3 (editor UX overhaul and whole-app audit), 2026-10-18.
+This document is authoritative, including over memory and older summaries. The previous handoff's history is in SESSION-LOG.md and BUILD-NOTES.md.
 
 ## 1. Snapshot
 
 Lorekeeper (command `lore`) is a self-sufficient, standalone story-world engine, inspired by Aeon Timeline but in no way dependent on it.
 - **Storage:** a world is plain Markdown files, one per character, place or event, with flat frontmatter and Obsidian wikilinks.
 - **What it does:** reads dates at whatever precision they are written, computes ages and timelines, and checks continuity (FAIL means a definite error, WARN a possible one).
-- **Interfaces:** a CLI, an MCP server for AI agents, and a local web editor.
+- **Interfaces:** a CLI, an MCP server for AI agents, and a local browser editor (`lore serve`).
 - **Interop:** imports and exports Aeon `.aeon`, CSV and Markdown.
 
-It was built for three audiences: writers who draft with AI agents, novelists who don't use AI, and worldbuilders/GMs. Its first clients are the owner's three novel sagas (Realm, Space, Zombies), which now use it in warn mode.
+Audiences: writers who draft with AI agents, novelists who don't use AI, and worldbuilders/GMs. First clients: the owner's three sagas (Realm, Space, Zombies), in warn mode.
 
 ## 2. Current state
 
-**Done.** Features 001–007 are built, reviewed and fixed.
-- **Lorekeeper repo:** HEAD `aaf029b` at https://github.com/WilliamEbong/lorekeeper (PRIVATE). 190 tests pass. The CLI is installed with `uv tool install .`.
-- **Standalone, confirmed 2026-10-18:** with the Aeon bundle hidden and no sagas reachable, the installed `lore` ran init, create, link, age, check, timeline, export to aeon/csv/md, re-import, MCP (20 tools) and the editor. The full suite passed, with 5 tests that need Aeon or the sagas skipping themselves. The package imports only the Python standard library.
-- **Sagas:** integrated and landed. Live HEADs: Realm `efd585f`, Space `ffedb64`, Zombies `82a1536`. In-progress chapters have status/validate output identical to before the integration.
+**Run 3 is done, on branch `feat/008-editor-ux`** (local commits only; not merged into `main`, not pushed). HEAD is the final docs commit after `d1d3468`. 240 tests pass (1 POSIX-only skip). `main` is still `adc9c41` and matches the private GitHub repo.
+
+What the branch adds:
+- **Editor (feature 008, specs/008-editor-ux):** rebuilt for novelists.
+  - Shell: a top bar with live save status, a find box (`/`), and a New item form.
+  - Inspector: plain labels, dates read back in words, one-per-line lists, a type picker, grouped connections, and Undo after every save. Conflicts offer "Load their version" or "Keep my text".
+  - Timeline: round axis dates that stay in view, packed rows, a colour per type, approximate dates drawn dashed, type filters, and safe dragging (a 6 px threshold, a live date, the whole span moves, Undo).
+  - Other views: Subway lines run from birth to death. Ages (renamed from Relationships) keeps its names in view and tints children and impossible ages. Spreadsheet sorts, filters and pages its rows.
+  - New Continuity tab: shows `lore check` results in plain words, with a count badge.
+  - Works in light and dark, at phone width, and at 3,000 items.
+- **Audit fixes (about 50 findings from three read-only audits, fixed in four parallel worktrees, then two fresh-context reviews):**
+  - Aeon import no longer invents deaths; dependencies are no longer reversed; SS/FF import as `starts_after_start`/`ends_after_end`.
+  - Obsidian block-style lists are read and edited safely.
+  - A mistyped `--root` errors instead of giving a false all-clear.
+  - "May 5, 1990" no longer reads as the year 5.
+  - New checks: `END_BEFORE_START` and `AMBIGUOUS_NAME` (WARN).
+  - TWO_PLACES: back-to-back scenes no longer clash, and the check went from 21 s to 0.3 s on coarse worlds.
+  - Parameter types are checked once for all three interfaces.
+  - The CLI prints plain sentences for timeline, age, when, where and knows.
+  - Live-reload polling went from 0.7 s to 0.05 s at 3,000 files.
+- **Wuthering Heights sample (re-imported):** 2 FAIL and 2 WARN, all genuine. It reported 23 FAIL and 7 WARN before.
 
 **In flight:** nothing.
 
-## 3. Decision log
+## 3. Decision log (this run; earlier decisions are in SESSION-LOG and BUILD-NOTES)
 
 | # | Decision | Rationale | Status |
 |---|----------|-----------|--------|
-| 1 | Stdlib-only Python, flat package, vendored into each saga | Sagas forbid reading outside their repo; zero dependencies | settled |
-| 2 | Storage = the saga Wiki convention (flat keys, inline lists, quoted `"[[links]]"`) | A saga Wiki is a project with no conversion; byte-identical round trip | settled |
-| 3 | Project config is `lore.json`, not TOML | The editor must write it; stdlib has no TOML writer | settled |
-| 4 | Dates are intervals of integer minutes on one axis; no `datetime` | Precision and uncertainty without inventing detail | settled |
-| 5 | Checks report only (FAIL definite / WARN possible); no auto-rescheduling | Never move canon silently | settled |
-| 6 | Sagas run in **warn mode** | Nothing blocks the pipeline; fail mode is the owner's call | settled |
-| 7 | Saga chronology config lives in `_system/lorekeeper.json` | The manifest is fingerprinted by in-progress profile packets | reversed → `_system/lorekeeper.json` (was a manifest key) |
-| 8 | Roster pages of chapters in progress at integration keep their new dates deferred in `_system/knowledge/chronology_deferred.md` | Editing them staled those chapters' packets | settled |
-| 9 | Canon gaps are decided and recorded in `agent_decisions.md` (42 birthdates) | Owner's standing rule; owner may override | settled |
-| 10 | Ageless beings carry `max_age: none` | Immortals must not trip the 130-year limit | settled |
-| 11 | `.aeon` writer emits fileVersion 14 (template shape) and lets Aeon migrate it | Avoids guessing the v27 shape | settled |
-| 12 | Saga changes are made in clones and landed fast-forward only, back to back | Live repos and in-progress files stay untouched | settled |
-| 13 | Aeon desktop app is not used | Owner declined access twice; Lorekeeper is standalone | settled |
+| 14 | Refine the editor's look; don't redesign it | The paper-and-ink identity works; the problems were usability | settled |
+| 15 | The Relationships tab is labelled **Ages** | It is an age grid; element ids are unchanged | owner may revert |
+| 16 | In local mode, link fields are edited only through Connections, not as raw `[[Name]]` text | Raw link syntax is error-prone for novelists; saga mode keeps the text | owner may revert |
+| 17 | A timeline drag moves the whole written span | Moving only the start could put it after its end | settled |
+| 18 | Continuity re-runs `check` after every reload (0.5 s debounce) | Keeps the badge honest; `check` takes about 1 s at 3,000 items | settled |
+| 19 | An event dated exactly like a birth or death is not a DEAD/UNBORN finding | Birth and death events were flagged against the same person | settled |
+| 20 | `create()` keeps the index current; callers no longer re-index | Imports were quadratic | settled |
+| 21 | Aeon SS/FF import as unchecked roles | Lorekeeper's `same_start`/`same_end` mean "equal", which is wrong for Aeon | settled; checking them is on the Later list |
 
-## 4. Open questions
+## 4. Open questions (owner's call)
 
-- Should the sagas switch from warn to fail mode? (Owner's decision.)
-- Realm's rule "paired cards sit 7 days apart" has no structured pairing data yet, so it isn't encoded.
-- A Lorekeeper-written `.aeon` has never been opened in the Aeon app (optional; the sample is at `C:\Users\Owner\lk-scratch\aeon_out`).
+- Merge `feat/008-editor-ux` into `main` and push to the private repo? (Not done: pushing needs the owner's go-ahead.)
+- Should the sagas switch from warn to fail mode? (Carried over.)
+- Keep the tab name "Ages", or go back to "Relationships"?
 
 ## 5. Next actions
 
-1. Review the Space chronology report: Cards 051/052 (6840 CE, Day 168) after Card 050 (6842 CE, Day 164) on one rail, and four impossible SRD days (D366/D367/D374/D378) on cards 110, 111, 205 and 206. **← NEXT**
-2. As Realm CH004, Space CH005 and Zombies CH004 freeze, apply their deferred keys from `chronology_deferred.md`.
-3. At the next engine change, re-vendor Lorekeeper into the sagas (they carry `eb20b30`; `dc9207a` only adds a load speed-up) via clones and `land.sh`.
-4. Optionally try `lore serve` on your own world, and `saga.py timeline` on a saga.
+1. Owner reviews the editor (`lore serve` in a world folder), then approves merging and pushing the branch. **← NEXT**
+2. Re-vendor the engine into the three sagas. They carry `eb20b30`; the branch changes check results: TWO_PLACES, END_BEFORE_START, AMBIGUOUS_NAME (cards are exempt) and `learns`. Use clones and `land.sh`, as in run 2, and compare saga reports before landing. The dates agent checked read-only that saga card dates and findings are unchanged.
+3. Space chronology report: cards 051/052 (RAIL_REGRESSION) and four impossible SRD days (carried over).
+4. Apply the deferred saga keys in `chronology_deferred.md` as chapters freeze (carried over).
 
 ## 6. Constraints & preferences
 
 - The owner directs in plain language and does not read code, JSON or git. Persisted docs and commits use normal prose.
-- Ponytail (the simplest correct design) and stdlib only. Spec Kit for features (the `speckit-*` skills). Playwright for any UI check. Codex builds and reviews; Claude commits.
+- Ponytail (the simplest correct design) and stdlib only. Spec Kit for features. Playwright for any UI check.
+- Line endings: most `.py` files and `editor.js` are CRLF; `editor.css`, `editor.html` and the docs are LF. Preserve them, and check with `git diff --stat` before committing.
 - **Sagas:**
   - Never stage in-progress chapters, `_system/state`, provenance or `saga.log`.
-  - Engine commits are prefixed `system:`; authorities are read-only.
-  - Run status/validate only on copies, because health and validate can rewrite status files.
+  - Engine commits are prefixed `system:`.
+  - Run status and validate only on copies.
 - Nothing public. The only remote is the private repo.
 
 ## 7. Artifact manifest
 
-| Artifact | Purpose | Status | Canonical location |
-|----------|---------|--------|--------------------|
-| Lorekeeper source + tests | The app (`lorekeeper/`, `tests/`) | final | repo (`Documents\Lorekeeper`, GitHub private) |
-| README.md, docs/user-guide.md, docs/agent-skill.md | Owner, novelist and agent guides | final | repo |
-| docs/research/AEON-SPEC.md | Clean-room `.aeon` format notes | final | repo |
-| docs/build/BUILD-PLAN.md, SESSION-LOG.md | Plan with checklist; full build history and evidence | final | repo |
-| docs/build/BUILD-NOTES.md | Previous handoff: Aeon research and saga engine seams | superseded | repo |
-| specs/001–007 | Spec Kit specs, plans and tasks | final | repo |
-| Saga chronology reports | Per-saga audit | final | each saga `_system/knowledge/chronology_report.md` |
-| Saga helper scripts (land.sh, commit_system.sh, baseline.sh, …) | Safe saga updates | final | `C:\Users\Owner\lk-scratch\snap` (local only) |
-| Sample `.aeon` export | Optional Aeon check | final | `C:\Users\Owner\lk-scratch\aeon_out` |
+| Artifact | Purpose | Status | Location |
+|----------|---------|--------|----------|
+| Lorekeeper source + tests | The app | final on branch | repo, `feat/008-editor-ux` |
+| specs/008-editor-ux | Spec, plan, tasks for the editor | final | repo |
+| README.md, docs/user-guide.md, docs/agent-skill.md | Guides (updated this run) | final | repo |
+| docs/research/AEON-SPEC.md | Clean-room `.aeon` notes (dependency direction and zero-length ends added) | final | repo |
+| docs/build/BUILD-PLAN.md, SESSION-LOG.md | Plan with run-3 section; full history | final | repo |
+| tests/test_editor_dates.py | Runs the editor's own date and tick code in Node against the engine (skips without Node) | final | repo |
+| Scratch test worlds (Wuthering Heights import, fixture copy, empty world, 3,000-item world) | Verification only | disposable | session scratchpad (not in the repo) |
 
 ## 8. Glossary
 
-- **Card:** an architecture chapter card. Lorekeeper models it as an in-memory item of type `card`.
-- **Rail:** a Space story strand (`Primary allocation` field).
-- **SRD:** Space's 365-day production calendar. `Y0 = 6842 CE`; written `SRD Y0 D004` or `6842 CE, Day 004`.
+- **Card:** an architecture chapter card (in-memory item of type `card`, path `<architecture>#CHnnn`).
+- **Rail:** a Space story strand. **SRD:** Space's 365-day production calendar.
 - **Warn mode:** chronology findings are printed but never block a stage.
-- **Profile packet:** the saga's per-chapter character context. Its receipt hashes the manifest and roster pages.
-- **Probe:** a full copy of a live saga, used for checks that may write files.
-- **FAIL / WARN:** definite / possible continuity error.
+- **FAIL / WARN:** a definite or possible continuity error.
+- **Approximate (editor):** circa, provisional, ranges, `date_min`/`date_max`, or month or year precision without a written end. Drawn pale and dashed.
 
-## 9. Probe facts
+## 9. How to verify
 
-1. The saga chronology config is `_system/lorekeeper.json`, not PROJECT_MANIFEST.json, because profile packets hash the manifest.
-2. 42 birthdates were decided rather than sourced: Realm 18, Space 15, Zombies 9.
-3. The sagas vendor engine `eb20b30`; the repo HEAD engine differs only by a load speed-up (3,000 items: 1.55 s → 0.85 s).
+- `python -m unittest discover -s tests` from the repo root: 240 tests, OK (1 skipped).
+- `lore serve --root <a world>` and open the printed address:
+  1. Press `/`, find a character, edit Born, and check that it reads back.
+  2. Press Ctrl+S, then Undo.
+  3. Open the Continuity tab.
+  4. Drag an event and watch the date shown live.
+- `"C:/Users/Owner/.claude/skills/impeccable/scripts/impeccable" detect --json lorekeeper/editor.html` should print `[]`.
 
-## 10. Appendix — embedded artifacts
+## 10. Appendix
 
 None.

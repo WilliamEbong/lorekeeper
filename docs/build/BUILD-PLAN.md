@@ -322,7 +322,8 @@ Paths are relative to each saga root and identical in all three repos.
 
 - [x] Editor rewritten (shell, find, inspector, six views, toasts with undo, conflict actions, drag safety) and verified in Playwright
 - [x] Docs (user guide, README) updated for the editor
-- [ ] Audit fixes: interop; frontmatter and store; ops, CLI, MCP and server; dates and checks
-- [ ] User guide finding codes updated; full suite; fresh-context review; final handoff
+- [x] Audit fixes: interop; frontmatter and store; ops, CLI, MCP and server; dates and checks (four worktrees, merged)
+- [x] Large-world performance: spreadsheet paging and shared place list, capped Ages and Continuity, stamp polling 0.7 s to 0.05 s
+- [x] User guide, agent skill, Aeon notes and spec 006 updated; full suite 240 OK; two fresh-context reviews (engine, editor) and all their findings fixed; final handoff
 
 **Later (not built).** BC dates finer than a year still display as astronomical years (`-0043-03-15`); "1800s" means the decade 1800–1809; Aeon nesting (`super`) is dropped on import; dated Aeon types all become `event`; Aeon multitext exports as JSON text; re-vendor the engine into the three sagas (they carry `eb20b30`).
