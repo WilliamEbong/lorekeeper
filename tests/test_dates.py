@@ -1,6 +1,7 @@
 """Date arithmetic and grammar vectors; no external saga files are needed."""
 
 import unittest
+from unittest.mock import patch
 
 from lorekeeper import dates
 
@@ -54,6 +55,34 @@ class CivilTests(unittest.TestCase):
 class GregorianTests(unittest.TestCase):
     def setUp(self):
         self.cal = dates.Calendar({})
+
+    def test_impossible_dates_stop_all_fallbacks(self):
+        srd = dates.Calendar(SRD)
+        permissive = dates.Calendar(dict(SRD, id="long", year_days=400))
+        for text, cals in (("February 30, 2024", [self.cal]),
+                           ("February 30, 2024 (provisional)", [self.cal]),
+                           ("6842 CE, Day 366", [srd, self.cal]),
+                           ("6842 CE, Day 366", [srd, permissive]),
+                           ("2024-01-01..February 30, 2024", [self.cal])):
+            with self.subTest(text=text, calendars=[c.id for c in cals]):
+                self.assertIsNone(cals[0].parse(text))
+                self.assertIsNone(dates.parse(text, cals))
+        matched = dates.parse("African Collapse Wars, 2040s", [self.cal])
+        self.assertEqual((matched.lo, matched.note),
+                         (self.cal.to_axis(2040, 1, 1), "African Collapse Wars"))
+
+    def test_written_date_without_space_after_comma(self):
+        for parse in (self.cal.parse, lambda text: dates.parse(text, [self.cal])):
+            w = parse("May 3,2071")
+            self.assertEqual((w.lo, w.hi, w.precision, w.note),
+                             (self.cal.to_axis(2071, 5, 3), self.cal.to_axis(2071, 5, 4), "day", ""))
+
+    def test_invalid_clock_in_note_is_preserved(self):
+        for note in ("note 13:00 pm", "note 24:00", "note 12:60"):
+            w = dates.parse("March 3, 2071, " + note, [self.cal])
+            self.assertEqual((w.lo, w.precision, w.note),
+                             (self.cal.to_axis(2071, 3, 3), "day", note))
+        self.assertIsNone(dates.parse("March 3, 2071, 13:00 pm", [self.cal]))
 
     def test_iso_and_written_forms(self):
         cases = (("2036", (2036, 1, 1), "year"),
@@ -190,6 +219,14 @@ class ArithmeticTests(unittest.TestCase):
     def setUp(self):
         self.cal = dates.Calendar({})
 
+    def test_signed_age_bounds_do_not_depend_on_status(self):
+        birth = self.cal.parse("2000..2010")
+        at = self.cal.parse("2005-01-01")
+        for death, status in ((None, "alive"), (self.cal.parse("2004"), "after_death")):
+            result = dates.age(birth, at, death, self.cal)
+            self.assertEqual(result["status"], status)
+            self.assertEqual(result["years"], [-5, 5])
+
     def test_durations(self):
         for text, expected in (("2h", (0, 120)), ("45m", (0, 45)), ("45min", (0, 45)),
                                ("3d", (0, 4320)), ("2w", (0, 20160)), ("1y", (12, 0)),
@@ -251,6 +288,49 @@ class ArithmeticTests(unittest.TestCase):
 
 
 class CustomCalendarTests(unittest.TestCase):
+    def test_native_month_count_defines_span_and_age_years(self):
+        cal = dates.Calendar(FANTASY)
+        birth = cal.parse("F7/1/1 00:00")
+        for text, expected, years in (("F7/13/1 00:00", "12 months", 0),
+                                      ("F8/1/1 00:00", "1 year", 1)):
+            at = cal.parse(text)
+            self.assertEqual(dates.span_text(dates.span(birth.lo, at.lo, cal)), expected)
+            self.assertEqual(dates.age(birth, at, None, cal),
+                             dict(text=expected, status="alive", years=[years, years]))
+        self.assertEqual(cal.add_months(birth.lo, 13), cal.to_axis(8, 1, 1))
+        self.assertEqual(cal.add_months(birth.lo, -13), cal.to_axis(6, 1, 1))
+
+    def test_custom_hour_without_minute_has_hour_precision(self):
+        cal = dates.Calendar(dict(SRD, formats=[
+            r"SRD Y(?P<year>-?\d+) D(?P<day>\d+) H(?P<hour>\d+)(?::(?P<minute>\d+))?"]))
+        for suffix, precision, width in (("H5", "hour", 60), ("H5:00", "minute", 1)):
+            w = cal.parse("SRD Y0 D004 " + suffix)
+            self.assertEqual((w.lo, w.precision, w.hi - w.lo),
+                             (cal.to_axis(0, 1, 4, 5), precision, width))
+
+    def test_display_template_time_is_not_duplicated(self):
+        for display, expected in (("{display_year} CE, Day {day:03}, {hour:02}:{minute:02}",
+                                    "6842 CE, Day 004, 20:33"),
+                                   ("{year}/{day} H{hour}", "0/4 H20"),
+                                   ("{year}/{day} M{minute}", "0/4 M33")):
+            cal = dates.Calendar(dict(SRD, display=display))
+            self.assertEqual(cal.format(cal.to_axis(0, 1, 4, 20, 33)), expected)
+
+    def test_distant_month_years_use_bounded_work_and_storage(self):
+        for cycles, offset in (([4, 100, 400], 0), ([4, 100, 400], 1), ([], 0)):
+            cal = dates.Calendar(dict(FANTASY, leap_cycles=cycles, leap_offset=offset))
+            with patch.object(cal, "_lengths", wraps=cal._lengths) as lengths:
+                for year in (-999993, 1000007):
+                    w = cal.parse(f"F{year}/1/1")
+                    elapsed = (dates.days_from_civil(year - offset, 1, 1)
+                               - dates.days_from_civil(7 - offset, 1, 1)
+                               if cycles else (year - 7) * 365)
+                    self.assertEqual(w.lo, (cal.epoch_day + elapsed) * 1440)
+                    self.assertEqual(cal.from_axis(w.lo)["year"], year)
+                    self.assertEqual(cal.from_axis(w.lo - 1)["year"], year - 1)
+                self.assertLess(lengths.call_count, 20)
+            self.assertEqual(len(cal.year_starts), max(cycles, default=1) + 1)
+
     def test_srd_parked_vectors(self):
         cal = dates.calendars([SRD])[0]
         w = dates.parse("SRD Y0 D004 (PROVISIONAL production calendar)", [cal])

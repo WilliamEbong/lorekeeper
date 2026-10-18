@@ -119,7 +119,7 @@ class McpTests(unittest.TestCase):
                 cli = subprocess.run([sys.executable, "-m", "lorekeeper", "--root", FIXTURE,
                                       "--json", name, *cli_args], cwd=REPO, env=env,
                                      capture_output=True, encoding="utf-8")
-                self.assertEqual(cli.returncode, 0, cli.stderr)
+                self.assertEqual(cli.returncode, 1 if name == "check" else 0, cli.stderr)  # fixture has FAILs
                 self.assertTrue(cli.stdout.endswith("\n"))
                 result = self.call(name, arguments)
                 self.assertEqual(result["content"], [{"type": "text", "text": cli.stdout[:-1]}])

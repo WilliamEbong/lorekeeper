@@ -68,7 +68,8 @@ class CliFlows(unittest.TestCase):
         root = os.path.join(self.root, "w")
         shutil.copytree(FIXTURE, root)
         r = lore("check", cwd=root)
-        self.assertEqual(r.returncode, 0)
+        self.assertEqual(r.returncode, 1)          # the fixture world carries deliberate FAILs
+        self.assertIn("FAIL PARENT_AGE", r.stdout)
         self.assertIn("WARN BROKEN_LINK located_in -> [[The Coast]] matches no item Locations/Saltmarsh.md:5", r.stdout)
         shutil.copy(os.path.join(root, "Characters", "Mara Quell.md"), os.path.join(root, "Characters", "Copy.md"))
         r = lore("check", cwd=root)

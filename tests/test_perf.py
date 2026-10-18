@@ -3,6 +3,7 @@ import tempfile
 import time
 import unittest
 
+from lorekeeper import ops
 from lorekeeper.store import Project
 
 
@@ -30,6 +31,15 @@ class Perf(unittest.TestCase):
             elapsed = time.perf_counter() - start
             self.assertEqual(len(p.items), 3000)
             self.assertLess(elapsed, 1.5, f"load took {elapsed:.2f}s")
+
+    def test_3000_items_check_under_2s(self):
+        with tempfile.TemporaryDirectory() as root:
+            synthetic(root)
+            p = Project(root)
+            start = time.perf_counter()
+            ops.run("check", {}, project=p)
+            elapsed = time.perf_counter() - start
+            self.assertLess(elapsed, 2.0, f"check took {elapsed:.2f}s")
 
 
 if __name__ == "__main__":

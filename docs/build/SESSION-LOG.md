@@ -142,3 +142,5 @@ Append-only. Newest entries at the bottom. Each entry gives: date/time (UTC if k
 - Decision: status/validate/health can rewrite status files, so baselines run on full copies (`lk-scratch\probe`), never on the live repos.
 - Decision: Realm rules are encoded as Wiki-event rules (`tag: duel` max 1d; `role: return_of` exactly 7d). "Paired cards 7 days apart" has no structured pairing data and is reported as not encoded.
 - Baselines GREEN (2026-10-18): all three suites and health exit 0, on the probes and the clones. Output in docs/build/baselines/{probe,clone}-before/. No stop condition.
+- (resumed after the usage reset) Codex job `task-mvd5i960-f2envw` finished: dates.py has 8 review fixes and 8 regression tests (30 date tests). Stray check: only dates.py and test_dates.py changed. Two tests (CLI check exit code, MCP golden check) now expect exit 1, because the fixture world carries deliberate FAILs. Added the perf check: 3,000 items checked in under 2 s. 131 tests green.
+- The speckit skills are now visible to the Skill tool (they loaded after the restart), so they can be invoked directly from here on.

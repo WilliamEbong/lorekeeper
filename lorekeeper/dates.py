@@ -1,6 +1,7 @@
 """Integer-minute dates, configured calendars, and uncertainty intervals."""
 
 import re
+from bisect import bisect_right
 from typing import NamedTuple
 
 UNITS = ("year", "month", "day", "hour", "minute")
@@ -74,8 +75,11 @@ class Calendar:
             self.cycles = config.get("leap_cycles", [])
             if any(c <= 0 for c in self.cycles):
                 raise ValueError("leap cycles must be positive")
-            self.starts = {self.epoch_year: self.epoch_day}
-            self.first_year = self.last_year = self.epoch_year
+            self.cycle_years = max(self.cycles, default=1)
+            self.year_starts = [0]
+            for year in range(self.cycle_years):
+                self.year_starts.append(self.year_starts[-1] + sum(self._lengths(year)))
+            self.cycle_days = self.year_starts[-1]
 
     def _lengths(self, year):
         if self.type == "gregorian":
@@ -89,16 +93,11 @@ class Calendar:
         return [m.get("leap_days", m["days"]) if leap else m["days"] for m in self.months]
 
     def _year_start(self, year):
-        # Extend a contiguous cache by summation, including years before epoch.
-        while self.last_year < year:
-            y = self.last_year
-            self.starts[y + 1] = self.starts[y] + sum(self._lengths(y))
-            self.last_year += 1
-        while self.first_year > year:
-            y = self.first_year - 1
-            self.starts[y] = self.starts[y + 1] - sum(self._lengths(y))
-            self.first_year = y
-        return self.starts[year]
+        # Floor division also counts complete blocks before year zero.
+        blocks, remainder = divmod(year, self.cycle_years)
+        epoch_blocks, epoch_remainder = divmod(self.epoch_year, self.cycle_years)
+        return (self.epoch_day + (blocks - epoch_blocks) * self.cycle_days
+                + self.year_starts[remainder] - self.year_starts[epoch_remainder])
 
     def to_axis(self, year, month, day, hour=0, minute=0):
         if not 0 <= hour < 24 or not 0 <= minute < 60:
@@ -125,19 +124,10 @@ class Calendar:
             year += self.epoch_year
             month, day = 1, day + 1
         else:
-            while n < self.starts[self.first_year]:
-                self._year_start(self.first_year - 1)
-            while n >= self.starts[self.last_year]:
-                self._year_start(self.last_year + 1)
-            low, high = self.first_year, self.last_year
-            while low + 1 < high:
-                mid = (low + high) // 2
-                if self.starts[mid] <= n:
-                    low = mid
-                else:
-                    high = mid
-            year, month = low, 1
-            day = n - self.starts[year] + 1
+            blocks, remainder = divmod(n - self._year_start(0), self.cycle_days)
+            year_in_cycle = bisect_right(self.year_starts, remainder) - 1
+            year, month = blocks * self.cycle_years + year_in_cycle, 1
+            day = remainder - self.year_starts[year_in_cycle] + 1
             for length in self._lengths(year):
                 if day <= length:
                     break
@@ -164,6 +154,7 @@ class Calendar:
         if precision not in UNITS:
             raise ValueError("invalid precision")
         p = self.from_axis(minutes)
+        template = ""
         if precision == "hour":
             p["minute"] = 0
         if self.type == "gregorian":
@@ -180,8 +171,9 @@ class Calendar:
                 return str(p.get("display_year", p["year"]))
             default = "Y{year} D{day:03}" if self.type == "days" else "{year}-{month:02}-{day:02}"
             p.setdefault("display_year", p["year"] + self.offset)
-            result = self.config.get("display", default).format(**p)
-        if precision in ("hour", "minute"):
+            template = self.config.get("display", default)
+            result = template.format(**p)
+        if precision in ("hour", "minute") and "{hour" not in template and "{minute" not in template:
             result += (" " if self.type == "gregorian" else ", ") + f'{p["hour"]:02}:{p["minute"]:02}'
         return result
 
@@ -200,11 +192,6 @@ class Calendar:
         time = _TIME.search(text)
         if time:
             text = text[:time.start()].strip()
-            hour, minute = int(time[1]), int(time[2])
-            if time[3]:
-                if not 1 <= hour <= 12:
-                    raise ValueError("invalid twelve-hour time")
-                hour = hour % 12 + (12 if time[3].lower() == "p" else 0)
         era = re.search(r"\s+(BC|BCE|AD|CE)$", text, re.I)
         if era:
             text = text[:era.start()].strip()
@@ -218,7 +205,7 @@ class Calendar:
             month, day = int(iso[2] or 1), int(iso[3] or 1)
             precision = "day" if iso[3] else "month" if iso[2] else "year"
         else:
-            written = re.fullmatch(r"([A-Za-z]+\.?)(?:\s+(\d{1,2})\s*,)?\s+(-?\d+)", text)
+            written = re.fullmatch(r"([A-Za-z]+\.?)\s+(?:(\d{1,2})\s*,\s*)?(-?\d+)", text)
             reverse = re.fullmatch(r"(\d{1,2})\s+([A-Za-z]+\.?)\s+(-?\d+)", text)
             if written:
                 name, day, year = written.groups()
@@ -239,6 +226,11 @@ class Calendar:
         if time:
             if precision != "day":
                 return None
+            hour, minute = int(time[1]), int(time[2])
+            if time[3]:
+                if not 1 <= hour <= 12:
+                    raise ValueError("invalid twelve-hour time")
+                hour = hour % 12 + (12 if time[3].lower() == "p" else 0)
             precision = "minute"
         return self._interval(year, month, day, hour, minute, precision)
 
@@ -249,7 +241,7 @@ class Calendar:
                 ends = text.split("..") if ".." in text else year_range.groups()
                 if len(ends) != 2:
                     return None
-                a, b = (self.parse(end) for end in ends)
+                a, b = (self._parse(end) for end in ends)
                 if a is None or b is None or b.lo < a.lo:
                     return None
                 return When(a.lo, b.hi, min((a.precision, b.precision), key=UNITS.index),
@@ -267,13 +259,23 @@ class Calendar:
                 month = next((str(i) for i, m in enumerate(self.months, 1)
                               if m["name"].casefold() == month.casefold()), "0")
             precision = "day" if p.get("day") is not None else "month" if p.get("month") is not None else "year"
-            if p.get("hour") is not None or p.get("minute") is not None:
+            if p.get("minute") is not None:
                 precision = "minute"
+            elif p.get("hour") is not None:
+                precision = "hour"
             return self._interval(year, int(month), int(p.get("day") or 1),
                                   int(p.get("hour") or 0), int(p.get("minute") or 0), precision)
         return None
 
     def parse(self, text):
+        try:
+            return self._parse(text)
+        except (ValueError, KeyError):
+            return None
+
+    def _parse(self, text):
+        # None means unmatched; invalid recognized expressions raise so callers
+        # can stop calendar and leading-label fallback as well as shorter cuts.
         if not isinstance(text, str) or not text.strip():
             return None
         source = text.strip()
@@ -288,12 +290,7 @@ class Calendar:
                 expression, leading = re.subn(r"^" + _MARKER, "", expression, flags=re.I)
                 expression, timed = re.subn(r"(?<=[\s,])" + _MARKER + r"(?=\d{1,2}:\d{2})",
                                            "", expression, flags=re.I)
-            try:
-                result = self._expression(expression)
-            except (ValueError, KeyError):
-                # A recognized but impossible date must not be reinterpreted
-                # as a shorter date plus note ("February 30, 2024").
-                return None
+            result = self._expression(expression)
             if result is None:
                 continue
             note = source[cut:].strip()
@@ -326,7 +323,10 @@ def calendars(config_list):
 
 def parse(text, cals):
     for cal in cals:
-        result = cal.parse(text)
+        try:
+            result = cal._parse(text)
+        except (ValueError, KeyError):
+            return None
         if result is not None:
             return result
     label, sep, rest = text.partition(", ") if isinstance(text, str) else ("", "", "")
@@ -372,19 +372,18 @@ def add(minutes, duration, cal):
 def span(lo, hi, cal):
     if lo > hi:
         raise ValueError("span requires lo <= hi")
-    # Contract defines a span year as 12 month additions, even for a custom
-    # calendar with 13 months. Precision intervals still use native years.
+    count = len(cal.months) if cal.type == "months" else 12
     low, high = 0, 1
-    while cal.add_months(lo, 12 * high) <= hi:
+    while cal.add_months(lo, count * high) <= hi:
         low, high = high, high * 2
     while low + 1 < high:
         mid = (low + high) // 2
-        if cal.add_months(lo, 12 * mid) <= hi:
+        if cal.add_months(lo, count * mid) <= hi:
             low = mid
         else:
             high = mid
     result = {"years": low}
-    start = cal.add_months(lo, 12 * low)
+    start = cal.add_months(lo, count * low)
     if cal.type == "days":
         months = (hi - start) // (30 * 1440)
         # The remaining span is shorter than a year, so positive multiples
@@ -422,7 +421,6 @@ def age(birth, at, death, cal):
     def years(start, end):
         if start <= end:
             return span(start, end, cal)["years"]
-        # Negative ages are reported only for definitely before-birth events.
-        return -span(end, start, cal)["years"] if status == "before_birth" else 0
+        return -span(end, start, cal)["years"]
 
     return dict(text=text, status=status, years=[years(birth.hi - 1, at.lo), years(birth.lo, at.hi - 1)])
