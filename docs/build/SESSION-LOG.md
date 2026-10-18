@@ -164,3 +164,14 @@ Append-only. Newest entries at the bottom. Each entry gives: date/time (UTC if k
   - the Space calendar gets a year-only SRD format `(?P<display_year>-?\d+) CE`, because circa birth years were falling back to Gregorian
   - the chrono report shows born as written, and ages as a range when uncertain (it showed the high end)
 - Later list: AGE_LIMIT will FAIL for ageless beings (Space's ancient being) once they take part in dated events. Fix: a per-item `max_age` override, or a manifest `checks.max_age` per type.
+
+### Feature 005 editor (2026-10-18)
+- Codex built serve.py (161 lines), editor.html/js/css (vanilla ES module + SVG) and test_serve.py; 157 tests green. Stray check clean (the repo-local Codex temp dirs were removed; `.playwright-mcp/` gitignored).
+- **Playwright MCP verification on a temp copy of the fixture world:**
+  - SC-1: created an event, set a date, linked Mara Quell, and drag-redated it on the timeline (2021-06-15 became 2003-04-19, day precision kept). The Relationships grid updated Mara's age from 33 y 2 mo to 15 y 2 wk.
+  - SC-2: keyboard-only create and date (focus, type, Enter, Tab, Save).
+  - SC-3: a CLI same-key edit while the browser held unsaved input gave a 409 shown with the current values; the input was kept and the file held the CLI value. Fixed one wart: the status line now says "Not saved" instead of a stale "Saved.".
+  - SC-4 (real Realm clone, `saga.py timeline`): 532 items; the inspector shows only "Propose change"; a proposal was queued in `_system/runtime/timeline_requests/` and the page was unchanged. The test request was closed with `--done`.
+- Added `saga.py timeline` / `timeline-requests` and the report fixes (born shown as written; uncertain ages as "a to b years") via `lk-scratch/snap/patch_saga2.py`. Space manifest: year-only SRD format added.
+- Engine: a per-person `max_age` override (`none` for the ageless). Realm's five immortal far-side beings and Space's ancient being are marked `max_age: none`, citing canon.
+- **Backfill Realm** (a7e4358 wiki + 84d8299 knowledge): 24 pages, 12 values sourced, 18 decided (the far-side immortals get a decided era of ~3000 BC); the 2 events got date/end/location/participants.

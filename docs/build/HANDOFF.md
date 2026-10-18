@@ -1,24 +1,27 @@
 # HANDOFF — Lorekeeper build
 
-**Last updated:** 2026-10-18, session 2, features 004/005 in flight.
-**Done:** 001, 002, 003 (all reviewed and fixed). In the saga CLONES (`C:\Users\Owner\lk-scratch\sagas\{Realm Saga,Space saga,Zombies saga}`), `system: lorekeeper chronology (warn mode)` is committed (Realm 1bd7f16, Space a5799be, Zombies dd98943). All 3 clone suites and parity are green.
-**In flight at this writing:**
-1. Three general-purpose agents are backfilling Wiki chronology in the clones (brief: `lk-scratch\snap\backfill_brief.md`). Once they report:
-   - check each clone's `git diff --stat` (only `Wiki/**` and `_system/knowledge/agent_decisions.md` may change)
-   - run `saga.py chrono-report`
-   - commit the Wiki pages as `wiki: chronology keys backfilled (Lorekeeper)` and agent_decisions as `knowledge: chronology backfill decisions`
-   - after the final vendor update, commit `_system/knowledge/chronology_report.md` as `knowledge: chronology report`
-2. Codex job `task-mvd7sf2a-ixipvk` (waiter `bkaohkx47`) is building `lorekeeper/serve.py`, `editor.html/js/css`, `tests/test_serve.py` and the `serve` adapter in cli.py. Afterwards: stray-check, run the tests, verify the 005 SCs with the Playwright MCP, then the Codex review.
-**Then:**
-- 005 FR-8: `saga.py timeline` / `timeline-requests` in the clones (chrono gets `serve_project()` = `project()[0]`, with `requests_dir` = `_system/runtime/timeline_requests`); re-vendor; second `system:` commit in each clone.
-- LAND all three clones into the live repos back to back: probe the live state first; `git fetch <clone> main`; `merge --ff-only`; re-verify porcelain status and in-progress file hashes.
-- Then 006 (interop; ask once for Aeon access), 007 (pyproject, docs, `gh repo create --private`), close-out.
+**Last updated:** 2026-10-18, session 2, after the 005 editor verification.
+**Done:**
+- 001, 002, 003 (all reviewed and fixed).
+- 005 is built and verified with Playwright (SC-1..SC-4), commit `c71ec9c`. Its Codex adversarial review is NOT yet run.
+- In the saga CLONES (`C:\Users\Owner\lk-scratch\sagas\*`): system commit 1, the backfill wiki+knowledge commits (all 3), and Space's ageless marker. Uncommitted in the clones: `patch_saga2` (timeline commands, report fixes), the re-vendored engine with the editor (VERSION = c71ec9c), the Space manifest SRD year format, and `_system/knowledge/chronology_report.md`.
+**Next:**
+1. Run the 3 clone suites (parity).
+2. `commit_system.sh <clone> "system: lorekeeper timeline editor and report fixes"`. It includes PIPELINE.md and the vendor html/js/css; also add PROJECT_MANIFEST.json for Space (it is in the allowlist).
+3. Regenerate and commit `chrono-report` as `knowledge: chronology report`.
+4. Land each saga with `lk-scratch\snap\land.sh "<saga>" <live HEAD>`. Expected live HEADs: Realm 974a7bf, Space 0861be8, Zombies 06f14f0. Land all three back to back, then run the live suites.
+5. Verify the in-progress chapters: copy each live repo to a probe and run `baseline.sh` into `docs/build/baselines/probe-after`; diff status/validate against `probe-before`.
+6. Codex review of 005.
+7. 006 interop (ask once for Aeon access).
+8. 007 packaging + private repo.
+9. Close-out.
 **Key facts:**
-- The speckit skills are invocable now.
+- The speckit skills are invocable.
 - context7 is out of quota; use WebFetch.
-- Scripts are in `lk-scratch\snap\` (snap.sh, codexwait.sh, baseline.sh, patch_saga.py, patch_docs.py, add_manifest_key.py (use `@file` for JSON), commit_system.sh).
-- The `rm -rf "$VAR"` safety check blocks variable paths: use literal paths, or overwrite instead of deleting.
-- The perf load test can flake under heavy machine load (1.93 s seen); re-run when idle.
+- Scripts are in `lk-scratch\snap\`.
+- The Bash tool mangles long heredocs and backslashes, so write scripts to files.
+- No `rm -rf "$VAR"`; use literal paths.
+- The perf load test can flake under load.
 **Read order for any new or resumed session:** this file → `BUILD-PLAN.md` (plan + checklist) → the tail of `SESSION-LOG.md`.
 
 ---
