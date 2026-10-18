@@ -120,6 +120,7 @@ Disabled types, properties and references are deleted by the v17 step. The other
 - **`relationshipsById[id]`:** `{id, subject, reference, object}`, i.e. "subject *role* object".
 - **`dependenciesById[id]`:** `{id, subject, object, dependencyType}`, with type FS, SS, FF or SF. The subject is the predecessor: for FS, the object cannot start until the subject finishes (all 37 template dependencies agree). SS and FF mean the object starts (or finishes) no earlier than the subject, not at the same moment. Lorekeeper puts `after` (FS), `starts_after_start` (SS), `ends_after_end` (FF) or `sf` on the object, pointing at the subject.
 - **`dateConstraintsById[id]`:** `{constraintType: Relative|Date|DatePart, subject, subjectTarget: Start|End, object, objectTarget, comparison: Before|After|Equal, date, offset, partPrecision, partValue}`.
+- **Item nesting** (`super`) needs the parent's type in the child type's `superTypes`; nested items stay in `itemOrderByType` (seen in all templates). Lorekeeper imports a place nested in a place as `located_in` and any other nesting as `part_of` (role "Part of", inverse "Includes"), exports both back as nesting, and never writes a loop. Dated Aeon types keep their own names as Lorekeeper types of category event (the generic Event stays `event`).
 - **`narrative.sacOrderById`:** the narrative tree, `{id: {super, childOrder{childId: rank}}}`.
 - **`sequenceOrder`:** chronological tie-break order.
 - **Also:** `tags`, `calendarMarkers` (recurring anniversaries), `savedFiltersById`, `attachmentsById`, `mindmaps`, `lastTodayDate`.

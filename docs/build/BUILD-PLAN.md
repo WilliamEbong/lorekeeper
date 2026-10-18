@@ -326,7 +326,7 @@ Paths are relative to each saga root and identical in all three repos.
 - [x] Large-world performance: spreadsheet paging and shared place list, capped Ages and Continuity, stamp polling 0.7 s to 0.05 s
 - [x] User guide, agent skill, Aeon notes and spec 006 updated; full suite 240 OK; two fresh-context reviews (engine, editor) and all their findings fixed; final handoff
 
-**Later (not built).** BC dates finer than a year still display as astronomical years (`-0043-03-15`); "1800s" means the decade 1800–1809; Aeon nesting (`super`) is dropped on import; dated Aeon types all become `event`; Aeon multitext exports as JSON text; re-vendor the engine into the three sagas (they carry `eb20b30`).
+**Later (not built).** ~~BC dates finer than a year display as astronomical years~~; ~~"1800s" means the decade~~; ~~Aeon nesting is dropped on import~~; ~~dated Aeon types all become `event`~~; ~~Aeon multitext exports as JSON text~~ (all done in run 3b, spec 009); re-vendor the engine into the three sagas (run 3b).
 
 # Feature requests from the owner
 

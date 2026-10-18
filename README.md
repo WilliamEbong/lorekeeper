@@ -80,7 +80,9 @@ On Windows, a JSON path can use forward slashes, such as `C:/Stories/My Novel`. 
 | `~2025` or `circa 2025` | Approximate year; the bounds widen |
 | `2025-04-01..2025-04-10` | A possible date anywhere in that inclusive range |
 | `2040s` | 2040 through 2049 |
+| `1800s` | 1800 through 1899 (a year ending in 00s is a century) |
 | `44 BC`, `2025 AD` | Era suffixes; BCE and CE also work |
+| `0044-03-15 BC` or `March 15, 44 BC` | A BC day; Lorekeeper writes BC dates in the first form |
 | `2025-04-02 (letter)` | Date with a source note |
 | `2025-04-02, tentative outline` | Date with a trailing note |
 | `2025-04-02 (provisional)` | Provisional date; relevant continuity findings become warnings |

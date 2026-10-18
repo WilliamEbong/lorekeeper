@@ -72,7 +72,7 @@ Keep frontmatter flat: one field per line, with a single value or an inline list
 
 Use the detail you know: `2025`, `2025-04`, `2025-04-02`, or `2025-04-02 09:30`. `April 2, 2025` works too. A day without a time means any time during that day, not a promise that something happened at midnight.
 
-Write `~2025` or `circa 2025` for an approximate year. Circa expands a year by one year on either side, a month by one month, a day by one day, and a minute-precision time by fifteen minutes. `2040s` covers the whole decade. `44 BC` and `2025 AD` work, as do BCE and CE suffixes.
+Write `~2025` or `circa 2025` for an approximate year. Circa expands a year by one year on either side, a month by one month, a day by one day, and a minute-precision time by fifteen minutes. `2040s` covers the whole decade, and a year ending in 00s covers the whole century, so `1800s` means 1800 to 1899. `44 BC` and `2025 AD` work, as do BCE and CE suffixes. A BC date finer than a year, such as `March 15, 44 BC`, is shown as `0044-03-15 BC`, and the editor reads it out as "15 March 44 BC".
 
 Write `2025-04-01..2025-04-10` when an event's date is somewhere in that range. Both endpoints are included. For an event that actually lasts that long, put its beginning in `date` and its ending in `end`. A `duration` such as `2d` or `1h 30m` can supply the end when there is no explicit end. Durations also accept years (`y`), months (`mo`), weeks (`w`) and minutes (`m`).
 
