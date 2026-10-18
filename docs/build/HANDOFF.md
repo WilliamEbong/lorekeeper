@@ -1,27 +1,28 @@
 # HANDOFF — Lorekeeper build
 
-**Last updated:** 2026-10-18, session 2, before the first saga landing (005 review fixes and 006 build in flight in Codex).
+**Last updated:** 2026-10-18, session 2, after landing the saga integration and committing 006.
 **Done:**
-- 001, 002, 003 (all reviewed and fixed).
-- 005 is built and verified with Playwright (SC-1..SC-4), commit `c71ec9c`. Its Codex adversarial review is NOT yet run.
-- In the saga CLONES (`C:\Users\Owner\lk-scratch\sagas\*`): system commit 1, the backfill wiki+knowledge commits (all 3), and Space's ageless marker. Uncommitted in the clones: `patch_saga2` (timeline commands, report fixes), the re-vendored engine with the editor (VERSION = c71ec9c), the Space manifest SRD year format, and `_system/knowledge/chronology_report.md`.
+- 001 to 006 (006's open-in-Aeon check is unverified: access was declined twice; do not ask again).
+- All 3 sagas LANDED by ff-only, working trees untouched. Live HEADs: Realm 7737f58, Space 75bd3ee, Zombies f1b4e1c. Lorekeeper HEAD: bd8fdfd.
 **Next:**
-1. Run the 3 clone suites (parity).
-2. `commit_system.sh <clone> "system: lorekeeper timeline editor and report fixes"`. It includes PIPELINE.md and the vendor html/js/css; also add PROJECT_MANIFEST.json for Space (it is in the allowlist).
-3. Regenerate and commit `chrono-report` as `knowledge: chronology report`.
-4. Land each saga with `lk-scratch\snap\land.sh "<saga>" <live HEAD>`. Expected live HEADs: Realm 974a7bf, Space 0861be8, Zombies 06f14f0. Land all three back to back, then run the live suites.
-5. Verify the in-progress chapters: copy each live repo to a probe and run `baseline.sh` into `docs/build/baselines/probe-after`; diff status/validate against `probe-before`.
-6. Codex review of 005 done; the fix job is running (review text: `lk-scratch\snap	ask-mvd8ktc1-rmlyxq.result.txt`). The 006 interop build is running in Codex (`task-mvd8m0xr-lvik6h`); wire the ops `import`/`export` afterwards.
-7. 006 interop (ask once for Aeon access).
-8. 007 packaging + private repo.
-9. Close-out.
+1. Check the after-landing baseline. The output is in `docs/build/baselines/probe-after/` (it was running): diff each `status_CH*` / `validate_CH*` against `probe-before/` (they must be identical), and check that the 3 suites are OK.
+2. Feature 007 (spec/plan/tasks):
+   - templates (Novel, Series, Worldbuilding/Campaign) as `lore init --template`
+   - `pyproject.toml` with a `lore` console script (`uv tool install .`)
+   - README with a scripted quickstart, `docs/user-guide.md`, and an agent skill file `docs/agent-skill.md` (+ `.mcp.json` example)
+   - re-run the perf test when idle
+   - Codex review of 006 + 007 (optional, time permitting)
+3. Final saga re-vendoring of the latest engine (the editor fixes) into the clones, then land again (Realm/Space/Zombies expected HEADs as above).
+4. `gh repo create lorekeeper --private --source . --push`; check that `gh repo view --json visibility` is PRIVATE.
+5. Close-out: final HANDOFF, delete `docs/build/ACTIVE`, remove the hooks from `.claude/settings.json`, update memory (fix the aeon memory file + add a Lorekeeper project memory), send a PushNotification, give the final report.
 **Key facts:**
 - The speckit skills are invocable.
 - context7 is out of quota; use WebFetch.
-- Scripts are in `lk-scratch\snap\`.
-- The Bash tool mangles long heredocs and backslashes, so write scripts to files.
-- No `rm -rf "$VAR"`; use literal paths.
-- The perf load test can flake under load.
+- Scripts are in `lk-scratch\snap\`: land.sh, commit_system.sh, baseline.sh, codexwait.sh, patch_*.py.
+- Long heredocs and backslashes break the Bash tool; write scripts to files.
+- No `rm -rf "$VAR"`.
+- The perf load test flakes under load.
+- Read the three docs ONE AT A TIME (the hook state can race).
 **Read order for any new or resumed session:** this file → `BUILD-PLAN.md` (plan + checklist) → the tail of `SESSION-LOG.md`.
 
 ---

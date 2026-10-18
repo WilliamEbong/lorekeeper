@@ -179,3 +179,13 @@ Append-only. Newest entries at the bottom. Each entry gives: date/time (UTC if k
 - Clone suites hit 1 failure (test_chrono expected "30 years"; the report now showed "29 to 30"). Decision: the report shows a range only when the birthdate is itself uncertain (year/month precision, or circa). `lk-scratch/snap/patch_saga3.py`.
 - **Guard bug:** parallel Reads of the 3 docs raced in the hook state file and lost one read, which blocked an edit. Fixed: reads are tracked per session, and enforcement applies only to sessions with a SessionStart, i.e. after a restart or compaction. Read the docs one at a time.
 - Decision: land the saga integration now at engine c71ec9c, plus the clone fixes. The 005 review fixes and 006/007 reach the sagas in one more landing at the end, so the live repos are touched twice in total.
+
+### Landing + 006 (2026-10-18)
+- **LANDED** all three sagas by ff-only, back to back, with the working tree untouched (`lk-scratch/snap/land.sh`: porcelain status and the hashes of every untracked or modified file were identical before and after). Live HEADs: Realm 7737f58, Space 75bd3ee, Zombies f1b4e1c.
+  - Each received: system #1 (chronology), the backfill wiki + knowledge commits, system #2 (timeline editor, report fixes), and `knowledge: chronology report`.
+  - Report results: Realm 0 FAIL / 0 WARN; Space 2 FAIL (RAIL_REGRESSION: cards 051/052) + 4 WARN (impossible SRD days); Zombies 0 / 0.
+- After-landing probe: the live repos were copied to `lk-scratch/probe2` and `baseline.sh` writes to `docs/build/baselines/probe-after` (running). The in-progress status/validate diffs are to be checked.
+- Aeon desktop access was declined a second time (the planned single retry). 006 SC-4 (opening in Aeon) stays **unverified**. Our export is at `lk-scratch\aeon_out\Salt Road (Lorekeeper).aeon` for the user to open.
+- Codex built interop.py (637 lines; 15 tests; all 19 templates read). I wired the ops `import`/`export`: CSV by extension, anything else goes through `read_aeon`, which refuses non-Aeon files. Fixed type mapping: old templates leave category OTHER, so people and places are now matched by name. Wuthering Heights imports 116 items, and Lorekeeper finds 22 DEAD_PARTICIPANT FAILs in it (the dead listed at later events).
+- Codex fixed the 8 findings from the 005 review. Committed `bd8fdfd`.
+- Perf: the 3,000-item load test fails only under heavy parallel load (1.57–2.31 s while 3 saga suites run); re-verify when idle before close-out.
