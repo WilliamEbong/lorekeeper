@@ -50,7 +50,7 @@ class Guard(unittest.TestCase):
         _, out = self.run_mode("start", {"source": "compact"})
         self.assertIn("# HANDOFF.md", out)
         self.assertIn("Before any action", out)
-        self.assertEqual(guard.load_state(self.root)["reads"], [])
+        self.assertEqual(guard.load_state(self.root)["sessions"]["s1"], {"started": True, "reads": []})
 
     def test_pre_blocks_until_all_docs_read(self):
         transcript(self.tr, 1000)
@@ -60,6 +60,16 @@ class Guard(unittest.TestCase):
         for name in guard.DOCS:
             self.run_mode("post", {"tool_name": "Read", "tool_input": {"file_path": guard.build(self.root, name)}})
         self.assertEqual(self.run_mode("pre", {"tool_name": "Edit"})[0], 0)
+
+    def test_other_sessions_neither_reset_nor_block(self):
+        transcript(self.tr, 1000)
+        self.run_mode("start", {})
+        out = io.BytesIO()
+        with mock.patch.object(sys, "stdout", mock.Mock(buffer=out)):
+            guard.main("post", {"session_id": "sub", "transcript_path": self.tr, "tool_name": "Bash"}, self.root)
+            self.assertEqual(guard.main("pre", {"session_id": "sub", "tool_name": "Edit"}, self.root), 0)
+        with redirect_stderr(io.StringIO()):
+            self.assertEqual(self.run_mode("pre", {"tool_name": "Edit"})[0], 2)   # main session still must read
 
     def test_post_tiers_fire_once_and_92_repeats_until_handoff_newer(self):
         self.run_mode("start", {})

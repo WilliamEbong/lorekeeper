@@ -117,8 +117,15 @@ def git(root, *args):
         return ""
 
 
+def session(state, payload):
+    """Per-session read tracking: subagents fire the same hooks under their own session id."""
+    return state.setdefault("sessions", {}).setdefault(payload.get("session_id") or "?",
+                                                       {"started": False, "reads": []})
+
+
 def do_start(root, payload, state):
-    state.update(session=payload.get("session_id"), reads=[], warned=0)
+    state.setdefault("sessions", {})[payload.get("session_id") or "?"] = {"started": True, "reads": []}
+    state["warned"] = 0
     save_state(root, state)
     with open(build(root, "HANDOFF.md"), encoding="utf-8") as fh:
         handoff = fh.read()
@@ -135,16 +142,15 @@ def do_start(root, payload, state):
 
 
 def do_post(root, payload, state):
-    if state.get("session") != payload.get("session_id"):
-        state.update(session=payload.get("session_id"), reads=[], warned=0)
+    mine = session(state, payload)
     tool = payload.get("tool_name", "")
     tin = payload.get("tool_input") or {}
     notes = []
     if tool == "Read":
         name = os.path.basename(tin.get("file_path", ""))
         if name in DOCS and os.path.normcase(os.path.dirname(os.path.abspath(tin["file_path"]))) \
-                == os.path.normcase(build(root)) and name not in state["reads"]:
-            state["reads"].append(name)
+                == os.path.normcase(build(root)) and name not in mine["reads"]:
+            mine["reads"].append(name)
     if tool in ("Bash", "PowerShell") and "git commit" in tin.get("command", "") \
             and time.time() - mtime(build(root, "HANDOFF.md")) > 900:
         notes.append("Commit done. If the build position changed, refresh docs/build/HANDOFF.md.")
@@ -168,12 +174,14 @@ def do_post(root, payload, state):
 
 
 def do_pre(root, payload, state):
-    missing = [d for d in DOCS if d not in state.get("reads", [])]
-    if state.get("session") != payload.get("session_id"):
-        missing = list(DOCS)
+    mine = state.get("sessions", {}).get(payload.get("session_id") or "?")
+    if not mine or not mine.get("started"):   # only sessions that (re)started must re-read the docs
+        return 0
+    missing = [d for d in DOCS if d not in mine["reads"]]
     if missing:
         sys.stderr.write("Continuity rule: Read docs/build/" + ", docs/build/".join(missing)
-                         + " before editing (after any restart or compaction).\n")
+                         + " before editing (after any restart or compaction). Read them one at a"
+                         " time: parallel reads can race in the hook state.\n")
         return 2
     return 0
 
@@ -214,7 +222,6 @@ def main(mode, payload, root=ROOT):
     if not os.path.exists(build(root, "ACTIVE")):
         return 0
     state = load_state(root)
-    state.setdefault("reads", [])
     if mode == "pre":
         return do_pre(root, payload, state)
     {"start": do_start, "post": do_post, "compact": do_compact}[mode](root, payload, state)
