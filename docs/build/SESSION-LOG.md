@@ -158,3 +158,9 @@ Append-only. Newest entries at the bottom. Each entry gives: date/time (UTC if k
 - Perf note: the load test hit 1.93 s while 3 suites and 6 agents were running; re-check when idle.
 - Clone suites green (Realm 219, Space 216, Zombies 211; parity included). Committed `system: lorekeeper chronology (warn mode)` in each clone (Realm 1bd7f16, Space a5799be, Zombies dd98943) with an explicit allowlist (`lk-scratch/snap/commit_system.sh`), so nothing protected was staged.
 - build-continuously skill adopted: keep-awake requested; a PushNotification goes out at the end. Decisions: Lorekeeper stays on `main` (fresh repo; the kickoff names the private push as the end state, which outranks the skill's no-push default).
+- **Backfill Zombies** (committed in the clone as 7415b05 wiki + ab9a6df knowledge): 19 pages, all 18 people now have a birthdate. 11 values sourced, 9 decided and logged. chrono-report: 0 FAIL / 0 WARN.
+- **Backfill Space** (224e56e wiki + b8a213e knowledge): 15 people. 15 birthdates decided (canon gives no ages; the android counts from commissioning; the ancient being got a placeholder of ~2 millennia) and 3 deaths sourced from the CH001 datelines. Findings unchanged: 2 rail regressions + 4 impossible SRD days.
+- To fold into the 005 system commit:
+  - the Space calendar gets a year-only SRD format `(?P<display_year>-?\d+) CE`, because circa birth years were falling back to Gregorian
+  - the chrono report shows born as written, and ages as a range when uncertain (it showed the high end)
+- Later list: AGE_LIMIT will FAIL for ageless beings (Space's ancient being) once they take part in dated events. Fix: a per-item `max_age` override, or a manifest `checks.max_age` per type.
