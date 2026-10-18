@@ -1,19 +1,33 @@
 # HANDOFF — Lorekeeper build
 
-**Last updated:** 2026-10-18, session 2, cut off by the usage limit during feature 003.
-**Current position:** 001 and 002 are done. 003 checks is implemented: `checks.py` (Codex, 238 lines), wired into `check`, plus the ops `where` and `knows`. On the fixture, `check` shows PARENT_AGE and DEAD_PARTICIPANT as FAIL. My files are committed.
-**IN FLIGHT at cutoff:** Codex background job `task-mvd5i960-f2envw` is fixing 8 dates.py findings from the 002 review (items 1,2,5,7,8,9,10,12 in `scratchpad/review002.txt`; that path is session-temporary). The text of those items is summarised in SESSION-LOG.
-**Next steps:**
-1. Check the job: `node ~/.claude/plugins/cache/openai-codex/codex/1.0.6/scripts/codex-companion.mjs status task-mvd5i960-f2envw`, then `result`. Stray-check with `snap.sh`, then diff. Run `python -m unittest discover -s tests -t .`. If dates.py is broken or half-done, `git diff lorekeeper/dates.py` and fix or re-brief.
-2. Commit the dates fixes. Finish 003: tick its tasks, add the perf check (3,000 items check < 2 s), converge, ponytail-review, Codex adversarial review.
-3. Feature 004. Clones are at `C:\Users\Owner\lk-scratch\sagas\*`, full probe copies (with in-progress state) at `C:\Users\Owner\lk-scratch\probe\*`. Baselines ran via `lk-scratch\snap\baseline.sh` into `docs/build/baselines/{probe,clone}-before/`; check that they are green. The spec draft is in `specs/004-saga-integration/spec.md`, and the engine seams are summarised in SESSION-LOG.
-   Decision: land 004 and 005 together in one ff-merge, so the vendored copy includes the editor.
+**Last updated:** 2026-10-18, session 2 (after the usage reset), mid feature 004.
+**Current position:**
+- **001, 002:** done.
+- **003:** done except the last review fixes. Codex is fixing checks.py items 2, 3, 5, 6 and 7 from `scratchpad/review003.txt` (age-limit month counts, max_duration month extrema, two-places performance with a shared person, monotonic provisional extrema, month-lag equality). Claude's fixes for items 1, 4, 8, 9 and 10 are committed (`2f3ca19`). When Codex finishes: stray-check, run the tests, commit, tick 003 in BUILD-PLAN.
+- **004 (in the Realm CLONE only, `C:\Users\Owner\lk-scratch\sagas\Realm Saga`, uncommitted):**
+  - vendored `_system/vendor/lorekeeper/*.py` + `VERSION`
+  - `_system/scripts/chrono.py` (context / assemble / problems_for / gate / health_line / report)
+  - `state.py` + `saga.py` wired by `lk-scratch\snap\patch_saga.py`
+  - `_system/tests/test_chrono.py` (4 tests green)
+  - docs by `lk-scratch\snap\patch_docs.py` (skill `chronology.md`, README row, PIPELINE command row and §10 paragraph, template comment keys, START_HERE intent)
+  - parity lists updated, BUT `_system/vendor/lorekeeper/VERSION` was not yet added to `SHARED_FILES` (the replace missed)
+  - manifest key added by `lk-scratch\snap\add_manifest_key.py`; the Realm rules JSON is in SESSION-LOG
+- **Next 004 steps:**
+  1. Fix the VERSION entry in the parity list.
+  2. Run the full Realm clone suite.
+  3. Copy the shared files to the Space and Zombies clones; run patch_docs (START_HERE) and add the manifest keys there (Space: `[srd, gregorian]` calendars, `cards: {"rail": ["Primary allocation"]}`, monotonic RAIL_REGRESSION rule; Zombies: gregorian, `cards: {"date": ["Date/era"], "rail": ["Arc/thread"]}`).
+  4. Run all 3 suites plus parity in the clones.
+  5. Commit `system: lorekeeper chronology (warn mode)` in each clone with an explicit path allowlist.
+  6. Backfill with 3 parallel subagents (frontmatter only + agent_decisions.md), commit `wiki:`/`knowledge:`.
+  7. Run chrono-report ×3, commit `knowledge:`.
+  8. Then 005 editor; land 004 + 005 together.
 **Key facts:**
-- Speckit skills: read `.claude/skills/speckit-*/SKILL.md` and follow it by hand.
+- The speckit skills ARE now invocable via the Skill tool.
 - context7 is out of quota; use WebFetch.
 - Aeon computer-use was declined; ask again once, at 006.
-- Snapshots: `C:\Users\Owner\lk-scratch\snap\snap.sh <name>`. Codex waiter: `snap\codexwait.sh <task-id>`.
-- Long heredocs break the Bash tool; write patch scripts to a file.
+- Snapshots: `lk-scratch\snap\snap.sh`. Codex waiter: `snap\codexwait.sh <task>`.
+- Long heredocs break the Bash tool; write scripts to files.
+- Baselines: `docs/build/baselines/{probe,clone}-before/`, all green. Probes (full copies with the in-progress state) are at `lk-scratch\probe\*`.
 **Read order for any new or resumed session:** this file → `BUILD-PLAN.md` (plan + checklist) → the tail of `SESSION-LOG.md`.
 
 ---

@@ -144,3 +144,9 @@ Append-only. Newest entries at the bottom. Each entry gives: date/time (UTC if k
 - Baselines GREEN (2026-10-18): all three suites and health exit 0, on the probes and the clones. Output in docs/build/baselines/{probe,clone}-before/. No stop condition.
 - (resumed after the usage reset) Codex job `task-mvd5i960-f2envw` finished: dates.py has 8 review fixes and 8 regression tests (30 date tests). Stray check: only dates.py and test_dates.py changed. Two tests (CLI check exit code, MCP golden check) now expect exit 1, because the fixture world carries deliberate FAILs. Added the perf check: 3,000 items checked in under 2 s. 131 tests green.
 - The speckit skills are now visible to the Skill tool (they loaded after the restart), so they can be invoked directly from here on.
+- 003 converged (one convergence task: where/knows tests). ponytail-review of checks.py: lean already, nothing to cut.
+- **Codex review of 003:** 10 findings. Claude fixed 1, 4, 8, 9 and 10 (`2f3ca19`). Codex is fixing 2, 3, 5, 6 and 7 in checks.py.
+- **004 started in the Realm clone:** vendored engine, chrono.py, state/saga wiring, test_chrono (4 green), shared docs, parity lists. Realm manifest rules: max_duration 1d on `{type: event, tag: duel}` (code DUEL_TOO_LONG); gap exactly 7d from start, `role: return_of`, on `{type: event, tag: return}` (code RETURN_GAP).
+- Decision: card items get their own type `card` (category narrative), with path `<architecture>#CHnnn`, so card findings point at the architecture.
+- Decision: the Wiki templates gain the optional keys as `#` comment lines, like the existing `voice:` comment, so no parser sees an empty key.
+- Decision: START_HERE is per-saga, not shared. The new intent is inserted before "## 2." and "These are the six intents" becomes "These are the intents".
