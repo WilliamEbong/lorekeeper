@@ -164,6 +164,13 @@ class Checks(unittest.TestCase):
         person = item("Person", "character", born="2020-01-01 00:00", died="2020-01-02 00:00")
         for value in ("2020-01-01 00:00", "2020-01-02 00:00"):
             self.assertEqual(checks.run(project(person, item("E", date=value, participants="[[Person]]"))), [])
+        # An event dated exactly like the birth or death is that birth or death: no possible clash.
+        for field in ("born", "died"):
+            person = item("Person", "character", **{field: "1784-03"})
+            self.assertEqual(checks.run(project(person, item("E", date="1784-03", participants="[[Person]]"))), [])
+            self.assertSeverity(project(person, item("E", date="1784", participants="[[Person]]")),
+                                "UNBORN_PARTICIPANT" if field == "born" else "DEAD_PARTICIPANT", "WARN")
+        person = item("Person", "character", born="2020-01-01 00:00", died="2020-01-02 00:00")
         # Non-people are not subject to mortality checks; an event can span a birth.
         org = item("Guild", "organization", died="1900")
         event = item("E", date="2019", end="2021", participants=["[[Person]]", "[[Guild]]"])

@@ -130,11 +130,13 @@ def run(project):
             if person not in people:
                 continue
             birth, death = times[person]
-            # Birth/death minutes are inclusive; strictly outside is a violation.
-            if start and death:
+            # Birth/death minutes are inclusive; strictly outside is a violation. An event dated exactly
+            # like the birth or death (same interval) is that birth or death, not a possible clash.
+            same = lambda x, y: (x.lo, x.hi) == (y.lo, y.hi)
+            if start and death and not same(start, death):
                 emit(compare_ge(death, start), "DEAD_PARTICIPANT", item, "participants", person,
                      start, death, "after death")
-            if end and birth:
+            if end and birth and not same(end, birth):
                 emit(compare_ge(end, birth), "UNBORN_PARTICIPANT", item, "participants", person,
                      end, birth, "before birth")
             appearances.setdefault(person, set()).add(item)
