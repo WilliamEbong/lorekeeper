@@ -28,7 +28,7 @@ The implementation supports legacy `initialize` negotiation for `2025-11-25`, `2
 
 ## Read before writing
 
-1. Call `schema` for effective types, roles, properties and settings. Use `query` to find relevant items, then `show` for the full fields, body and version. `graph` supplies all items, versions, dates and relationships in one call.
+1. Call `schema` for effective types, roles, properties and settings. Use `query` to find relevant items, then `show` for the full fields, body and version. `graph` supplies all items, versions, dates and relationships in one call, plus the schema's types, roles and properties.
 2. Preserve the exact version and original values for every field you will change or remove. `query` summaries do not include versions.
 3. Use `set` with `version` and `expect`. On `CONFLICT`, reread and reconcile with the current file; never discard the version to force your old draft through.
 4. Run `check` after edits. Read every finding, including WARNs. Report unresolved contradictions with their paths and line numbers; do not silently reschedule items to make the report clean.

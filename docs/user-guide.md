@@ -91,10 +91,12 @@ Run `lore check` from your story folder. Each finding includes a code, an explan
 | `UNSUPPORTED_FRONTMATTER` | A line was preserved but not understood; use flat fields and inline lists. |
 | `DUPLICATE_ID` | Two items share an ID. Give each item its own ID. |
 | `DUPLICATE_NAME` | Two items share a canonical name. Make their names distinct. |
+| `AMBIGUOUS_NAME` | An alias or file name belongs to two items, so a link using it could mean either. Give each item its own aliases. |
 | `UNKNOWN_TYPE` | A type is missing from the schema. Correct its spelling or define it in `lore.json`. |
 | `BROKEN_LINK` | A field links to a name that cannot be found. |
 | `ROLE_TYPE` | A link reaches the wrong kind of item, such as a location used as a participant. |
 | `DATE_UNPARSED` | A date, bound or duration cannot be understood, or bounds contradict the stated date. |
+| `END_BEFORE_START` | An item ends before it starts, or a person dies before they are born. FAIL when the dates prove it, WARN when uncertain dates allow it. |
 | `DEPENDENCY_UNDATED` | A timing relationship lacks a date needed for comparison. |
 | `DEPENDENCY` | A timing relationship is violated or uncertain, or its lag cannot be read. |
 | `DEAD_PARTICIPANT` | A person is involved after their death. |
