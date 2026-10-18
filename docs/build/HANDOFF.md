@@ -1,28 +1,13 @@
 # HANDOFF — Lorekeeper build
 
-**Last updated:** 2026-10-18, session 2, after landing the saga integration and committing 006.
-**Done:**
-- 001 to 006 (006's open-in-Aeon check is unverified: access was declined twice; do not ask again).
-- All 3 sagas LANDED by ff-only, working trees untouched. Live HEADs: Realm 7737f58, Space 75bd3ee, Zombies f1b4e1c. Lorekeeper HEAD: bd8fdfd.
-**Next:**
-1. Check the after-landing baseline. The output is in `docs/build/baselines/probe-after/` (it was running): diff each `status_CH*` / `validate_CH*` against `probe-before/` (they must be identical), and check that the 3 suites are OK.
-2. Feature 007 (spec/plan/tasks):
-   - templates (Novel, Series, Worldbuilding/Campaign) as `lore init --template`
-   - `pyproject.toml` with a `lore` console script (`uv tool install .`)
-   - README with a scripted quickstart, `docs/user-guide.md`, and an agent skill file `docs/agent-skill.md` (+ `.mcp.json` example)
-   - re-run the perf test when idle
-   - Codex review of 006 + 007 (optional, time permitting)
-3. Final saga re-vendoring of the latest engine (the editor fixes) into the clones, then land again (Realm/Space/Zombies expected HEADs as above).
-4. `gh repo create lorekeeper --private --source . --push`; check that `gh repo view --json visibility` is PRIVATE.
-5. Close-out: final HANDOFF, delete `docs/build/ACTIVE`, remove the hooks from `.claude/settings.json`, update memory (fix the aeon memory file + add a Lorekeeper project memory), send a PushNotification, give the final report.
-**Key facts:**
-- The speckit skills are invocable.
-- context7 is out of quota; use WebFetch.
-- Scripts are in `lk-scratch\snap\`: land.sh, commit_system.sh, baseline.sh, codexwait.sh, patch_*.py.
-- Long heredocs and backslashes break the Bash tool; write scripts to files.
-- No `rm -rf "$VAR"`.
-- The perf load test flakes under load.
-- Read the three docs ONE AT A TIME (the hook state can race).
+**Last updated:** 2026-10-18, session 2. URGENT FIX IN PROGRESS for the live sagas (see SESSION-LOG, last entries).
+**Problem:** after landing, Realm CH004 and Space CH005 (in progress, at READY_FOR_HUMAN) fail `validate` with "PROFILE_CONTEXT stale or altered packet". Zombies CH004 is still being checked. Their profile packet receipts hash PROJECT_MANIFEST.json and the roster Wiki pages, which our landing changed.
+**Fix plan (in the clones `C:\Users\Owner\lk-scratch\sagas\*`, which equal the live HEADs Realm 7737f58, Space 75bd3ee, Zombies f1b4e1c):**
+1. In `chrono.py`, `settings()` reads `_system/lorekeeper.json` (`fsio.rpath("_system", "lorekeeper.json")`) and `enabled()` = that file exists. Update the saga.py SKIP messages, the docs ("manifest `lorekeeper`" becomes "`_system/lorekeeper.json`") and `test_chrono.enable()`.
+2. Write `_system/lorekeeper.json` from the manifest block. Restore PROJECT_MANIFEST.json to its pre-integration bytes: `git show <base>:PROJECT_MANIFEST.json` with base Realm 974a7bf, Space 0861be8, Zombies 06f14f0. The Space manifest also carried the SRD year format, which moves into the json.
+3. For each in-progress chapter, revert the Wiki pages listed in its packet "inputs" (live `_system/runtime/CH00N/profile_packet.json`) to `git show <base>:<page>`, and list the reverted keys in `_system/knowledge/chronology_deferred.md` ("apply after CH00N freezes").
+4. Commit `system:` (chrono + docs + config move) and `wiki:` (deferral) in the clones; suites; land again with `land.sh` (expected HEADs as above); probe again (copy the live repos to `lk-scratch\probe3`, run `baseline.sh` into `docs/build/baselines/probe-after2`); diff status/validate against `probe-before`. They MUST be identical.
+**Then:** commit 007 (pending in the Lorekeeper working tree), re-vendor the final engine, private repo, close-out.
 **Read order for any new or resumed session:** this file → `BUILD-PLAN.md` (plan + checklist) → the tail of `SESSION-LOG.md`.
 
 ---

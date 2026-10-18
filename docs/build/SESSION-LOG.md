@@ -189,3 +189,9 @@ Append-only. Newest entries at the bottom. Each entry gives: date/time (UTC if k
 - Codex built interop.py (637 lines; 15 tests; all 19 templates read). I wired the ops `import`/`export`: CSV by extension, anything else goes through `read_aeon`, which refuses non-Aeon files. Fixed type mapping: old templates leave category OTHER, so people and places are now matched by name. Wuthering Heights imports 116 items, and Lorekeeper finds 22 DEAD_PARTICIPANT FAILs in it (the dead listed at later events).
 - Codex fixed the 8 findings from the 005 review. Committed `bd8fdfd`.
 - Perf: the 3,000-item load test fails only under heavy parallel load (1.57–2.31 s while 3 saga suites run); re-verify when idle before close-out.
+- **REGRESSION found by the after-landing probe:** Realm CH004 and Space CH005 `validate` now print `FAIL PROFILE_CONTEXT stale or altered packet` (it was "ok" before). Cause: the in-progress profile packet receipts (`_system/runtime/CH00N/profile_packet.json` "inputs") hash PROJECT_MANIFEST.json and the roster's Wiki pages. Both were changed: the manifest by the `lorekeeper` key, the Wiki pages by the backfill.
+  - Decision (to restore byte-identical in-progress validation without touching their runtime files):
+    - (a) move the chronology config to `_system/lorekeeper.json` (chrono reads that; enabled = file exists) and restore each PROJECT_MANIFEST.json to its exact pre-integration bytes;
+    - (b) revert the backfill on every Wiki page listed in an in-progress chapter's packet inputs, recording the deferred keys in `_system/knowledge/chronology_deferred.md` so they are applied after that chapter freezes;
+    - (c) update the docs, the SKIP messages and test_chrono; land again by ff-only; re-probe.
+- 007: Codex added templates.py, the `init --template` op, pyproject.toml, README, user-guide, agent-skill and tests (189/190; the perf flake). Not yet reviewed or committed.
