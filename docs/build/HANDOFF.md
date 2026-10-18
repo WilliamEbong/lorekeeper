@@ -10,7 +10,7 @@
 - `bqr16y5hc`: a full probe of the live copies (`lk-scratch\probe3`), output in `docs/build/baselines/probe-after2`. Needed: all suites OK and no DIFF lines.
 - `bkmtp27ie`: the clones were re-vendored with engine eb20b30 (VERSION file), and their full suites are running (`lk-scratch\snap\suite4-*.txt`).
 **Next, in order:**
-1. If the clone suites are OK, run `lk-scratch\snap\commit_system.sh "<clone>" "system: update vendored Lorekeeper (editor and interop fixes)"` for each clone, then `land.sh "<saga>" <HEAD>` with HEADs Realm 8a4c594, Space 0f02dcf, Zombies 3114c1d. Then copy the live repos to `lk-scratch\probe4`, run `baseline.sh` into `docs/build/baselines/probe-after3`, and diff status/validate against probe-before (they must be identical).
+1. DONE: final engine landed (Realm efd585f, Space ffedb64, Zombies 82a1536); probe4 identical. (Old step: run `lk-scratch\snap\commit_system.sh "<clone>" "system: update vendored Lorekeeper (editor and interop fixes)"` for each clone, then `land.sh "<saga>" <HEAD>` with HEADs Realm 8a4c594, Space 0f02dcf, Zombies 3114c1d. Then copy the live repos to `lk-scratch\probe4`, run `baseline.sh` into `docs/build/baselines/probe-after3`, and diff status/validate against probe-before (they must be identical).
 2. Re-run `python -m unittest tests.test_perf` when the machine is idle (the load test flakes under load; earlier idle runs passed).
 3. `gh repo create lorekeeper --private --source . --push`, then `gh repo view --json visibility`. Make sure `.gitignore` excludes Aeon content (it does) and that `docs/build/baselines` holds no secrets (it holds test output only).
 4. Close-out:

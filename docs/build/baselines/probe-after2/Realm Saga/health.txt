@@ -1,0 +1,23 @@
+OK manifest PROJECT_MANIFEST.json parsed project=Realm
+OK authority world_bible Realm_World_Bible_vNext_Consolidated_2026-09-01_R5_CHRONOLOGY_WORLDSTATE_REFINEMENT.md sha256=1e4dcc485dd1988a
+OK authority story_architecture Realm_500_Chapter_Braided_Architecture_vNext_2026-09-01_R5_CHRONOLOGY_WORLDSTATE_REFINEMENT.md sha256=7b1962a858290a99
+OK authority style_bible Style_Bible_Realm_v1.0.md sha256=3697f6e344bc2cde
+OK authority conversations Realm_Conversations_2026-09-03.md sha256=15e821c533ffb0b2
+OK architecture 500 cards, 4 required fields each
+OK dual-map architecture cards == companion cards (Status excluded)
+OK chronology warn mode: 500/500 card dates readable, 0 FAIL / 0 WARN findings (saga.py chrono-report)
+OK cards 25 card(s); 21 Wiki character page(s) resolve
+OK dir archive _system/archive
+OK dir chapters Chapters
+OK dir knowledge _system/knowledge
+OK dir logs _system/logs
+OK dir roles _system/roles
+OK dir runtime _system/runtime
+OK dir skills _system/skills
+OK dir state _system/state
+OK dir system _system
+OK dir wiki Wiki
+OK dir workflow _system/workflow
+OK state 4 chapter state file(s) parsed
+OK git repository usable
+exit=0
