@@ -1,29 +1,30 @@
-# HANDOFF — Lorekeeper build
+# HANDOFF — Lorekeeper build (FINAL)
 
-**Last updated:** 2026-10-18, session 2, context 90% (mandatory checkpoint).
-**Done:**
-- Features 001 to 007, all committed. Lorekeeper HEAD `eb20b30`.
-- `uv tool install .` verified.
-- Sagas integrated and landed (fixed). Live HEADs: Realm 8a4c594, Space 0f02dcf, Zombies 3114c1d.
-- The in-progress chapters' status and validate are identical to the pre-integration baseline.
-**Running in the background:**
-- `bqr16y5hc`: a full probe of the live copies (`lk-scratch\probe3`), output in `docs/build/baselines/probe-after2`. Needed: all suites OK and no DIFF lines.
-- `bkmtp27ie`: the clones were re-vendored with engine eb20b30 (VERSION file), and their full suites are running (`lk-scratch\snap\suite4-*.txt`).
-**Next, in order:**
-1. DONE: final engine landed (Realm efd585f, Space ffedb64, Zombies 82a1536); probe4 identical. (Old step: run `lk-scratch\snap\commit_system.sh "<clone>" "system: update vendored Lorekeeper (editor and interop fixes)"` for each clone, then `land.sh "<saga>" <HEAD>` with HEADs Realm 8a4c594, Space 0f02dcf, Zombies 3114c1d. Then copy the live repos to `lk-scratch\probe4`, run `baseline.sh` into `docs/build/baselines/probe-after3`, and diff status/validate against probe-before (they must be identical).
-2. Re-run `python -m unittest tests.test_perf` when the machine is idle (the load test flakes under load; earlier idle runs passed).
-3. `gh repo create lorekeeper --private --source . --push`, then `gh repo view --json visibility`. Make sure `.gitignore` excludes Aeon content (it does) and that `docs/build/baselines` holds no secrets (it holds test output only).
-4. Close-out:
-   - final HANDOFF
-   - delete `docs/build/ACTIVE`
-   - remove the "hooks" block from `.claude/settings.json` (keep permissions)
-   - memory: update `C:\Users\Owner\.claude\projects\C--Users-Owner-OneDrive-Documents\memory\aeon-timeline-re-project.md` and add a Lorekeeper memory in this project's memory dir
-   - PushNotification, then the final report (built / evidence / decisions / not done / how to see it / git).
-**Saga findings for the report:**
-- Space has 2 RAIL_REGRESSION FAILs (cards 051/052 at 6840 CE Day 168 come after card 050 at 6842 CE Day 164 on the same rail) and 4 impossible SRD days (cards 110 D367, 111 D374, 205 D366, 206 D378).
-- Realm and Zombies are clean.
-- Backfill decided 42 birthdates (Realm 18, Space 15, Zombies 9) and sourced 26 values. 14 roster pages are deferred in `chronology_deferred.md`.
-- Aeon open-in-app is unverified (access declined twice); the export is in `lk-scratch\aeon_out`.
+**Last updated:** 2026-10-18, end of session 2. **The build is complete.**
+**Where things are:**
+- **Code:** `Documents\Lorekeeper`. Private repo: https://github.com/WilliamEbong/lorekeeper (visibility PRIVATE). Install with `uv tool install .`, which gives `lore`.
+- **Sagas:** chronology is integrated in warn mode. Live HEADs: Realm efd585f, Space ffedb64, Zombies 82a1536.
+  - Config: `_system/lorekeeper.json`.
+  - Engine: `_system/vendor/lorekeeper/` (VERSION eb20b30; Lorekeeper dc9207a differs only by a load-speed change).
+  - Reports: `_system/knowledge/chronology_report.md`.
+  - Deferred roster keys: `_system/knowledge/chronology_deferred.md`.
+  - Commands: `saga.py chrono N`, `chrono-report`, `timeline`, `timeline-requests`.
+- **Verification evidence:** see SESSION-LOG.
+  - Lorekeeper: 190 tests OK.
+  - Saga suites green (219/216/211, parity included).
+  - All 26 status/validate outputs are identical to the pre-integration baseline.
+  - The Playwright editor flows passed (SC-1..SC-4).
+  - `uv tool install` works.
+  - MCP golden test passes.
+  - All 19 Aeon templates import.
+**Not done or unverified:**
+- Opening a Lorekeeper-written .aeon file in the Aeon desktop app: access was declined twice. The sample is at `C:\Users\Owner\lk-scratch\aeon_out`.
+**Later list:**
+- Re-vendor the engine into the sagas at the next update (perf only).
+- Apply `chronology_deferred.md` as each in-progress chapter freezes.
+- The user decides on fail mode.
+- Optional saga rules: Realm's "paired cards 7 days apart" has no structured pairing data yet.
+**Continuity kit:** retired. `docs/build/ACTIVE` is removed and the hooks are unregistered from `.claude/settings.json`. `tools/build-hooks/guard.py` is kept for reuse.
 **Read order for any new or resumed session:** this file → `BUILD-PLAN.md` (plan + checklist) → the tail of `SESSION-LOG.md`.
 
 ---

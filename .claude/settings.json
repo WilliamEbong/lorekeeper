@@ -5,56 +5,5 @@
       "C:\\Users\\Owner\\OneDrive\\Documents\\aeon timelin RE",
       "C:\\Users\\Owner\\lk-scratch"
     ]
-  },
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python",
-            "args": ["-I", "C:/Users/Owner/OneDrive/Documents/Lorekeeper/tools/build-hooks/guard.py", "start"],
-            "timeout": 15
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python",
-            "args": ["-I", "C:/Users/Owner/OneDrive/Documents/Lorekeeper/tools/build-hooks/guard.py", "post"],
-            "timeout": 15
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Edit|Write|NotebookEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python",
-            "args": ["-I", "C:/Users/Owner/OneDrive/Documents/Lorekeeper/tools/build-hooks/guard.py", "pre"],
-            "timeout": 15
-          }
-        ]
-      }
-    ],
-    "PreCompact": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python",
-            "args": ["-I", "C:/Users/Owner/OneDrive/Documents/Lorekeeper/tools/build-hooks/guard.py", "compact"],
-            "timeout": 15
-          }
-        ]
-      }
-    ]
   }
 }
