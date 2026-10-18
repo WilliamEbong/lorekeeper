@@ -149,7 +149,7 @@ Each feature runs speckit-specify → plan → tasks → implement → converge,
    - In saga mode, edits go to the change-request queue.
    - Accessibility basics: keyboard navigation, labels, and contrast in both themes.
 6. **006 interop.**
-   - `.aeon` import of all 17 templates plus our fixtures, and a v1 writer.
+   - `.aeon` import of all 19 bundled template files (fileVersion 14) and app-saved v27 files, and a v1 writer that emits the v14 core shape (AEON-SPEC §2.1).
    - Round trip: our writer → open in the Aeon desktop app via computer use → a screenshot shows the items, dates and relationships.
    - CSV import/export with Aeon's column IDs, and Markdown export.
 7. **007 templates, onboarding, packaging.**
@@ -231,7 +231,7 @@ Paths are relative to each saga root and identical in all three repos.
   - A keyboard-only create/date/link flow.
   - A simultaneous CLI and browser edit ends in a merge or 409, never lost data.
   - In saga mode, hand edits reach the queue.
-- **`.aeon`:** all 17 Aeon templates import, and an exported file opens in Aeon (computer use, screenshot).
+- **`.aeon`:** all 19 bundled Aeon template files import, and an exported file opens in Aeon (computer use, screenshot).
 - **Sagas:**
   - All three suites green, parity green, `health` clean.
   - In-progress chapters unchanged.
@@ -291,10 +291,10 @@ Paths are relative to each saga root and identical in all three repos.
 - [x] Commit `chore: bootstrap Lorekeeper with Spec Kit and continuity kit`
 
 ## Phase 1 — REA close-out
-- [ ] Re-extract Aeon bundle with tools/aeon_extract.py into scratch (not repo)
-- [ ] ~5 sample .aeon fixtures created in Aeon via computer use (scratch, not git)
-- [ ] docs/research/AEON-SPEC.md (clean-room, our words): container, calendar math, age rule, solver, numbering, CSV columns, migration notes
-- [ ] (only if needed) REA/Ghidra pass to settle the 28 extra index bytes
+- [x] Re-extract Aeon bundle with tools/aeon_extract.py into scratch (not repo)
+- [ ] ~5 sample .aeon fixtures created in Aeon via computer use (scratch, not git) — DEFERRED: app access declined 2026-10-18; the 19 bundled templates (v14) are the fixtures; retry once at 006
+- [x] docs/research/AEON-SPEC.md (clean-room, our words): container, calendar math, age rule, solver, numbering, CSV columns, migration notes
+- [x] (only if needed) REA/Ghidra pass — not needed: trailer is plain (no checksum); v2 extra = size copy to settle the 28 extra index bytes
 
 ## Phase 2 — features (each: specify → plan → tasks → implement → converge → ponytail-review → Codex read-only adversarial review → commit)
 - [ ] 001 core (model + storage + ops table + CLI + MCP) — accept: all subcommands with --json; MCP golden test vs --json; saga Wikis round-trip byte-identical; round-trip byte-stable frontmatter on fixtures; types/roles/properties from lore.json; concurrent-edit sha256 version + merge/409 test; Obsidian-compatible keys; stdlib-only import scan; no bare open(); 3,000 items load <1.5 s
@@ -302,7 +302,7 @@ Paths are relative to each saga root and identical in all three repos.
 - [ ] 003 checks — accept: FS/SS/FF/SF + constraints; two-places; dead-participant; age sanity; rail regression; story-vs-chronology; declarative max-duration + exact-gap rules; findings carry code/severity/file:line; non-zero exit on FAIL; FAIL vs WARN by certainty; 3,000 items check <2 s
 - [ ] 004 saga integration — accept: baselines green; vendored + parity green in all 3; chrono.py gated (in-progress chapters byte-identical status/validate before/after); chrono-report for 500 cards ×3; Wiki templates/skills/PIPELINE updated; START_HERE intent; backfill of frozen-chapter Wiki pages; suites green; `system:` commits explicit paths only; landed by ff-only back to back
 - [ ] 005 interactive editor — accept (Playwright): create event, link character, drag re-date, age updates, subway lanes, relationship grid, spreadsheet, narrative, live reload on agent edit, saga-mode edits land in change-request queue; keyboard-only flow; simultaneous CLI+browser edit merges or 409s; labels + contrast
-- [ ] 006 interop — accept: all 17 Aeon templates import; exported v1 .aeon opens in Aeon desktop (computer-use screenshot); CSV in/out with Aeon column ids; Markdown export
+- [ ] 006 interop — accept: all 19 bundled Aeon template files import; exported v1 .aeon opens in Aeon desktop (computer-use screenshot); CSV in/out with Aeon column ids; Markdown export
 - [ ] 007 templates + onboarding + packaging — accept: Novel / Series / Worldbuilding-Campaign templates pass `lore check`; pyproject + `uv tool install .` works; README quickstart runs verbatim; user guide, agent skill; private GitHub repo created + pushed, visibility PRIVATE
 
 ## Phase 9 — close-out

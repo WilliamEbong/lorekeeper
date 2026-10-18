@@ -77,3 +77,12 @@ Append-only. Newest entries at the bottom. Each entry gives: date/time (UTC if k
 - `tools/build-hooks/guard.py` (modes start/post/pre/compact) and `test_guard.py` (5 checks, green).
 - Hooks registered in the project `.claude/settings.json`, using exec form (`command: python`, `args`) to avoid shell quoting. They picked up live with no restart. Verified live: PostToolUse wrote `.hookstate.json` and recorded the 3 doc reads, and PreToolUse blocked an Edit while reads were cleared.
 - Tiers 86/90/92% are in the code (calibrated from the observed compactions, lowest 92.3%).
+
+### Phase 1 (2026-10-18)
+- Re-extracted the Aeon bundle into `C:\Users\Owner\lk-scratch\aeon_extract`; the stream counts match session 1. The analysis scripts live in the session scratchpad, never in the repo.
+- Decision: **computer-use access to Aeon Timeline was declined** in the approval dialog. I did not retry. The 19 bundled template files (all fileVersion 14; Story Planning is the v1 layout) serve as fixtures. I will ask once more at feature 006 for the open-in-Aeon check; if that is declined too, the item is reported as unverified.
+- Finding: the container parses cleanly on all 19 files, with no checksum. In v2 the 28 extra bytes hold a copy of the size at +12. The REA/Ghidra pass is not needed.
+- Finding: bundled templates are fileVersion 14, while the app writes 27. The loader accepts a bare core or a full file, runs the migration chain, then rebuilds `collection`. Decision: the writer emits `{fileVersion:14, core:<v14 shape>}` and lets Aeon migrate it; the reader accepts v14 and v27 (customOrder/superById vs itemOrderByType/superAndChildOrderById).
+- Finding: month and day are 1-based. AD timestamps = proleptic Gregorian seconds since 0001-01-01 (901/901 exact). BC dates are +1 day versus proleptic (105/105, all 1 January).
+- Wrote `docs/research/AEON-SPEC.md` (clean-room, our words).
+- Plan text: "17 templates" corrected to "19 bundled template files".
