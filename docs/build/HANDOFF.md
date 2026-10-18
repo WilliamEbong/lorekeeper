@@ -1,13 +1,14 @@
 # HANDOFF — Lorekeeper build
 
-**Last updated:** 2026-10-18, session 2, during feature 001.
-**Current position:** Phases 0 and 1 are done. Feature 001 core is implemented and committed (`840b7fb`): fm.py (Codex), store.py, ops.py, cli.py, and 48 tests green. **Next:** T008 `lorekeeper/mcp.py` + `tests/test_mcp.py` (Codex, dual-era MCP: legacy `initialize` plus modern 2026-07-28 `server/discover`), then the 001 converge, ponytail-review and Codex adversarial review. After that comes feature 002 time.
+**Last updated:** 2026-10-18, session 2, at the feature 001 → 002 boundary.
+**Current position:** Feature 001 core is DONE (commit `69979c6`, 76 tests green). Codex built fm.py and mcp.py; Claude built store, ops and cli. A Codex adversarial review produced 16 fixes. **Next: feature 002 time.** Spec, plan and tasks are in `specs/002-time/`. T001 is a Codex brief for `lorekeeper/dates.py` + `tests/test_dates.py`. `tests/pending_saga_dates.py` gets renamed to `test_saga_dates.py` once dates.py exists. The saga SRD calendar config is in that test.
 **Key facts from this session:**
-- The Skill tool can't see the speckit skills here; read `.claude/skills/speckit-*/SKILL.md` and follow it by hand.
-- context7 is out of quota; use WebFetch.
-- Aeon computer-use access was declined once; ask again once, at 006.
-- Repo-state snapshots: `C:\Users\Owner\lk-scratch\snap\snap.sh <name>`.
-- Aeon spec: `docs/research/AEON-SPEC.md`. The writer emits fileVersion 14 core.
+- The Skill tool can't see the speckit skills; read `.claude/skills/speckit-*/SKILL.md` and follow it by hand. The converge rule is: append `## Phase N: Convergence` tasks, or report converged.
+- context7 is out of quota; use WebFetch. MCP 2026-07-28 is stateless (`server/discover`, `_meta`).
+- Aeon computer-use was declined once; ask again only at 006.
+- Snapshot repo states before and after every Codex run: `C:\Users\Owner\lk-scratch\snap\snap.sh <name>`, then diff.
+- The Bash tool mangles long heredocs. Write patch scripts to the scratchpad and run them.
+- Codex read-only reviews can't write temp files, so I run the tests myself.
 **Read order for any new or resumed session:** this file → `BUILD-PLAN.md` (plan + checklist) → the tail of `SESSION-LOG.md`.
 
 ---

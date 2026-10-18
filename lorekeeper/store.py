@@ -8,7 +8,7 @@ import tempfile
 import threading
 import time
 
-from . import fm
+from . import dates, fm
 
 CONFIG = "lore.json"
 SKIP_DIRS = {".git", ".obsidian", "_TEMPLATES", "node_modules", "__pycache__"}
@@ -198,6 +198,7 @@ class Project:
                         raise LoreError("INVALID", f"{CONFIG} is not valid JSON: {exc}") from exc
         self.config = config
         self.schema = merged_schema(config)
+        self.calendars = dates.calendars(config.get("calendars"))
         self.problems = []
         self.items = []
         self._load()

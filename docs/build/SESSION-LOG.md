@@ -110,3 +110,11 @@ Append-only. Newest entries at the bottom. Each entry gives: date/time (UTC if k
   - MCP: the envelope is validated (`jsonrpc` "2.0", string/int id, method); modern requests need `clientCapabilities`; output is ASCII-escaped, so lone surrogates can't crash the server.
 - Note: Codex's sandbox blocks temp-file writes in read-only mode, so its in-review test run is not meaningful. Claude runs the suite.
 - **Feature 001 done:** 76 tests green.
+
+### Feature 002 time (2026-10-18)
+- The codex-rescue forwarder ran the dates job with `--background`: the 9 KB prompt broke single-quoted Bash, so it was passed via a file. I waited with a status poll loop, then fetched the result with `codex-companion.mjs result`. Codex delivered `dates.py` (419 lines, no datetime) + `tests/test_dates.py` (21 tests). Stray check clean.
+- I wired `timeinfo.py` (item_dates, narrowing, durations, display), `Project.calendars`, the ops `when` / `age` / `timeline` / `convert`, and `DATE_UNPARSED` in check.
+- Added decades ("2040s") and a leading label before the date ("African Collapse Wars, 2040s").
+- **Saga finding:** 1,497 of 1,501 card dates parse. The other 4 are real architecture errors in Space: `SRD Y0 D367`, `Y0 D374`, `Y1 D366`, `Y1 D378`. SRD years have 365 days, so these days cannot exist. They are kept in `KNOWN_INVALID` for the chrono-report.
+- Decision: Space projects list `[srd, gregorian]` calendars, because the architecture header carries an ISO date.
+- **Converge 002:** FR-1..FR-11 met; converged. 104 tests green.

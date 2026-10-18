@@ -3,7 +3,8 @@ import json
 import os
 from collections import namedtuple
 
-from . import store
+from . import dates, store
+from .timeinfo import calendar_of, item_dates, parse_at, show_when
 from .store import LoreError, Project
 
 Param = namedtuple("Param", "name kind required help")   # kind: str | int | bool | list | dict
@@ -113,8 +114,55 @@ def op_unlink(p, item, role, target):
     return {"path": it.path, "version": version, "merged": merged}
 
 
+def op_when(p, item):
+    it = p.find(item)
+    start, end, bad = item_dates(p, it)
+    return {**it.summary(), "start": show_when(p, start), "end": show_when(p, end),
+            "unparsed": [{"key": k, "value": v} for k, v in bad]}
+
+
+def op_age(p, item, at):
+    it = p.find(item)
+    birth, death, _ = item_dates(p, it)
+    if birth is None:
+        raise LoreError("INVALID", f"{it.name} has no start date (born/date/start)")
+    when = parse_at(p, at)
+    if p.schema["types"].get(it.type, {}).get("category") != "person":
+        death = None
+    return {"item": it.name, "at": show_when(p, when), **dates.age(birth, when, death, calendar_of(p, birth))}
+
+
+def op_timeline(p, type=None, since=None, until=None):
+    lo = parse_at(p, since).lo if since else None
+    hi = parse_at(p, until).hi if until else None
+    rows = []
+    for it in p.items:
+        start, end, _ = item_dates(p, it)
+        if start is None or (type and it.type != type):
+            continue
+        last = (end or start).hi
+        if (lo is not None and last <= lo) or (hi is not None and start.lo >= hi):
+            continue
+        rows.append((start.lo, last, it.name.lower(), it, start, end))
+    rows.sort(key=lambda r: r[:3])
+    return {"items": [{**it.summary(), "start": show_when(p, s), "end": show_when(p, e)}
+                      for *_, it, s, e in rows], "count": len(rows)}
+
+
+def op_convert(p, date):
+    when = dates.parse(date, p.calendars)
+    if when is None:
+        raise LoreError("INVALID", f"no calendar in this project can read {date!r}")
+    return {"input": date, "parsed_by": when.calendar, "precision": when.precision,
+            "calendars": {c.id: {"from": c.format(when.lo, when.precision), "to": c.format(when.hi - 1, when.precision)}
+                          for c in p.calendars}}
+
+
 def op_check(p):
     found = p.findings()
+    for it in p.items:
+        for key, value in item_dates(p, it)[2]:
+            found.append(store.finding("WARN", "DATE_UNPARSED", f"{key}: {value}", it.path, it.line(key)))
     found.sort(key=lambda f: (f["severity"] != "FAIL", f["path"], f["line"], f["code"]))
     fails = sum(f["severity"] == "FAIL" for f in found)
     return {"findings": found, "fail": fails, "warn": len(found) - fails}
@@ -146,6 +194,15 @@ OPS = [
     Op("unlink", "Remove a role link.",
        [Param("item", S, True, "subject item"), Param("role", S, True, "role key"),
         Param("target", S, True, "target item")], True, op_unlink),
+    Op("when", "Show an item's start and end as date intervals.",
+       [Param("item", S, True, "item name or id")], False, op_when),
+    Op("age", "Age of a person (or any dated item) at a date or at another item's start.",
+       [Param("item", S, True, "person or item"), Param("at", S, True, "a date, or an item name")], False, op_age),
+    Op("timeline", "Dated items in chronological order.",
+       [Param("type", S, False, "only this type"), Param("since", S, False, "date or item: from"),
+        Param("until", S, False, "date or item: until")], False, op_timeline),
+    Op("convert", "Show a date in every calendar of the project.",
+       [Param("date", S, True, "date text")], False, op_convert),
     Op("check", "Check the project; FAIL lines are definite problems, WARN lines possible ones.",
        [], False, op_check),
 ]
