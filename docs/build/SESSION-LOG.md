@@ -253,3 +253,4 @@ Append-only. Newest entries at the bottom. Each entry gives: date/time (UTC if k
 - `saga.py timeline` on the Realm probe serves the new editor: 532 items, proposals only, no drag handles, Continuity clean, no console errors. Cosmetic (Later): its title reads "Wiki" because the saga config has no `name`.
 - LANDED by fast-forward with `land.sh` (working trees untouched): Realm 6ee4816, Space 87db843, Zombies 89095c4.
 - Lorekeeper `main` is at 2de4351 locally, 6 commits ahead of the private repo (3faade4). Pushing the follow-ups waits for the owner's go-ahead.
+- Owner approved: pushed `main` (55fa436) to the private repo (visibility PRIVATE confirmed with gh).

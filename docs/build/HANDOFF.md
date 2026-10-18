@@ -17,7 +17,7 @@ Audiences: writers who draft with AI agents, novelists who don't use AI, and wor
 
 **Run 3 and its follow-ups (3b) are done.**
 - Run 3 (feature 008) was merged into `main` and pushed to the private repo (`3faade4`).
-- The owner's follow-ups (feature 009) are merged into local `main` at the final docs commit, which is about seven commits ahead of `origin/main`. Pushing them waits for the owner's go-ahead.
+- The owner's follow-ups (feature 009) are merged into `main` and pushed to the private repo (`55fa436`), with the owner's approval.
 - 247 tests pass (1 POSIX-only skip).
 - The three sagas now vendor engine `2de4351`. Live HEADs: Realm `6ee4816`, Space `87db843`, Zombies `89095c4`. They were landed fast-forward only, after the probes matched the before-baseline.
 
@@ -78,8 +78,7 @@ Follow-ups in 009:
 ## 5. Next actions
 
 0. **Owner feature request (2026-10-18), not started:** a chapter-scoped story wiki that shows only what is known by a chosen chapter. It is AI-optional, and it builds on the saga's chapter wrap-up rather than replacing it. The full brief and its grounding are in BUILD-PLAN.md under "Feature requests from the owner". Start it with speckit-specify.
-1. Owner approves pushing local `main` (the 009 follow-ups) to the private repo. **← NEXT**
-2. Then start the owner's chapter-scoped story wiki (item 0), with speckit-specify.
+1. Start the owner's chapter-scoped story wiki (item 0), with speckit-specify. **← NEXT**
 3. Space chronology report: cards 051/052 (RAIL_REGRESSION) and four impossible SRD days (carried over).
 4. Apply the deferred saga keys in `chronology_deferred.md` as chapters freeze (carried over).
 
