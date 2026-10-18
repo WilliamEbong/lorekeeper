@@ -254,5 +254,102 @@ class FrontmatterTests(unittest.TestCase):
                          text.replace("name: first\n", ""))
 
 
+class BlockListTests(unittest.TestCase):
+    """Obsidian's Properties panel writes lists as "key:" then indented "- item" lines."""
+    TEXT = ('---\nid: EVENT-STORM\nparticipants:\n  - "[[Mira Vale]]"\n  # a note\n'
+            "  - [[Ivo]]\n  - 'O''Neil'\n  -\nstatus: draft\naliases:\n- the storm\n---\nBody\n")
+    LIST = 'participants:\n  - "[[Mira Vale]]"\n  # a note\n  - [[Ivo]]\n  - \'O\'\'Neil\'\n  -\n'
+
+    def test_read(self):
+        front = parse(self.TEXT)
+        self.assertEqual(front.fields, {"id": "EVENT-STORM", "status": "draft", "aliases": ["the storm"],
+                                        "participants": ["[[Mira Vale]]", "[[Ivo]]", "O'Neil", ""]})
+        self.assertEqual(front.lines, {"id": 2, "participants": 3, "status": 9, "aliases": 10})
+        self.assertEqual(front.unsupported, [])
+
+    def test_round_trip_and_other_edits_are_byte_identical(self):
+        for nl in ("\n", "\r\n"):
+            text = self.TEXT.replace("\n", nl)
+            with self.subTest(nl=nl):
+                self.assertEqual(update(text).encode("utf-8"), text.encode("utf-8"))
+                self.assertEqual(update(text, set=parse(text).fields), text)
+                self.assertEqual(update(text, set={"status": "final", "new": "x"}),
+                                 text.replace("status: draft", "status: final")
+                                 .replace("---" + nl + "Body", "new: x" + nl + "---" + nl + "Body"))
+
+    def test_edit_and_unset_replace_the_whole_list(self):
+        for nl in ("\n", "\r\n"):
+            text, block = self.TEXT.replace("\n", nl), self.LIST.replace("\n", nl)
+            with self.subTest(nl=nl):
+                edited = update(text, set={"participants": ["[[Mira Vale]]", "[[Tess]]"]})
+                self.assertEqual(edited, text.replace(block, 'participants: ["[[Mira Vale]]", "[[Tess]]"]' + nl))
+                self.assertEqual(parse(edited).fields["participants"], ["[[Mira Vale]]", "[[Tess]]"])
+                self.assertEqual(parse(edited).unsupported, [])
+                self.assertEqual(update(text, unset=["participants"]), text.replace(block, ""))
+                self.assertEqual(update(text, set={"aliases": "storm"}),
+                                 text.replace("aliases:" + nl + "- the storm", "aliases: storm"))
+
+    def test_list_as_the_last_key(self):
+        text = "---\r\ntype: event\r\ntags:\r\n  - a\r\n  - b\r\n---\r\n"
+        self.assertEqual(parse(text).fields["tags"], ["a", "b"])
+        self.assertEqual(update(text), text)
+        self.assertEqual(update(text, set={"tags": ["a"]}), "---\r\ntype: event\r\ntags: [a]\r\n---\r\n")
+        self.assertEqual(update(text, unset=["tags"]), "---\r\ntype: event\r\n---\r\n")
+        self.assertEqual(update(text, set={"new": "x"}),
+                         "---\r\ntype: event\r\ntags:\r\n  - a\r\n  - b\r\nnew: x\r\n---\r\n")
+
+    def test_empty_key_without_items_reads_as_before(self):
+        text = "---\nsummary:\nnext: x\n---\n"
+        self.assertEqual(parse(text).fields, {"summary": "", "next": "x"})
+        self.assertEqual(update(text, set={"summary": "y"}), "---\nsummary: y\nnext: x\n---\n")
+        stray = "---\nname: x\n  - stray\nempty: ''\n  - stray\n---\n"
+        self.assertEqual(parse(stray).fields, {"name": "x", "empty": ""})
+        self.assertEqual(parse(stray).unsupported, [3, 5])
+
+
+class HandWrittenLinkTests(unittest.TestCase):
+    def test_bare_wikilinks_separated_by_commas_or_spaces(self):
+        cases = {
+            "[[A]], [[B]]": ["[[A]]", "[[B]]"],
+            "[[A]],[[B|b]] [[C#h]]": ["[[A]]", "[[B|b]]", "[[C#h]]"],
+            "[[A]] [[B]]": ["[[A]]", "[[B]]"],
+        }
+        for raw, expected in cases.items():
+            with self.subTest(raw=raw):
+                self.assertEqual(parse_value(raw), expected)
+                self.assertEqual(parse("---\nk: " + raw + "\n---\n").fields, {"k": expected})
+
+    def test_unbalanced_list_item_is_kept_and_refused(self):
+        for raw in ("[[A]], [[B]", "[[[A]], [[B]]", "[[A]", "[a, [[b]"):
+            with self.subTest(raw=raw), self.assertRaises(ValueError):
+                parse_value(raw)
+        text = "---\nparticipants: [[A]], [[B]\nstatus: x\n---\n"
+        front = parse(text)
+        self.assertEqual(front.fields, {"status": "x"})
+        self.assertEqual(front.unsupported, [2])
+        self.assertEqual(update(text), text)
+        self.assertEqual(update(text, set={"status": "y"}), text.replace("status: x", "status: y"))
+        for edit in ({"set": {"participants": ["[[C]]"]}}, {"unset": ["participants"]}):
+            with self.subTest(edit=edit), self.assertRaises(ValueError):
+                update(text, **edit)
+        self.assertEqual(front.lines["participants"], 2)
+        self.assertEqual(parse("---\nk: [[A]\nk: b\n---\n").unsupported, [2, 3])   # still the first k
+
+
+class YamlSafeWritingTests(unittest.TestCase):
+    def test_yaml_indicators_are_quoted(self):
+        for value in ["- draft", "-", "-\tx", "? x", "?", ":", "Note:", "a:\tb", "a\t#b", "]x", "}x"]:
+            with self.subTest(value=value):
+                self.assertEqual(format_value(value), '"' + value + '"')
+                self.assertEqual(parse_value(format_value(value)), value)
+                self.assertEqual(parse_value(format_value([value])), [value])
+        for value in ["a{b", "a}b", "?x", ":x"]:
+            with self.subTest(value=value):
+                self.assertEqual(format_value([value]), '["' + value + '"]')
+        for value in ["-x", "?x", ":x", "a:b", "a-b", "x - y", "a?", "1st"]:
+            with self.subTest(value=value):
+                self.assertEqual(format_value(value), value)
+
+
 if __name__ == "__main__":
     unittest.main()

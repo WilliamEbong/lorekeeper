@@ -18,6 +18,7 @@ KEY = re.compile(r"[a-z_]+\Z")   # keys we write: exactly what the saga regex re
 LINK = re.compile(r"\s*(\[\[[^\]]+\]\])\s*(.*)\Z", re.S)   # "[[X]] +2h" -> ("[[X]]", "+2h")
 BAD_NAME = re.compile(r"[\[\]|#^/\\\x00-\x1f]")   # cannot appear inside a wikilink
 BAD_FILENAME = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+DEVICE = re.compile(r"\A(con|prn|aux|nul|com[1-9\xb9\xb2\xb3]|lpt[1-9\xb9\xb2\xb3])(?= *(?:\.|\Z))", re.I)
 
 DEFAULT_SCHEMA = {
     "types": {
@@ -97,6 +98,8 @@ def atomic_write(path, text, expect=None, create=False):
     try:
         with os.fdopen(fd, "wb") as fh:
             fh.write(data)
+        if not create and os.name != "nt" and os.path.exists(path):   # mkstemp made it owner-only
+            os.chmod(tmp, os.stat(path).st_mode & 0o7777)
         for attempt in (1, 2):
             with _WRITE_LOCK:
                 if expect is not None and file_sha(path) != expect:
@@ -174,7 +177,8 @@ class Item:
         f = front.fields
         self.fields = f
         self.type = str(f.get("type", ""))
-        self.name = str(f.get("canonical_name") or f.get("name") or os.path.splitext(os.path.basename(path))[0])
+        self.stem = os.path.splitext(os.path.basename(path))[0]
+        self.name = str(f.get("canonical_name") or f.get("name") or self.stem)
         self.id = str(f.get("id") or "")
         aliases = f.get("aliases", [])
         self.aliases = aliases if isinstance(aliases, list) else [aliases] if aliases else []
@@ -208,6 +212,8 @@ class Project:
                         config = json.load(fh)
                     except ValueError as exc:
                         raise LoreError("INVALID", f"{CONFIG} is not valid JSON: {exc}") from exc
+        if isinstance(config.get("paths"), str):   # "paths": "Wiki" means ["Wiki"]
+            config["paths"] = [config["paths"]]
         self.config = config
         self.schema = merged_schema(config)
         self.calendars = dates.calendars(config.get("calendars"))
@@ -263,33 +269,44 @@ class Project:
         self._index()
 
     def _index(self):
+        self.items[:] = dict.fromkeys(self.items)   # a caller that re-appends a created item counts it once
         self.by_id, self.by_name, self.by_stem, self.by_alias = {}, {}, {}, {}
         self.by_path = {}
+        self._linked = None
         for item in self.items:
-            self.by_path[item.path] = item
-            if item.id:
-                if item.id.lower() in self.by_id:
-                    first = self.by_id[item.id.lower()]
-                    self.problems.append(finding("FAIL", "DUPLICATE_ID", f"{item.id} also in {first.path}",
-                                                 item.path, item.line("id")))
-                else:
-                    self.by_id[item.id.lower()] = item
-            key = item.name.lower()
-            if key in self.by_name:
-                self.problems.append(finding("FAIL", "DUPLICATE_NAME", f"{item.name} also in {self.by_name[key].path}",
-                                             item.path, item.line("canonical_name")))
+            self._add(item)
+
+    def _add(self, item):
+        self.by_path[item.path] = item
+        if item.id:
+            if item.id.lower() in self.by_id:
+                first = self.by_id[item.id.lower()]
+                self.problems.append(finding("FAIL", "DUPLICATE_ID", f"{item.id} also in {first.path}",
+                                             item.path, item.line("id")))
             else:
-                self.by_name[key] = item
-            self.by_stem.setdefault(os.path.splitext(os.path.basename(item.path))[0].lower(), item)
-            for alias in item.aliases:
-                self.by_alias.setdefault(str(alias).lower(), item)
-        self._links = {id(item): self._item_links(item) for item in self.items}
-        self._back = {}
-        for item in self.items:
-            for role, links in self._links[id(item)].items():
-                for target, other, _ in links:
-                    if other is not None:
-                        self._back.setdefault(id(other), {}).setdefault(role, []).append(item)
+                self.by_id[item.id.lower()] = item
+        key = item.name.lower()
+        if key in self.by_name:
+            self.problems.append(finding("FAIL", "DUPLICATE_NAME", f"{item.name} also in {self.by_name[key].path}",
+                                         item.path, item.line("canonical_name")))
+        else:
+            self.by_name[key] = item
+        self.by_stem.setdefault(item.stem.lower(), item)
+        for alias in item.aliases:
+            self.by_alias.setdefault(str(alias).lower(), item)
+        self._linked = None   # links and backlinks are rebuilt on next use
+
+    def _link_maps(self):
+        if self._linked is None:
+            links = {id(item): self._item_links(item) for item in self.items}
+            back = {}
+            for item in self.items:
+                for role, found in links[id(item)].items():
+                    for _, other, _ in found:
+                        if other is not None:
+                            back.setdefault(id(other), {}).setdefault(role, []).append(item)
+            self._linked = links, back
+        return self._linked
 
     def read(self, path, data=None):
         rel = self.rel(path)
@@ -337,10 +354,10 @@ class Project:
         return item
 
     def links(self, item):
-        return self._links[id(item)]
+        return self._link_maps()[0][id(item)]
 
     def backlinks(self, item):
-        return self._back.get(id(item), {})
+        return self._link_maps()[1].get(id(item), {})
 
     def findings(self):
         out = list(self.problems)
@@ -358,6 +375,20 @@ class Project:
                     elif allowed and other.type not in allowed:
                         out.append(finding("WARN", "ROLE_TYPE", f"{role} -> [[{target}]] is a {other.type}, "
                                            f"expected {'/'.join(allowed)}", item.path, item.line(role)))
+        return out + self._ambiguous()
+
+    def _ambiguous(self):
+        """A name, file stem or alias that two items claim: its links silently pick one of them."""
+        out, claims = [], {}
+        for item in self.items:
+            name_line = item.line("canonical_name" if "canonical_name" in item.fields else "name")
+            keys = [(item.name, "name", name_line), (item.stem, "stem", 1)]
+            keys += [(str(alias), "alias", item.line("aliases")) for alias in item.aliases]
+            for label, kind, line in keys:
+                first, first_kind = claims.setdefault(label.lower(), (item, kind))
+                if label and first is not item and not kind == first_kind == "name":   # that is DUPLICATE_NAME
+                    out.append(finding("WARN", "AMBIGUOUS_NAME", f"[[{label}]] could mean {first.name} "
+                                       f"({first.path}) or {item.name} ({item.path})", item.path, line))
         return out
 
     # ---- writes --------------------------------------------------------
@@ -369,22 +400,29 @@ class Project:
         spec = self.schema["types"][type_]
         folder = spec.get("folder") or spec.get("plural") or type_
         base = self.config.get("paths", ["."])[0]
-        path = os.path.normpath(os.path.join(self.root, base, folder, BAD_FILENAME.sub("-", name).strip(" .") + ".md"))
+        stem = DEVICE.sub(r"\1_", BAD_FILENAME.sub("-", name).strip(" ."))   # Windows cannot hold Con.md
+        path = os.path.normpath(os.path.join(self.root, base, folder, stem + ".md"))
         if not inside(self.root, path):
             raise LoreError("INVALID", f"type {type_!r} folder points outside the project folder")
         return path
 
+    def check_name(self, name, item=None):
+        """The stripped name, if it suits a wikilink and no other item answers to it."""
+        name = name.strip() if isinstance(name, str) else ""
+        if not name or BAD_NAME.search(name):
+            raise LoreError("INVALID", "name must be one line without [ ] | # ^ / \\ (they break wikilinks)")
+        other = self.resolve(name)
+        if other is not None and (item is None or other.path != item.path):
+            raise LoreError("CONFLICT", f"an item named {name!r} already exists: {other.path}")
+        return name
+
     def create(self, type_, name, fields=None, body=None):
-        name = str(name).strip()
         fields = clean_fields(fields or {})
         if type_ not in self.schema["types"]:
             raise LoreError("INVALID", f"unknown type {type_!r}; add it to {CONFIG} types")
-        if not name or BAD_NAME.search(name):
-            raise LoreError("INVALID", "name must be one line without [ ] | # ^ / \\ (they break wikilinks)")
         if set(fields) & {"id", "type", "canonical_name", "name"}:
             raise LoreError("INVALID", "id, type and canonical_name are set by create, not by fields")
-        if self.resolve(name):
-            raise LoreError("CONFLICT", f"an item named {name!r} already exists: {self.resolve(name).path}")
+        name = self.check_name(str(name))
         path = self.path_for(type_, name)
         folder = os.path.dirname(path)
         if os.path.isdir(folder) and os.path.basename(path).lower() in {n.lower() for n in os.listdir(folder)}:
@@ -397,11 +435,18 @@ class Project:
         version = atomic_write(path, text, create=True)
         item = self.read(path)
         item.version = version
+        self.items.append(item)
+        self._add(item)
         return item
 
     def update(self, item, set=None, unset=(), body=None, version=None, expect=None):
         """Apply an edit; merge onto a newer file when the edited keys are untouched, else CONFLICT."""
         set, unset = clean_fields(set or {}), list(unset or ())
+        if "type" in unset or "type" in set and not "".join(set["type"]).strip():
+            raise LoreError("INVALID", "type cannot be blank: an item without a type is no longer read")
+        for key in ("canonical_name", "name"):
+            if key in set and set[key] != item.fields.get(key):
+                set[key] = self.check_name(set[key], item)
         path = os.path.join(self.root, item.path)
         with open(path, "rb") as fh:
             data = fh.read()
@@ -434,7 +479,7 @@ def clean_fields(fields):
     out = {}
     for key, value in fields.items():
         if not KEY.match(key):
-            raise LoreError("INVALID", f"bad key {key!r}: use lowercase letters, digits and _")
+            raise LoreError("INVALID", f"bad key {key!r}: use lowercase letters and _")
         if isinstance(value, (list, tuple)):
             out[key] = [str(v) for v in value]
         else:

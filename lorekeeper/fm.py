@@ -1,12 +1,14 @@
 """Flat, restricted frontmatter with edits confined to the requested lines."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import re
 
 
 _KEY = re.compile(r"([a-z_][a-z0-9_]*):(.*)")
+_ITEM = re.compile(r"[ \t]*-(?:[ \t]+(.*))?")   # "  - value" under an empty "key:" (Obsidian's lists)
 _CLOSE = re.compile(r"^---(?:\r?\n|\Z)", re.MULTILINE)
 _WIKILINK = re.compile(r"\[\[([^\[\]\r\n]*)\]\]")
+_LINKS = re.compile(r"\[\[[^\[\]\r\n]*\]\](?:[ \t,]*\[\[[^\[\]\r\n]*\]\])+")   # [[A]], [[B]] by hand
 
 
 class FrontmatterError(ValueError):
@@ -18,10 +20,11 @@ class FrontmatterError(ValueError):
 @dataclass
 class Frontmatter:
     fields: dict[str, str | list[str]]
-    lines: dict[str, int]
+    lines: dict[str, int]          # each key's first line; a key missing from fields could not be read
     unsupported: list[int]
     body: str
     newline: str
+    ends: dict[str, int] = field(default_factory=dict)   # last "- item" line of each block list
 
 
 def _block(text):
@@ -41,19 +44,34 @@ def parse(text: str) -> Frontmatter | None:
     if block is None:
         return None
     raw_lines, body, newline = block
-    fields, lines, unsupported = {}, {}, []
+    fields, lines, unsupported, ends = {}, {}, [], {}
+    owner = None   # the empty "key:" whose "- item" lines may follow
     for number, line in enumerate(raw_lines[1:-1], 2):
         line = line.removesuffix("\n").removesuffix("\r")
         if not line.strip() or line.lstrip().startswith("#"):
             continue
+        item = owner and _ITEM.fullmatch(line)
+        if item:
+            if owner not in ends:
+                fields[owner] = []
+            fields[owner].append(_unquote((item[1] or "").strip()))
+            ends[owner] = number
+            continue
+        owner = None
         match = _KEY.fullmatch(line)
-        if match is None or match[1] in fields:
+        if match is None or match[1] in lines:
             unsupported.append(number)
             continue
-        key, raw = match.groups()
-        fields[key] = parse_value(raw.strip(" \t"))
+        key, raw = match[1], match[2].strip(" \t")
         lines[key] = number
-    return Frontmatter(fields, lines, unsupported, body, newline)
+        try:
+            fields[key] = parse_value(raw)
+        except ValueError:   # kept as-is; update() refuses to edit it
+            unsupported.append(number)
+            continue
+        if not raw:
+            owner = key
+    return Frontmatter(fields, lines, unsupported, body, newline, ends)
 
 
 def _unquote(raw):
@@ -64,9 +82,20 @@ def _unquote(raw):
     return raw
 
 
+def _list_item(raw):
+    raw = raw.strip()
+    value = _unquote(raw)
+    if value == raw and raw.count("[") != raw.count("]"):
+        raise ValueError(f"list item {raw!r} has unbalanced brackets")
+    return value
+
+
 def parse_value(raw: str) -> str | list[str]:
+    """Raises ValueError when an unquoted list item has unbalanced brackets ([[A]], [[B])."""
     if _WIKILINK.fullmatch(raw):
         return raw
+    if _LINKS.fullmatch(raw):
+        return [m[0] for m in _WIKILINK.finditer(raw)]
     if not (raw.startswith("[") and raw.endswith("]")):
         return _unquote(raw)
     inside = raw[1:-1]
@@ -99,20 +128,21 @@ def parse_value(raw: str) -> str | list[str]:
         elif char in "\"'" and not inside[start:i].strip():   # quotes open a token, never mid-word
             quote = char
         elif char == ",":
-            items.append(_unquote(inside[start:i].strip()))
+            items.append(_list_item(inside[start:i]))
             start = i + 1
         i += 1
-    items.append(_unquote(inside[start:].strip()))
+    items.append(_list_item(inside[start:]))
     return items
 
 
 def _format_string(value, in_list=False):
     value = str(value)
     needs_quotes = (
-        value.startswith(tuple('[{\"\'#&*!|>%@`,'))
-        or ": " in value or " #" in value
+        value.startswith(tuple('[]{}\"\'#&*!|>%@`,'))
+        or re.match(r"[-?:](?:[ \t]|\Z)", value)   # YAML "- ", "? " and ": " indicators
+        or value.endswith(":") or re.search(r":[ \t]|[ \t]#", value)
         or value != value.strip()
-        or (in_list and (not value or any(c in value for c in ",[]\"'")))
+        or (in_list and (not value or value[0] in "?:" or any(c in value for c in ",[]{}\"'")))
     )
     if needs_quotes:
         return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
@@ -146,13 +176,17 @@ def update(text, set=None, unset=(), body=None) -> str:
         content = text[len(bom):] if body is None else body
         added = "".join(line + newline for key, line in formatted.items() if key not in removed)
         return bom + "---" + newline + added + "---" + newline + content
+    for key in [*changes, *removed]:
+        if key in fm.lines and key not in fm.fields:
+            raise ValueError(f"{key}: line {fm.lines[key]} cannot be read; fix it by hand first")
     raw_lines, _, _ = _block(text)
     for key, number in fm.lines.items():
+        last = fm.ends.get(key, number)   # a block list spans its "- item" lines too
         if key in removed:
-            raw_lines[number - 1] = ""
+            raw_lines[number - 1:last] = [""] * (last - number + 1)
         elif key in changes and fm.fields[key] != changes[key]:
             ending = "\r\n" if raw_lines[number - 1].endswith("\r\n") else "\n"
-            raw_lines[number - 1] = formatted[key] + ending
+            raw_lines[number - 1:last] = [formatted[key] + ending] + [""] * (last - number)
     # Unset wins on overlap; unsupported duplicates remain untouched.
     added = "".join(line + fm.newline for key, line in formatted.items()
                     if key not in fm.fields and key not in removed)

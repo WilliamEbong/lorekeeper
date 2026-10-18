@@ -199,5 +199,103 @@ class Writing(WorldCase):
         self.assertEqual(fields["type"], "event")
 
 
+class AuditFixes(WorldCase):
+    def ambiguous(self, project):
+        return [(f["path"], f["line"], f["detail"]) for f in project.findings() if f["code"] == "AMBIGUOUS_NAME"]
+
+    def test_shared_alias_name_and_stem_warn_but_resolve_as_before(self):
+        self.assertEqual(self.ambiguous(self.p), [])
+        ahab = store.Item.from_fields("Characters/Ahab.md", {"type": "character", "name": "Ahab",
+                                                             "aliases": ["the Captain"]})
+        nemo = store.Item.from_fields("Characters/Nemo.md", {"type": "character", "name": "Nemo",
+                                                             "aliases": ["The Captain", "ahab", "Nemo"]})
+        storm = store.Item.from_fields("Events/Storm.md", {"type": "event", "name": "Storm"})
+        coast = store.Item.from_fields("Places/Storm.md", {"type": "location", "name": "Storm Coast"})
+        p = Project.from_items(self.root, {}, [ahab, nemo, storm, coast])
+        self.assertEqual(self.ambiguous(p), [
+            ("Characters/Nemo.md", 4, "[[The Captain]] could mean Ahab (Characters/Ahab.md) or Nemo "
+                                      "(Characters/Nemo.md)"),
+            ("Characters/Nemo.md", 4, "[[ahab]] could mean Ahab (Characters/Ahab.md) or Nemo (Characters/Nemo.md)"),
+            ("Places/Storm.md", 1, "[[Storm]] could mean Storm (Events/Storm.md) or Storm Coast (Places/Storm.md)"),
+        ])
+        self.assertEqual([f["severity"] for f in p.findings() if f["code"] == "AMBIGUOUS_NAME"], ["WARN"] * 3)
+        self.assertIs(p.find("the captain"), ahab)
+        self.assertIs(p.find("Ahab"), ahab)
+        self.assertIs(p.find("Storm"), storm)
+
+    def test_create_with_another_items_name_as_alias_warns(self):
+        item = self.p.create("character", "Ola", {"aliases": ["Mara Quell"]})
+        self.assertEqual([(path, line) for path, line, _ in self.ambiguous(self.p)], [(item.path, 5)])
+
+    def test_create_updates_the_index(self):
+        before = len(self.p.items)
+        item = self.p.create("location", "The Coast", {"aliases": ["the shore"], "located_in": "[[Harrow Pass]]"})
+        self.assertEqual(len(self.p.items), before + 1)
+        for ref in ("The Coast", "the shore", item.id, "path:" + item.path, "[[The Coast|it]]"):
+            self.assertIs(self.p.find(ref), item, ref)
+        saltmarsh = self.p.find("Saltmarsh")                 # its broken link now resolves
+        self.assertIs(self.p.links(saltmarsh)["located_in"][0][1], item)
+        self.assertEqual(self.p.backlinks(item)["located_in"], [saltmarsh])
+        self.assertIs(self.p.links(item)["located_in"][0][1], self.p.find("Harrow Pass"))
+        self.assertNotIn("BROKEN_LINK", [f["code"] for f in self.p.findings() if f["path"] == saltmarsh.path])
+        with self.assertRaises(LoreError):
+            self.p.create("character", "the SHORE")
+        self.p.items.append(item)                            # older callers re-add and re-index
+        self.p._index()
+        self.assertEqual(len(self.p.items), before + 1)
+        self.assertIs(self.p.find("The Coast"), item)
+        self.assertNotIn("DUPLICATE_ID", [f["code"] for f in self.p.findings()])
+
+    def test_set_refuses_blank_type_and_bad_names(self):
+        item = self.p.find("Tess Varga")
+        before = self.read(item.path)
+        cases = [({"type": ""}, (), "INVALID"), ({"type": " "}, (), "INVALID"), ({}, ("type",), "INVALID"),
+                 ({"canonical_name": "A [b]"}, (), "INVALID"), ({"canonical_name": "a|b"}, (), "INVALID"),
+                 ({"canonical_name": ""}, (), "INVALID"), ({"name": "x#y"}, (), "INVALID"),
+                 ({"canonical_name": ["Tess"]}, (), "INVALID"),
+                 ({"canonical_name": "mara quell"}, (), "CONFLICT"), ({"name": "THE CARTOGRAPHER"}, (), "CONFLICT"),
+                 ({"canonical_name": "chapter 1"}, (), "CONFLICT")]
+        for set_, unset, code in cases:
+            with self.subTest(set=set_, unset=unset):
+                with self.assertRaises(LoreError) as cm:
+                    self.p.update(item, set_, unset, None, item.version, {})
+                self.assertEqual(cm.exception.code, code)
+        self.assertEqual(self.read(item.path), before)
+        self.p.update(item, {"canonical_name": "Tess Varga", "type": "character"}, (), None, item.version, {})
+        self.assertEqual(self.read(item.path), before)
+        version, _ = self.p.update(item, {"canonical_name": " Tess Orme "}, (), None, item.version, {})
+        self.assertEqual(self.read(item.path), before.replace(b"Tess Varga\r\nborn", b"Tess Orme\r\nborn"))
+
+    def test_windows_device_names_get_a_safe_file_name(self):
+        cases = {"Con": "Con_", "aux": "aux_", "NUL.txt": "NUL_.txt", "Prn .x": "Prn_ .x", "Com1": "Com1_",
+                 "lpt9": "lpt9_", "Console": "Console", "Con Air": "Con Air", "Falcon": "Falcon"}
+        for name, stem in cases.items():
+            with self.subTest(name=name):
+                self.assertEqual(os.path.basename(self.p.path_for("character", name)), stem + ".md")
+        item = self.p.create("character", "Con")
+        self.assertEqual((item.path, item.name), ("Characters/Con_.md", "Con"))
+        self.assertEqual(Project(self.root).find("Con").path, "Characters/Con_.md")
+
+    def test_paths_may_be_a_single_folder_string(self):
+        with open(os.path.join(self.root, "lore.json"), "w", encoding="utf-8") as fh:
+            fh.write('{"lorekeeper": 1, "paths": "Characters"}\n')
+        p = Project(self.root)
+        self.assertEqual(sorted(i.name for i in p.items), ["Ivo Brandt", "Mara Quell", "Tess Varga"])
+        self.assertEqual(p.create("event", "Bob").path, "Characters/Events/Bob.md")
+
+    def test_bad_key_message_matches_the_rule(self):
+        with self.assertRaises(LoreError) as cm:
+            store.clean_fields({"k2": "x"})
+        self.assertEqual(cm.exception.message, "bad key 'k2': use lowercase letters and _")
+
+    @unittest.skipIf(os.name == "nt", "file modes are POSIX")
+    def test_rewrite_keeps_the_file_mode(self):
+        path = os.path.join(self.root, "Characters", "Tess Varga.md")
+        os.chmod(path, 0o644)
+        item = self.p.find("Tess Varga")
+        self.p.update(item, {"died": "2051"}, (), None, item.version, {})
+        self.assertEqual(os.stat(path).st_mode & 0o777, 0o644)
+
+
 if __name__ == "__main__":
     unittest.main()
