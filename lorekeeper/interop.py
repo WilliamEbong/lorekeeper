@@ -591,10 +591,7 @@ def import_into(project, data, into=None):
     project.config, project.schema = config, store.merged_schema(config)
     writer = project if folder is None else store.Project.from_items(project.root, local, project.items)
     for _, type_, name, fields, body in pending:
-        item = writer.create(type_, name, fields, body)
-        writer.items.append(item)
-        # Names and files were planned above; only ids need tracking (re-indexing per item is quadratic).
-        writer.by_id[item.id.lower()] = item
+        writer.create(type_, name, fields, body)   # create keeps the writer's index current
     project.items = writer.items
     project._index()
     narrative = [targets[key] for key in data.get("narrative", []) if key in targets]

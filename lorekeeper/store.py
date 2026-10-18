@@ -269,7 +269,6 @@ class Project:
         self._index()
 
     def _index(self):
-        self.items[:] = dict.fromkeys(self.items)   # a caller that re-appends a created item counts it once
         self.by_id, self.by_name, self.by_stem, self.by_alias = {}, {}, {}, {}
         self.by_path = {}
         self._linked = None

@@ -480,8 +480,8 @@ class InteropTests(unittest.TestCase):
         counts = interop.import_into(target, self.read_document(doc))
         self.assertEqual(counts["created"], 4)
         loaded = store.Project(target.root)
-        # "Mr" is imported first; "Mr." would also be stored as Mr.md, and CON.md is a Windows device.
-        self.assertEqual({item.name for item in loaded.items}, {"Mr", "Mr. (2)", "CON (2)", "Stray (2)"})
+        # "Mr" is imported first and "Mr." would also be stored as Mr.md; CON keeps its name in CON_.md.
+        self.assertEqual({item.name for item in loaded.items}, {"Mr", "Mr. (2)", "CON", "Stray (2)"})
         self.assertEqual(len({item.path.lower() for item in loaded.items}), 4)
         self.assertEqual(Path(target.root, "Events", "stray.md").read_text(encoding="utf-8"), "not an item\n")
         self.assertEqual(interop._suffixed("Con.Air", 2), "Con (2).Air")   # Con.Air.md is also the CON device

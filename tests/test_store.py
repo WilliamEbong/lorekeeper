@@ -240,8 +240,6 @@ class AuditFixes(WorldCase):
         self.assertNotIn("BROKEN_LINK", [f["code"] for f in self.p.findings() if f["path"] == saltmarsh.path])
         with self.assertRaises(LoreError):
             self.p.create("character", "the SHORE")
-        self.p.items.append(item)                            # older callers re-add and re-index
-        self.p._index()
         self.assertEqual(len(self.p.items), before + 1)
         self.assertIs(self.p.find("The Coast"), item)
         self.assertNotIn("DUPLICATE_ID", [f["code"] for f in self.p.findings()])

@@ -52,9 +52,7 @@ def op_init(root, name=None, template=None):
     store.atomic_write(path, to_json(config) + "\n", create=True)
     if starter:
         for item in starter["items"]:
-            created = p.create(item["type"], item["name"], item["fields"], item["body"])
-            p.items.append(created)
-            p._index()
+            p.create(item["type"], item["name"], item["fields"], item["body"])
         for filename, text in starter["files"].items():
             store.atomic_write(os.path.join(root, filename), text, create=True)
     return {"created": store.CONFIG, "root": os.path.abspath(root)}
