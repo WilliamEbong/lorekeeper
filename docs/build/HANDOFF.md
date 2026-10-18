@@ -1,20 +1,29 @@
 # HANDOFF — Lorekeeper build
 
-**Last updated:** 2026-10-18, session 2, after the regression fix landed.
+**Last updated:** 2026-10-18, session 2, context 90% (mandatory checkpoint).
 **Done:**
-- 001 to 006.
-- The sagas are integrated, landed and FIXED. Live HEADs: Realm 8a4c594, Space 0f02dcf, Zombies 3114c1d.
-- The in-progress chapters' status and validate are identical to the pre-integration baseline (proven on probe copies).
-- Chronology config is in `_system/lorekeeper.json`, not the manifest.
-**Running:** full probe-after2 (`docs/build/baselines/probe-after2`). Check that all suites are OK and that no status/validate diffs exist against probe-before.
-**Next:**
-1. Review and commit 007, which Codex left uncommitted in the Lorekeeper tree:
-   - templates.py, the ops `init --template`, pyproject.toml, README.md, docs/user-guide.md, docs/agent-skill.md, tests.
-   - Fix anything still referring to the manifest `lorekeeper` key in the docs: it is now `_system/lorekeeper.json`.
-   - Test `uv tool install .`, then `lore --version`.
-2. Final re-vendor of the engine (with the editor fixes) into the clones, run the suites, commit `system: update vendored Lorekeeper`, land with land.sh (expected HEADs as above), probe again.
-3. `gh repo create lorekeeper --private --source . --push`; check visibility PRIVATE.
-4. Close-out: final HANDOFF, `rm docs/build/ACTIVE`, remove the hooks from `.claude/settings.json`, update memory, PushNotification, final report.
+- Features 001 to 007, all committed. Lorekeeper HEAD `eb20b30`.
+- `uv tool install .` verified.
+- Sagas integrated and landed (fixed). Live HEADs: Realm 8a4c594, Space 0f02dcf, Zombies 3114c1d.
+- The in-progress chapters' status and validate are identical to the pre-integration baseline.
+**Running in the background:**
+- `bqr16y5hc`: a full probe of the live copies (`lk-scratch\probe3`), output in `docs/build/baselines/probe-after2`. Needed: all suites OK and no DIFF lines.
+- `bkmtp27ie`: the clones were re-vendored with engine eb20b30 (VERSION file), and their full suites are running (`lk-scratch\snap\suite4-*.txt`).
+**Next, in order:**
+1. If the clone suites are OK, run `lk-scratch\snap\commit_system.sh "<clone>" "system: update vendored Lorekeeper (editor and interop fixes)"` for each clone, then `land.sh "<saga>" <HEAD>` with HEADs Realm 8a4c594, Space 0f02dcf, Zombies 3114c1d. Then copy the live repos to `lk-scratch\probe4`, run `baseline.sh` into `docs/build/baselines/probe-after3`, and diff status/validate against probe-before (they must be identical).
+2. Re-run `python -m unittest tests.test_perf` when the machine is idle (the load test flakes under load; earlier idle runs passed).
+3. `gh repo create lorekeeper --private --source . --push`, then `gh repo view --json visibility`. Make sure `.gitignore` excludes Aeon content (it does) and that `docs/build/baselines` holds no secrets (it holds test output only).
+4. Close-out:
+   - final HANDOFF
+   - delete `docs/build/ACTIVE`
+   - remove the "hooks" block from `.claude/settings.json` (keep permissions)
+   - memory: update `C:\Users\Owner\.claude\projects\C--Users-Owner-OneDrive-Documents\memory\aeon-timeline-re-project.md` and add a Lorekeeper memory in this project's memory dir
+   - PushNotification, then the final report (built / evidence / decisions / not done / how to see it / git).
+**Saga findings for the report:**
+- Space has 2 RAIL_REGRESSION FAILs (cards 051/052 at 6840 CE Day 168 come after card 050 at 6842 CE Day 164 on the same rail) and 4 impossible SRD days (cards 110 D367, 111 D374, 205 D366, 206 D378).
+- Realm and Zombies are clean.
+- Backfill decided 42 birthdates (Realm 18, Space 15, Zombies 9) and sourced 26 values. 14 roster pages are deferred in `chronology_deferred.md`.
+- Aeon open-in-app is unverified (access declined twice); the export is in `lk-scratch\aeon_out`.
 **Read order for any new or resumed session:** this file → `BUILD-PLAN.md` (plan + checklist) → the tail of `SESSION-LOG.md`.
 
 ---
