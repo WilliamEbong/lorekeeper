@@ -170,16 +170,14 @@ def _events_of(p, person):
 
 def op_where(p, item, at):
     who, when = p.find(item), parse_at(p, at)
-    placed = [(s, it) for s, it in _events_of(p, who) if s.lo < when.hi and it.fields.get("location")]
+    placed = [(s, it, place) for s, it in _events_of(p, who) if s.lo <= when.lo
+              for place in [next((o for _, o, _ in p.links(it).get("location", []) if o), None)] if place]
     if not placed:
         return {"item": who.name, "at": show_when(p, when), "location": None, "event": None}
-    start, event = placed[-1]
-    target = store.link_parts(event.fields["location"] if isinstance(event.fields["location"], str)
-                              else event.fields["location"][0])
-    place = p.resolve(target[0]) if target else None
-    # uncertain when the event may fall after the date, or when the previous event may come later
-    uncertain = start.hi - 1 >= when.lo or (len(placed) > 1 and placed[-2][0].hi > start.lo)
-    return {"item": who.name, "at": show_when(p, when), "location": place.name if place else (target or [None])[0],
+    start, event, place = placed[-1]
+    # uncertain when the event may fall after the date, or any earlier event may in fact be later
+    uncertain = start.hi - 1 > when.lo or any(s.hi - 1 > start.lo for s, _, _ in placed[:-1])
+    return {"item": who.name, "at": show_when(p, when), "location": place.name,
             "event": event.name, "since": show_when(p, start), "uncertain": uncertain}
 
 
@@ -189,7 +187,7 @@ def op_knows(p, item, at):
     for start, event in _events_of(p, who):
         if start.lo >= when.hi:
             continue
-        bucket = known if start.hi - 1 < when.lo else maybe
+        bucket = known if start.hi - 1 <= when.lo else maybe
         for target, other, _ in p.links(event).get("learns", []):
             bucket.setdefault(other.name if other else target, event.name)
     for name in known:

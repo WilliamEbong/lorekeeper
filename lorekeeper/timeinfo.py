@@ -13,6 +13,15 @@ def _first(fields, keys):
     return None, None
 
 
+def shift(w, duration, cal):
+    """The interval of possible instants of w moved by duration (months may clamp month ends)."""
+    candidates = [w.lo, w.hi - 1]
+    if duration[0]:   # month-end clamping can reorder clock times on adjacent days: add midnight edges
+        candidates += [n for n in ((w.lo // 1440 + 1) * 1440, (w.hi - 1) // 1440 * 1440 - 1) if w.lo <= n < w.hi]
+    moved = [dates.add(n, duration, cal) for n in candidates]
+    return w._replace(lo=min(moved), hi=max(moved) + 1)
+
+
 def calendar_of(p, when):
     return next((c for c in p.calendars if c.id == when.calendar), p.calendars[0])
 
@@ -35,14 +44,16 @@ def item_dates(p, item):
         if start is None and (lo_w or hi_w):          # only bounds known: they are the interval
             lo, hi = (lo_w or hi_w).lo, (hi_w or lo_w).hi
             if lo < hi:
-                start = (lo_w or hi_w)._replace(lo=lo, hi=hi)
+                start = (lo_w or hi_w)._replace(lo=lo, hi=hi,
+                                                provisional=any(w and w.provisional for w in (lo_w, hi_w)))
             else:
                 bad.append(("date_max", f"{f.get('date_max')} is before date_min {f.get('date_min')}"))
         elif start is not None and (lo_w or hi_w):     # bounds narrow a stated date, never move it
             lo = max(start.lo, lo_w.lo) if lo_w else start.lo
             hi = min(start.hi, hi_w.hi) if hi_w else start.hi
             if lo < hi:
-                start = start._replace(lo=lo, hi=hi)
+                flagged = any(w and w.provisional for w in (start, lo_w, hi_w))
+                start = start._replace(lo=lo, hi=hi, provisional=flagged)
             else:
                 bad.append(("date_min" if lo_w else "date_max", "contradicts the stated date"))
         raw = f.get("duration")
@@ -51,11 +62,7 @@ def item_dates(p, item):
             bad.append(("duration", raw))
         category = p.schema["types"].get(item.type, {}).get("category")
         if start and end is None and category != "person":
-            cal = calendar_of(p, start)
-            # possible ends are start instants plus the duration; add() never decreases, so the
-            # bounds come from the first and last possible start minute
-            end = start._replace(lo=dates.add(start.lo, duration, cal),
-                                 hi=dates.add(start.hi - 1, duration, cal) + 1) if duration else start
+            end = shift(start, duration, calendar_of(p, start)) if duration else start
         cache[id(item)] = (start, end, bad)
     return cache[id(item)]
 

@@ -38,6 +38,14 @@ class TimeOps(unittest.TestCase):
         self.assertEqual([i["name"] for i in run("timeline", type="event", since="2020")["items"]],
                          ["Crossing Harrow Pass"])
 
+    def test_where_and_knows(self):
+        where = run("where", item="Mara Quell", at="2020-06-01")
+        self.assertEqual((where["location"], where["event"]), ("Harrow Pass", "Crossing Harrow Pass"))
+        self.assertEqual(run("where", item="Mara Quell", at="2019-11-02 22:00")["location"], "Saltmarsh")
+        self.assertIsNone(run("where", item="Mara Quell", at="2000")["location"])
+        self.assertEqual([k["item"] for k in run("knows", item="Tess Varga", at="2021")["knows"]], ["Ivo Brandt"])
+        self.assertEqual(run("knows", item="Tess Varga", at="2019")["knows"], [])
+
     def test_convert_and_unparsed_dates(self):
         self.assertEqual(run("convert", date="November 2, 2019")["calendars"]["gregorian"]["from"], "2019-11-02")
         with tempfile.TemporaryDirectory() as tmp:
