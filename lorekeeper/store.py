@@ -7,6 +7,7 @@ import re
 import tempfile
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from . import dates, fm
 
@@ -126,6 +127,11 @@ def inside(root, path):
     return path == root or path.startswith(root.rstrip(os.sep) + os.sep)
 
 
+def _slurp(path):
+    with open(path, "rb") as fh:
+        return fh.read()
+
+
 def find_root(start="."):
     """The nearest folder at or above start that holds lore.json."""
     here = os.path.abspath(start)
@@ -225,6 +231,9 @@ class Project:
 
     # ---- loading -------------------------------------------------------
     def rel(self, path):
+        prefix = self.root.rstrip(os.sep) + os.sep
+        if path.startswith(prefix):          # the common case: a path os.walk built under root
+            return path[len(prefix):].replace(os.sep, "/")
         return os.path.relpath(path, self.root).replace(os.sep, "/")
 
     def files(self):
@@ -243,8 +252,12 @@ class Project:
                         yield os.path.join(dirpath, name)
 
     def _load(self):
-        for path in self.files():
-            item = self.read(path)
+        paths = list(self.files())
+        # file opens dominate on Windows (antivirus scans each one); overlap them, parse in order
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            blobs = list(pool.map(_slurp, paths))
+        for path, data in zip(paths, blobs):
+            item = self.read(path, data)
             if item is not None:
                 self.items.append(item)
         self._index()
@@ -278,10 +291,10 @@ class Project:
                     if other is not None:
                         self._back.setdefault(id(other), {}).setdefault(role, []).append(item)
 
-    def read(self, path):
+    def read(self, path, data=None):
         rel = self.rel(path)
-        with open(path, "rb") as fh:
-            data = fh.read()
+        if data is None:
+            data = _slurp(path)
         try:
             text = data.decode("utf-8")
         except UnicodeDecodeError as exc:
