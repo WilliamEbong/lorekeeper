@@ -312,6 +312,13 @@ class ServeTests(unittest.TestCase):
         self.assertEqual(len(calls), 2)
         self.assertIsNot(calls[0], calls[1])
 
+    def test_stamp_reads_a_single_paths_string_like_the_project(self):
+        before = serve.stamp(self.root, {"paths": "Characters"})
+        self.assertNotEqual(before, serve.stamp(self.root, {"paths": ["Events"]}))
+        with open(self.root / "Characters" / "Mara Quell.md", "a", encoding="utf-8") as fh:
+            fh.write("\nMore.\n")
+        self.assertNotEqual(serve.stamp(self.root, {"paths": "Characters"}), before)
+
     def test_stamp_scopes_paths_excludes_folders_and_deduplicates_roots(self):
         config = {"paths": ["Characters"], "exclude": ["Archive"]}
         (self.root / "lore.json").write_text(json.dumps(config), encoding="utf-8")

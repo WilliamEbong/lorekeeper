@@ -260,6 +260,12 @@ class BlockListTests(unittest.TestCase):
             "  - [[Ivo]]\n  - 'O''Neil'\n  -\nstatus: draft\naliases:\n- the storm\n---\nBody\n")
     LIST = 'participants:\n  - "[[Mira Vale]]"\n  # a note\n  - [[Ivo]]\n  - \'O\'\'Neil\'\n  -\n'
 
+    def test_emptying_a_value_keeps_a_stray_item_line_unread(self):
+        text = "---\nsummary: hello\n  - stray\n---\n"
+        edited = update(text, set={"summary": ""})
+        self.assertEqual(edited, '---\nsummary: ""\n  - stray\n---\n')
+        self.assertEqual(parse(edited).fields["summary"], "")
+
     def test_read(self):
         front = parse(self.TEXT)
         self.assertEqual(front.fields, {"id": "EVENT-STORM", "status": "draft", "aliases": ["the storm"],

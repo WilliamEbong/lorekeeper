@@ -535,6 +535,7 @@ def import_into(project, data, into=None):
             if name.lower() not in names and not project.resolve(name):
                 path = planner.path_for(type_, name)
         names.add(name.lower())
+        names.add(os.path.splitext(os.path.basename(path))[0].lower())   # its file stem also resolves
         planned.add(path.lower())
         targets[ident] = name
         if name != original:

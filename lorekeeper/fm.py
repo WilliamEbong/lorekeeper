@@ -186,7 +186,10 @@ def update(text, set=None, unset=(), body=None) -> str:
             raw_lines[number - 1:last] = [""] * (last - number + 1)
         elif key in changes and fm.fields[key] != changes[key]:
             ending = "\r\n" if raw_lines[number - 1].endswith("\r\n") else "\n"
-            raw_lines[number - 1:last] = [formatted[key] + ending] + [""] * (last - number)
+            line = formatted[key]
+            if line.endswith(":") and last < len(raw_lines) and _ITEM.fullmatch(raw_lines[last].rstrip("\r\n")):
+                line += ' ""'   # a bare "key:" would adopt the "- x" line below it as a list
+            raw_lines[number - 1:last] = [line + ending] + [""] * (last - number)
     # Unset wins on overlap; unsupported duplicates remain untouched.
     added = "".join(line + fm.newline for key, line in formatted.items()
                     if key not in fm.fields and key not in removed)

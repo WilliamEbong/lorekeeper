@@ -52,7 +52,8 @@ def stamp(root, config=None):
                 elif entry.name.endswith(".md") and not entry.name.startswith("~$"):
                     record(entry.path, entry)
 
-    for base in config.get("paths", ["."]):
+    paths = config.get("paths", ["."])
+    for base in [paths] if isinstance(paths, str) else paths:   # "paths": "Wiki", as Project reads it
         top = os.path.normpath(os.path.join(root, base))
         if not store.inside(root, top):
             raise LoreError("INVALID", f"{store.CONFIG} path {base!r} is outside the project folder")

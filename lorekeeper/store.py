@@ -381,11 +381,12 @@ class Project:
         out, claims = [], {}
         for item in self.items:
             name_line = item.line("canonical_name" if "canonical_name" in item.fields else "name")
-            keys = [(item.name, "name", name_line), (item.stem, "stem", 1)]
+            # Only real files claim a stem: saga cards share their architecture file's path.
+            keys = [(item.name, "name", name_line)] + ([(item.stem, "stem", 1)] if item.path.endswith(".md") else [])
             keys += [(str(alias), "alias", item.line("aliases")) for alias in item.aliases]
             for label, kind, line in keys:
                 first, first_kind = claims.setdefault(label.lower(), (item, kind))
-                if label and first is not item and not kind == first_kind == "name":   # that is DUPLICATE_NAME
+                if label and first is not item and first.name.lower() != item.name.lower():   # that is DUPLICATE_NAME
                     out.append(finding("WARN", "AMBIGUOUS_NAME", f"[[{label}]] could mean {first.name} "
                                        f"({first.path}) or {item.name} ({item.path})", item.path, line))
         return out

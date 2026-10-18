@@ -455,6 +455,14 @@ class InteropTests(unittest.TestCase):
         self.assertEqual((ada.fields["born"], ada.fields["died"]), ("1815", "1852"))
         self.assertNotIn("Character", loaded.config.get("types", {}))
 
+    def test_a_name_that_matches_another_planned_file_stem_is_suffixed(self):
+        path = self.root / "stems.csv"
+        store.atomic_write(path, "label,type\r\nAcme Inc.,organization\r\nAcme Inc,character\r\n")
+        target = self.empty()
+        counts = interop.import_into(target, interop.read_csv(path))
+        self.assertEqual(counts["created"], 2)
+        self.assertEqual({i.name for i in store.Project(target.root).items}, {"Acme Inc.", "Acme Inc (2)"})
+
     def test_aeon_role_on_builtin_key_adds_its_target_types(self):
         doc = sample()
         defs, data = doc["core"]["definitions"], doc["core"]["data"]

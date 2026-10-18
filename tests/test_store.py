@@ -200,6 +200,22 @@ class Writing(WorldCase):
 
 
 class AuditFixes(WorldCase):
+    def test_ambiguous_names_skip_card_paths_and_duplicate_names(self):
+        import copy
+        base = self.p.find("Chapter 1")
+        cards = []
+        for n in (1, 2):   # saga cards share their architecture file, so they share its stem
+            card = copy.copy(base)
+            card.path, card.name, card.aliases = f"Chapters/Arch.md#CH00{n}", f"Card {n}", []
+            cards.append(card)
+        twin = copy.copy(self.p.find("Mara Quell"))
+        twin.path = "Locations/Mara Quell.md"   # same name and stem: DUPLICATE_NAME only
+        self.p.items = [i for i in self.p.items if i is not base] + cards + [twin]
+        self.p._index()
+        codes = [f["code"] for f in self.p.findings()]
+        self.assertNotIn("AMBIGUOUS_NAME", codes)
+        self.assertIn("DUPLICATE_NAME", codes)
+
     def ambiguous(self, project):
         return [(f["path"], f["line"], f["detail"]) for f in project.findings() if f["code"] == "AMBIGUOUS_NAME"]
 
