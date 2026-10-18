@@ -1,0 +1,2 @@
+validate CH003 ok stage=COMPLETE
+exit=0

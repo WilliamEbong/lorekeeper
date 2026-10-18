@@ -1,0 +1,20 @@
+OK manifest PROJECT_MANIFEST.json parsed project=2071
+OK authority world_bible World_Bible_2071_Master_v1.4.md sha256=0a87febff7d7a14e
+OK authority story_architecture Story_Architecture_2071_Master_v1.4.md sha256=90dd73a4c830348a
+OK authority style_bible Style_Bible_2071_v1.0.md sha256=440e55bdc40d7975
+OK architecture 500 cards, 14 required fields each
+OK cards 22 card(s); 18 Wiki character page(s) resolve
+OK dir archive _system/archive
+OK dir chapters Chapters
+OK dir knowledge _system/knowledge
+OK dir logs _system/logs
+OK dir roles _system/roles
+OK dir runtime _system/runtime (gitignored; created on demand)
+OK dir skills _system/skills
+OK dir state _system/state
+OK dir system _system
+OK dir wiki Wiki
+OK dir workflow _system/workflow
+OK state 3 chapter state file(s) parsed
+OK git repository usable
+exit=0

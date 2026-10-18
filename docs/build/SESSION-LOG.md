@@ -141,3 +141,4 @@ Append-only. Newest entries at the bottom. Each entry gives: date/time (UTC if k
   - `test_docs` genericity bans HO-numbers, word caps, saga terms (Mandate, Ilyra, 2071, "Realm saga"…) and Wiki titles in shared docs.
 - Decision: status/validate/health can rewrite status files, so baselines run on full copies (`lk-scratch\probe`), never on the live repos.
 - Decision: Realm rules are encoded as Wiki-event rules (`tag: duel` max 1d; `role: return_of` exactly 7d). "Paired cards 7 days apart" has no structured pairing data and is reported as not encoded.
+- Baselines GREEN (2026-10-18): all three suites and health exit 0, on the probes and the clones. Output in docs/build/baselines/{probe,clone}-before/. No stop condition.

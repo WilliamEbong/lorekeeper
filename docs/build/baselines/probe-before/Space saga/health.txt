@@ -1,0 +1,22 @@
+OK manifest PROJECT_MANIFEST.json parsed project=Space
+OK authority world_bible DARK_SPACE_OPERA_WORLD_BIBLE_V6.md sha256=2b823a59f8b2970d
+OK authority story_architecture DARK_SPACE_OPERA_500_CHAPTER_BRAIDED_ARCHITECTURE_V2.md sha256=48cf5cbf269afc41
+OK authority military_bible DARK_SPACE_OPERA_MILITARY_SYSTEMS_BIBLE_V4_COMPLETE.md sha256=917a04f1cea533f2
+OK authority style_bible Style_Bible_Space_v0.1.md sha256=3758160855e6bef6
+OK authority conversations Space_Conversations_v0.1.md sha256=734076050b693ddd
+OK architecture 500 cards, 20 required fields each
+OK cards 80 card(s); 15 Wiki character page(s) resolve
+OK dir archive _system/archive
+OK dir chapters Chapters
+OK dir knowledge _system/knowledge
+OK dir logs _system/logs
+OK dir roles _system/roles
+OK dir runtime _system/runtime
+OK dir skills _system/skills
+OK dir state _system/state
+OK dir system _system
+OK dir wiki Wiki
+OK dir workflow _system/workflow
+OK state 5 chapter state file(s) parsed
+OK git repository usable
+exit=0

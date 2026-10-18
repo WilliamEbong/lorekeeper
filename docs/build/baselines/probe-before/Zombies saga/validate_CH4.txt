@@ -1,0 +1,2 @@
+validate CH004 ok stage=READY_FOR_HUMAN
+exit=0
