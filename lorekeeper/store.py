@@ -173,6 +173,12 @@ class Item:
         aliases = f.get("aliases", [])
         self.aliases = aliases if isinstance(aliases, list) else [aliases] if aliases else []
 
+    @classmethod
+    def from_fields(cls, path, fields, body=""):
+        """An item that lives only in memory (e.g. a saga chapter card)."""
+        text = fm.update("", set=clean_fields(fields), body=body)
+        return cls(path, text, sha256(text.encode("utf-8")), fm.parse(text))
+
     @property
     def body(self):
         return self.fm.body
@@ -204,6 +210,16 @@ class Project:
         self._load()
 
     @classmethod
+    def from_items(cls, root, config, items):
+        """A project over given items, without scanning files."""
+        p = cls.__new__(cls)
+        p.root, p.config = os.path.abspath(root), config
+        p.schema, p.calendars = merged_schema(config), dates.calendars(config.get("calendars"))
+        p.problems, p.items = [], list(items)
+        p._index()
+        return p
+
+    @classmethod
     def open(cls, start="."):
         return cls(find_root(start))
 
@@ -231,6 +247,9 @@ class Project:
             item = self.read(path)
             if item is not None:
                 self.items.append(item)
+        self._index()
+
+    def _index(self):
         self.by_id, self.by_name, self.by_stem, self.by_alias = {}, {}, {}, {}
         for item in self.items:
             if item.id:

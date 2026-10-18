@@ -3,7 +3,7 @@ import json
 import os
 from collections import namedtuple
 
-from . import dates, store
+from . import checks, dates, store
 from .timeinfo import calendar_of, item_dates, parse_at, show_when
 from .store import LoreError, Project
 
@@ -158,11 +158,53 @@ def op_convert(p, date):
                           for c in p.calendars}}
 
 
+def _events_of(p, person):
+    """(start, item) for every dated item the person takes part in, earliest first."""
+    out = []
+    for it in p.backlinks(person).get("participants", []):
+        start = item_dates(p, it)[0]
+        if start is not None:
+            out.append((start, it))
+    return sorted(out, key=lambda pair: (pair[0].lo, pair[0].hi))
+
+
+def op_where(p, item, at):
+    who, when = p.find(item), parse_at(p, at)
+    placed = [(s, it) for s, it in _events_of(p, who) if s.lo < when.hi and it.fields.get("location")]
+    if not placed:
+        return {"item": who.name, "at": show_when(p, when), "location": None, "event": None}
+    start, event = placed[-1]
+    target = store.link_parts(event.fields["location"] if isinstance(event.fields["location"], str)
+                              else event.fields["location"][0])
+    place = p.resolve(target[0]) if target else None
+    # uncertain when the event may fall after the date, or when the previous event may come later
+    uncertain = start.hi - 1 >= when.lo or (len(placed) > 1 and placed[-2][0].hi > start.lo)
+    return {"item": who.name, "at": show_when(p, when), "location": place.name if place else (target or [None])[0],
+            "event": event.name, "since": show_when(p, start), "uncertain": uncertain}
+
+
+def op_knows(p, item, at):
+    who, when = p.find(item), parse_at(p, at)
+    known, maybe = {}, {}
+    for start, event in _events_of(p, who):
+        if start.lo >= when.hi:
+            continue
+        bucket = known if start.hi - 1 < when.lo else maybe
+        for target, other, _ in p.links(event).get("learns", []):
+            bucket.setdefault(other.name if other else target, event.name)
+    for name in known:
+        maybe.pop(name, None)
+    return {"item": who.name, "at": show_when(p, when),
+            "knows": [{"item": k, "learned_in": v} for k, v in known.items()],
+            "may_know": [{"item": k, "learned_in": v} for k, v in maybe.items()]}
+
+
 def op_check(p):
     found = p.findings()
     for it in p.items:
         for key, value in item_dates(p, it)[2]:
             found.append(store.finding("WARN", "DATE_UNPARSED", f"{key}: {value}", it.path, it.line(key)))
+    found += checks.run(p)
     found.sort(key=lambda f: (f["severity"] != "FAIL", f["path"], f["line"], f["code"]))
     fails = sum(f["severity"] == "FAIL" for f in found)
     return {"findings": found, "fail": fails, "warn": len(found) - fails}
@@ -203,6 +245,10 @@ OPS = [
         Param("until", S, False, "date or item: until")], False, op_timeline),
     Op("convert", "Show a date in every calendar of the project.",
        [Param("date", S, True, "date text")], False, op_convert),
+    Op("where", "Where a person last was at a date: their latest located event by then.",
+       [Param("item", S, True, "person"), Param("at", S, True, "a date, or an item name")], False, op_where),
+    Op("knows", "What a person has learned by a date (learns links on events they took part in).",
+       [Param("item", S, True, "person"), Param("at", S, True, "a date, or an item name")], False, op_knows),
     Op("check", "Check the project; FAIL lines are definite problems, WARN lines possible ones.",
        [], False, op_check),
 ]

@@ -1,14 +1,19 @@
 # HANDOFF — Lorekeeper build
 
-**Last updated:** 2026-10-18, session 2, at the feature 001 → 002 boundary.
-**Current position:** Feature 001 core is DONE (commit `69979c6`, 76 tests green). Codex built fm.py and mcp.py; Claude built store, ops and cli. A Codex adversarial review produced 16 fixes. **Next: feature 002 time.** Spec, plan and tasks are in `specs/002-time/`. T001 is a Codex brief for `lorekeeper/dates.py` + `tests/test_dates.py`. `tests/pending_saga_dates.py` gets renamed to `test_saga_dates.py` once dates.py exists. The saga SRD calendar config is in that test.
-**Key facts from this session:**
-- The Skill tool can't see the speckit skills; read `.claude/skills/speckit-*/SKILL.md` and follow it by hand. The converge rule is: append `## Phase N: Convergence` tasks, or report converged.
-- context7 is out of quota; use WebFetch. MCP 2026-07-28 is stateless (`server/discover`, `_meta`).
-- Aeon computer-use was declined once; ask again only at 006.
-- Snapshot repo states before and after every Codex run: `C:\Users\Owner\lk-scratch\snap\snap.sh <name>`, then diff.
-- The Bash tool mangles long heredocs. Write patch scripts to the scratchpad and run them.
-- Codex read-only reviews can't write temp files, so I run the tests myself.
+**Last updated:** 2026-10-18, session 2, cut off by the usage limit during feature 003.
+**Current position:** 001 and 002 are done. 003 checks is implemented: `checks.py` (Codex, 238 lines), wired into `check`, plus the ops `where` and `knows`. On the fixture, `check` shows PARENT_AGE and DEAD_PARTICIPANT as FAIL. My files are committed.
+**IN FLIGHT at cutoff:** Codex background job `task-mvd5i960-f2envw` is fixing 8 dates.py findings from the 002 review (items 1,2,5,7,8,9,10,12 in `scratchpad/review002.txt`; that path is session-temporary). The text of those items is summarised in SESSION-LOG.
+**Next steps:**
+1. Check the job: `node ~/.claude/plugins/cache/openai-codex/codex/1.0.6/scripts/codex-companion.mjs status task-mvd5i960-f2envw`, then `result`. Stray-check with `snap.sh`, then diff. Run `python -m unittest discover -s tests -t .`. If dates.py is broken or half-done, `git diff lorekeeper/dates.py` and fix or re-brief.
+2. Commit the dates fixes. Finish 003: tick its tasks, add the perf check (3,000 items check < 2 s), converge, ponytail-review, Codex adversarial review.
+3. Feature 004. Clones are at `C:\Users\Owner\lk-scratch\sagas\*`, full probe copies (with in-progress state) at `C:\Users\Owner\lk-scratch\probe\*`. Baselines ran via `lk-scratch\snap\baseline.sh` into `docs/build/baselines/{probe,clone}-before/`; check that they are green. The spec draft is in `specs/004-saga-integration/spec.md`, and the engine seams are summarised in SESSION-LOG.
+   Decision: land 004 and 005 together in one ff-merge, so the vendored copy includes the editor.
+**Key facts:**
+- Speckit skills: read `.claude/skills/speckit-*/SKILL.md` and follow it by hand.
+- context7 is out of quota; use WebFetch.
+- Aeon computer-use was declined; ask again once, at 006.
+- Snapshots: `C:\Users\Owner\lk-scratch\snap\snap.sh <name>`. Codex waiter: `snap\codexwait.sh <task-id>`.
+- Long heredocs break the Bash tool; write patch scripts to a file.
 **Read order for any new or resumed session:** this file → `BUILD-PLAN.md` (plan + checklist) → the tail of `SESSION-LOG.md`.
 
 ---

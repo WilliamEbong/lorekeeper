@@ -33,20 +33,29 @@ def item_dates(p, item):
         lo_w = read("date_min", f.get("date_min") or None)
         hi_w = read("date_max", f.get("date_max") or None)
         if start is None and (lo_w or hi_w):          # only bounds known: they are the interval
-            start = (lo_w or hi_w)._replace(lo=(lo_w or hi_w).lo, hi=(hi_w or lo_w).hi)
-        elif start is not None:                        # bounds narrow a stated date
+            lo, hi = (lo_w or hi_w).lo, (hi_w or lo_w).hi
+            if lo < hi:
+                start = (lo_w or hi_w)._replace(lo=lo, hi=hi)
+            else:
+                bad.append(("date_max", f"{f.get('date_max')} is before date_min {f.get('date_min')}"))
+        elif start is not None and (lo_w or hi_w):     # bounds narrow a stated date, never move it
             lo = max(start.lo, lo_w.lo) if lo_w else start.lo
             hi = min(start.hi, hi_w.hi) if hi_w else start.hi
-            start = start._replace(lo=lo, hi=max(hi, lo + 1))
+            if lo < hi:
+                start = start._replace(lo=lo, hi=hi)
+            else:
+                bad.append(("date_min" if lo_w else "date_max", "contradicts the stated date"))
+        raw = f.get("duration")
+        duration = dates.parse_duration(str(raw)) if raw else None
+        if raw and duration is None:
+            bad.append(("duration", raw))
         category = p.schema["types"].get(item.type, {}).get("category")
         if start and end is None and category != "person":
-            raw = f.get("duration")
-            duration = dates.parse_duration(str(raw)) if raw else None
-            if raw and duration is None:
-                bad.append(("duration", raw))
             cal = calendar_of(p, start)
-            end = start._replace(lo=dates.add(start.lo, duration, cal), hi=dates.add(start.hi, duration, cal)) \
-                if duration else start
+            # possible ends are start instants plus the duration; add() never decreases, so the
+            # bounds come from the first and last possible start minute
+            end = start._replace(lo=dates.add(start.lo, duration, cal),
+                                 hi=dates.add(start.hi - 1, duration, cal) + 1) if duration else start
         cache[id(item)] = (start, end, bad)
     return cache[id(item)]
 
@@ -62,10 +71,11 @@ def show_when(p, when):
 
 
 def parse_at(p, at):
-    """A date string, or an item name meaning that item's start."""
+    """A date string, or an item name meaning that item's whole span (start to end)."""
     when = dates.parse(at, p.calendars)
     if when is None:
-        when = item_dates(p, p.find(at))[0]
-        if when is None:
+        start, end, _ = item_dates(p, p.find(at))
+        if start is None:
             raise LoreError("INVALID", f"{at!r} is neither a date nor a dated item")
+        when = start._replace(hi=max(start.hi, (end or start).hi))
     return when

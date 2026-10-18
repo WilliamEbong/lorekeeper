@@ -118,3 +118,26 @@ Append-only. Newest entries at the bottom. Each entry gives: date/time (UTC if k
 - **Saga finding:** 1,497 of 1,501 card dates parse. The other 4 are real architecture errors in Space: `SRD Y0 D367`, `Y0 D374`, `Y1 D366`, `Y1 D378`. SRD years have 365 days, so these days cannot exist. They are kept in `KNOWN_INVALID` for the chrono-report.
 - Decision: Space projects list `[srd, gregorian]` calendars, because the architecture header carries an ISO date.
 - **Converge 002:** FR-1..FR-11 met; converged. 104 tests green.
+
+### Feature 003 checks + 002 review fixes (2026-10-18), cut off by the usage limit
+- **Codex review of 002:** 12 findings.
+  - I fixed timeinfo items: duration end bounds use the last possible start minute; contradictory date_min/date_max is reported, never invented; an item used as `at` means its whole span; an invalid duration is always DATE_UNPARSED.
+  - Codex job `task-mvd5i960-f2envw` is fixing the dates.py items:
+    1. Impossible dates (Feb 30, SRD day 366) must not fall back to another reading.
+    2. "May 3,2071".
+    5. Months calendars use the configured month count per year.
+    7. Signed age-year bounds.
+    8. Hour-only format precision.
+    9. Clock text inside notes.
+    10. No duplicate time when the display template has one.
+    12. Arithmetic leap-cycle year starts, no per-year materialisation.
+- Codex built `checks.py` + `tests/test_checks.py` (122 tests green before wiring). I wired `checks.run` into `check` and added the ops `where` and `knows`. On the fixture: FAIL PARENT_AGE (Ivo/Mara), FAIL DEAD_PARTICIPANT (Ivo on the crossing after his death), WARN BROKEN_LINK.
+- **Saga engine seams for 004** (investigator report):
+  - `profiles.applies` keys on `st.contract(record) >= 2`. chrono will set its own `"chrono": 1` in `saga.py cmd_init_chapter` (L202-267, after `st.new_state`).
+  - Gates are called in `state.py` `_enter` L345 and `complete_stage` L382 (lazy `import profiles`).
+  - `cmd_validate` builds `fails`, with feature blocks at L576-585. `cmd_health` collects oks/fails, gated at L1531. Subcommand pattern at L1612.
+  - `cards.parse_cards` returns `{n: {number, title, fields{label: value}, raw}}`. The rail field: Realm none; Space `Primary allocation`; Zombies `Arc/thread`. The date field is `Date` or `Date/era`.
+  - `fsio`: `atomic_write(path, text)`, `write_json`, `sha256_file`, `append_log`. `GateError(PermissionError)` is at state.py L198. Test fixture: `fixture.make_repo(rich)`.
+  - `test_docs` genericity bans HO-numbers, word caps, saga terms (Mandate, Ilyra, 2071, "Realm saga"…) and Wiki titles in shared docs.
+- Decision: status/validate/health can rewrite status files, so baselines run on full copies (`lk-scratch\probe`), never on the live repos.
+- Decision: Realm rules are encoded as Wiki-event rules (`tag: duel` max 1d; `role: return_of` exactly 7d). "Paired cards 7 days apart" has no structured pairing data and is reported as not encoded.

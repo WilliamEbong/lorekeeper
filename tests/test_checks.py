@@ -1,0 +1,296 @@
+"""Certainty vectors for the public checks API; synthetic worlds stay in memory."""
+import os
+import shutil
+import tempfile
+import time
+import unittest
+from unittest.mock import mock_open, patch
+
+from lorekeeper import checks, dates
+from lorekeeper.store import Item, Project
+from lorekeeper.timeinfo import item_dates, show_when
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FIXTURE = os.path.join(ROOT, "tests", "fixtures", "world")
+
+
+def item(name, type="event", **fields):
+    return Item.from_fields(f"{name}.md", {"type": type, "canonical_name": name, **fields})
+
+
+def project(*items, **config):
+    return Project.from_items(ROOT, config, items)
+
+
+def findings(p, code):
+    return [f for f in checks.run(p) if f["code"] == code]
+
+
+class Comparisons(unittest.TestCase):
+    def test_possible_and_comparisons(self):
+        def w(lo, hi):
+            return dates.When(lo, hi, "minute", False, False, "", "gregorian", "")
+        self.assertEqual(checks.possible(w(-3, 2)), (-3, 1))
+        for compare, vectors in (
+            (checks.compare_ge, [(0, 1, 2, 3, 0, "FAIL"), (0, 3, 2, 4, 0, "WARN"),
+                                 (3, 4, 0, 4, 0, None), (3, 4, 0, 1, 3, None),
+                                 (0, 1, 3, 4, -3, None)]),
+            (checks.compare_eq, [(0, 1, 1, 2, 0, "FAIL"), (0, 2, 1, 2, 0, "WARN"),
+                                 (0, 1, 0, 2, 0, "WARN"), (3, 4, 1, 2, 2, None),
+                                 (0, 1, 1, 2, -1, None)])):
+            for a, b, c, d, lag, expected in vectors:
+                with self.subTest(compare=compare.__name__, vector=(a, b, c, d, lag)):
+                    self.assertEqual(compare(w(a, b), w(c, d), lag), expected)
+
+    def test_same_place_ancestry_siblings_and_cycles(self):
+        town = item("Town", "location")
+        inn = item("Inn", "location", located_in="[[Town]]")
+        room = item("Room", "location", located_in="[[Inn]]")
+        dock = item("Dock", "location", located_in="[[Town]]")
+        a = item("A", "location", located_in="[[B]]")
+        b = item("B", "location", located_in="[[A]]")
+        p = project(town, inn, room, dock, a, b)
+        for x, y in ((town, town), (town, room), (room, town), (a, b)):
+            self.assertTrue(checks.same_place(p, x, y))
+        for x, y in ((room, dock), (a, town), (None, None)):
+            self.assertFalse(checks.same_place(p, x, y))
+
+
+class Checks(unittest.TestCase):
+    def assertSeverity(self, p, code, expected):
+        found = findings(p, code)
+        self.assertEqual([f["severity"] for f in found], [expected] if expected else [], found)
+        return found
+
+    def test_each_dependency(self):
+        for role in ("after", "same_start", "same_end", "sf"):
+            for value, expected in (("2020-01-01 00:00", "FAIL"), ("2020-01-03", "WARN"),
+                                    ("2020-01-03 00:00", None)):
+                with self.subTest(role=role, date=value):
+                    if role in ("after", "sf") and expected == "WARN":
+                        value = "~2020-01-03 00:00"  # Straddle the minimum threshold.
+                    y = item("Y", date="2020-01-01 00:00", end="2020-01-01 00:00")
+                    x = item("X", date=value, end=value, **{role: "[[Y]] +2d"})
+                    self.assertSeverity(project(y, x), "DEPENDENCY", expected)
+        # Distinct endpoints ensure FS, SS, FF and SF are not accidentally conflated.
+        y = item("Y", date="2020-01-01 00:00", end="2020-01-03 00:00")
+        for role, start, end in (("after", "05", "06"), ("same_start", "03", "06"),
+                                 ("same_end", "03", "05"), ("sf", "01", "03")):
+            x = item("X", date=f"2020-01-{start} 00:00", end=f"2020-01-{end} 00:00", **{role: "[[Y]] +2d"})
+            self.assertSeverity(project(x, y), "DEPENDENCY", None)
+
+    def test_missing_dates_and_broken_links(self):
+        for xfields, yfields in (({}, {"date": "2020"}), ({"date": "2020"}, {}),
+                                 ({"date": "nonsense"}, {"date": "2020"})):
+            x, y = item("X", after="[[Y]]", **xfields), item("Y", **yfields)
+            p = project(x, y)
+            self.assertSeverity(p, "DEPENDENCY", None)
+            f = self.assertSeverity(p, "DEPENDENCY_UNDATED", "WARN")[0]
+            self.assertEqual(f["line"], x.line("after"))
+        self.assertEqual(checks.run(project(item("X", after="[[Missing]]"))), [])
+        x = item("X", date="2020", after="[[Y]] +nonsense")
+        self.assertSeverity(project(x, item("Y", date="1900")), "DEPENDENCY", "WARN")
+
+    def test_calendar_lags_and_gap(self):
+        y = item("Y", date="2024-01-31 00:00")
+        x = item("X", date="2024-03-01 00:00", same_start="[[Y]] +1mo 1d")
+        self.assertSeverity(project(x, y), "DEPENDENCY", None)
+        x = item("X", date="2024-01-30 00:00", same_start="[[Y]] -1d")
+        self.assertSeverity(project(x, y), "DEPENDENCY", None)
+        config = [{"type": "days", "id": "short", "epoch": "2000-01-01", "year_days": 360,
+                   "formats": [r"Y(?P<year>\d+) D(?P<day>\d+) (?P<hour>\d+):(?P<minute>\d+)"]},
+                  {"type": "gregorian"}]
+        x = item("X", date="Y1 D001 00:00", same_start="[[Y]] +1y", paired="[[Y]]")
+        y = item("Y", date="2000-01-01 00:00")
+        p = project(x, y, calendars=config, rules=[{"rule": "gap", "role": "paired", "exactly": "1y", "from": "start"}])
+        self.assertEqual(checks.run(p), [])  # A year is 360 days in the subject's calendar.
+
+    def test_month_end_clamping_keeps_all_possible_minutes(self):
+        y = item("Y", date="2023-01-30 23:00..2023-01-31 01:00")
+        for value in ("2023-02-28 00:00", "2023-02-28 23:59"):
+            x = item("X", date=value, same_start="[[Y]] +1mo")
+            self.assertSeverity(project(x, y), "DEPENDENCY", "WARN")
+        x = item("X", date="2023-03-01 00:00", same_start="[[Y]] +1mo")
+        self.assertSeverity(project(x, y), "DEPENDENCY", "FAIL")
+
+    def test_provisional_caps_either_item_or_date(self):
+        for side in ("X", "Y"):
+            for mode in ("status", "date", "other_date"):
+                with self.subTest(side=side, mode=mode):
+                    fields = {"X": {"date": "2000-01-01 00:00", "after": "[[Y]]"},
+                              "Y": {"date": "2020-01-01 00:00"}}
+                    if mode == "status":
+                        fields[side]["status"] = "provisional"
+                    elif mode == "date":
+                        fields[side]["date"] += " (PROVISIONAL)"
+                    else:
+                        fields[side]["end"] = "2021-01-01 (provisional)"
+                    p = project(*(item(name, **f) for name, f in fields.items()))
+                    self.assertSeverity(p, "DEPENDENCY", "WARN")
+
+    def test_dead_and_unborn_participants_and_learns(self):
+        for role in ("participants", "learns"):
+            for code, field, values in (
+                ("DEAD_PARTICIPANT", "died", (("2019", "FAIL"), ("2020", "WARN"), ("2021", None))),
+                ("UNBORN_PARTICIPANT", "born", (("2021", "FAIL"), ("2020", "WARN"), ("2019", None)))):
+                for value, expected in values:
+                    with self.subTest(role=role, code=code, date=value):
+                        person = item("Person", "hero", **{field: value})
+                        event = item("Event", date="2020-06-01 00:00", end="2020-06-02 00:00", **{role: "[[Person]]"})
+                        self.assertSeverity(project(person, event, types={"hero": {"category": "person"}}), code, expected)
+        person = item("Person", "character", born="2020-01-01 00:00", died="2020-01-02 00:00")
+        for value in ("2020-01-01 00:00", "2020-01-02 00:00"):
+            self.assertEqual(checks.run(project(person, item("E", date=value, participants="[[Person]]"))), [])
+        # Non-people are not subject to mortality checks; an event can span a birth.
+        org = item("Guild", "organization", died="1900")
+        event = item("E", date="2019", end="2021", participants=["[[Person]]", "[[Guild]]"])
+        self.assertSeverity(project(person, org, event), "UNBORN_PARTICIPANT", None)
+
+    def test_age_sanity_and_settings(self):
+        for birth, expected in (("2010", "FAIL"), ("2008", "WARN"), ("2000", None)):
+            parent = item("Parent", "character", born=birth)
+            child = item("Child", "character", born="2020-06-01 00:00", parent="[[Parent]]")
+            self.assertSeverity(project(parent, child), "PARENT_AGE", expected)
+        for birth, expected in (("1800", "FAIL"), ("1890", "WARN"), ("1900", None)):
+            person = item("Person", "character", born=birth)
+            event = item("Event", date="2020-06-01 00:00", participants="[[Person]]")
+            self.assertSeverity(project(person, event), "AGE_LIMIT", expected)
+        parent = item("P", "character", born="2000-01-01 00:00")
+        child = item("C", "character", born="2010-01-01 00:00", parent="[[P]]")
+        event = item("E", date="2031", participants="[[P]]")
+        p = project(parent, child, event, checks={"min_parent_age": 10, "max_age": 30})
+        self.assertSeverity(p, "PARENT_AGE", None)
+        self.assertSeverity(p, "AGE_LIMIT", "FAIL")
+
+    def test_two_places_certainty_locations_and_switch(self):
+        person, a, b = item("P", "character"), item("A", "location"), item("B", "location")
+        for start, end, expected in (("2020-01-01 10:30", "2020-01-01 12:00", "FAIL"),
+                                     ("~2020-01-01 11:15", "~2020-01-01 11:30", "WARN"),
+                                     ("2020-01-01 12:00", "2020-01-01 13:00", None),
+                                     ("2020-01-01", "2020-01-01", None)):
+            x = item("X", date="2020-01-01 10:00", end="2020-01-01 11:00", participants="[[P]]", location="[[A]]")
+            y = item("Y", date=start, end=end, participants="[[P]]", location="[[B]]")
+            self.assertSeverity(project(person, a, b, x, y), "TWO_PLACES", expected)
+            self.assertSeverity(project(person, a, b, x, y, checks={"two_places": "off"}), "TWO_PLACES", None)
+        y = item("Y", date="2020-01-01 10:30", end="2020-01-01 12:00", participants="[[P]]", location="[[B]]")
+        nested = item("B", "location", located_in="[[A]]")
+        self.assertSeverity(project(person, a, nested, x, y), "TWO_PLACES", None)
+        provisional = item("P", "character", status="provisional")
+        self.assertSeverity(project(provisional, a, b, x, y), "TWO_PLACES", "WARN")
+        # Day precision suppresses only possible clashes, not definite multi-day overlap.
+        x = item("X", date="2020-01-01", end="2020-01-05", participants="[[P]]", location="[[A]]")
+        y = item("Y", date="2020-01-03", end="2020-01-06", participants="[[P]]", location="[[B]]")
+        self.assertSeverity(project(person, a, b, x, y), "TWO_PLACES", "FAIL")
+
+    def test_max_duration_vectors_and_selection(self):
+        rule = {"rule": "max_duration", "max": "1d", "select": {"type": "event", "tag": "duel", "rail": "A"}}
+        for end, expected in (("2020-01-03 00:00", "FAIL"), ("2020-01-02", "WARN"),
+                              ("2020-01-01 23:59", None)):
+            event = item("E", date="2020-01-01 00:00", end=end, tags=["duel"], rail="A")
+            self.assertSeverity(project(event, rules=[rule]), "MAX_DURATION", expected)
+        # The half-open hull includes a minute beyond the exact endpoint: at max is WARN.
+        event = item("E", date="2020-01-01 00:00", duration="1d")
+        self.assertSeverity(project(event, rules=[{"rule": "max_duration", "max": "1d"}]), "MAX_DURATION", "WARN")
+        for fields in ({"tags": ["other"], "rail": "A"}, {"tags": "duel", "rail": "B"},
+                       {"type": "chapter", "tags": "duel", "rail": "A"}):
+            event = item("E", date="2020-01-01", end="2020-02-01", **fields)
+            self.assertEqual(checks.run(project(event, rules=[rule])), [])
+
+    def test_gap_exact_min_max_from_start_and_end(self):
+        y = item("Y", date="2020-01-01 00:00", end="2020-01-03 00:00")
+        for origin, target in (("start", 8), ("end", 10)):
+            for bound in ("exactly", "min", "max"):
+                wrong = target + (1 if bound == "max" else -1)
+                for value, expected in ((f"2020-01-{wrong:02} 00:00", "FAIL"),
+                                        (f"2020-01-{target:02}", "WARN"),
+                                        (f"2020-01-{target:02} 00:00", None)):
+                    with self.subTest(origin=origin, bound=bound, date=value):
+                        # For min, uncertainty must straddle the target, not start at it.
+                        if bound == "min" and expected == "WARN":
+                            value = f"~2020-01-{target:02} 00:00"
+                        x = item("X", date=value, paired="[[Y]]")
+                        rule = {"rule": "gap", "role": "paired", bound: "7d", "from": origin}
+                        self.assertSeverity(project(x, y, rules=[rule]), "GAP", expected)
+
+    def test_monotonic_numeric_order_groups_and_uncertainty(self):
+        rule = {"rule": "monotonic", "order": "chapter", "group": "rail"}
+        for date, expected in (("2019", "FAIL"), ("2020", "WARN"), ("2021", None)):
+            a = item("A", date="2020-06-01 00:00", chapter="2", rail="main")
+            b = item("B", date=date, chapter="10", rail="main")
+            other = item("Other", date="1800", chapter="11", rail="side")
+            bad = item("Bad", date="1800", chapter="invalid", rail="main")
+            self.assertSeverity(project(b, other, bad, a, rules=[rule]), "ORDER_REGRESSION", expected)
+        a = item("A", date="2020", chapter="1")
+        b = item("B", date="1900..2100", chapter="2")
+        c = item("C", date="2000", chapter="3")
+        found = findings(project(a, b, c, rules=[rule]), "ORDER_REGRESSION")
+        self.assertEqual([(f["path"], f["severity"]) for f in found], [("B.md", "WARN"), ("C.md", "FAIL")])
+        c = item("C", date="1900", chapter="1.0")
+        self.assertEqual(checks.run(project(a, c, rules=[rule])), [])
+
+    def test_custom_codes_and_rule_severity_caps(self):
+        a = item("A", date="2020", chapter="1")
+        b = item("B", date="2000", end="2002", chapter="2", paired="[[A]]")
+        rules = [{"rule": "monotonic", "order": "chapter", "code": "RAIL_REGRESSION"},
+                 {"rule": "max_duration", "max": "1d", "select": {"canonical_name": "B"}, "code": "LONG"},
+                 {"rule": "gap", "role": "paired", "min": "7d", "code": "SHORT"}]
+        for rule in rules:
+            self.assertSeverity(project(a, b, rules=[rule]), rule["code"], "FAIL")
+            self.assertSeverity(project(a, b, rules=[{**rule, "severity": "warn"}]), rule["code"], "WARN")
+
+    def test_story_order_opt_in_definite_only_and_fileless_projects(self):
+        a = item("A", date="2020")
+        b = item("B", date="1900..2100")
+        c = item("C", date="2000")
+        source = mock_open(read_data="[[A|First]]\n[[Unknown]] [[ ]] [[B]]\n[[C]]")
+        with patch("lorekeeper.checks.open", source):
+            self.assertEqual(checks.run(project(a, b, c)), [])
+            source.assert_not_called()
+            found = self.assertSeverity(project(a, b, c, checks={"story_order": True}), "STORY_ORDER", "WARN")
+            self.assertEqual(found[0]["path"], "C.md")
+            source.assert_called_once_with(os.path.join(ROOT, "narrative.md"), encoding="utf-8")
+        with patch("lorekeeper.checks.open", side_effect=FileNotFoundError):
+            self.assertEqual(checks.run(project(a, checks={"story_order": True})), [])
+
+    def test_finding_schema_lines_and_formatted_dates(self):
+        y = item("Other", date="2020-02-01 12:00")
+        x = item("Subject", date="2020-01-01 12:00", after="[[Other]]")
+        p = project(x, y)
+        f = self.assertSeverity(p, "DEPENDENCY", "FAIL")[0]
+        self.assertEqual(set(f), {"severity", "code", "detail", "path", "line"})
+        self.assertEqual((f["path"], f["line"]), (x.path, x.line("after")))
+        for i in (x, y):
+            self.assertIn(i.name, f["detail"])
+            self.assertIn(show_when(p, item_dates(p, i)[0])["from"], f["detail"])
+        x = item("X", start="2020", chapter="1")
+        y = item("Y", start="2000", chapter="2")
+        p = project(x, y, rules=[{"rule": "monotonic", "order": "chapter"}])
+        f = self.assertSeverity(p, "ORDER_REGRESSION", "FAIL")[0]
+        self.assertEqual((f["path"], f["line"]), (y.path, y.line("start")))
+
+    def test_3000_in_memory_items_check_under_two_seconds(self):
+        items = []
+        for n in range(1000):
+            items.extend((item(f"P{n}", "character", born="1900"), item(f"L{n}", "location"),
+                          item(f"E{n}", date=f"2020-{1 + n % 12:02}-{1 + n % 28:02} 12:00",
+                               duration="1h", participants=f"[[P{n}]]", location=f"[[L{n}]]")))
+        p = project(*items)
+        start = time.perf_counter()
+        found = checks.run(p)
+        elapsed = time.perf_counter() - start
+        self.assertEqual(found, [])
+        self.assertLess(elapsed, 2, f"3,000 items checked in {elapsed:.3f}s")
+
+    def test_fixture_world(self):
+        # Keep even the disposable fixture copy inside the authorized repository.
+        with tempfile.TemporaryDirectory(dir=ROOT) as tmp:
+            root = os.path.join(tmp, "world")
+            shutil.copytree(FIXTURE, root)
+            found = checks.run(Project(root))
+        self.assertIn(("PARENT_AGE", "FAIL", "Characters/Ivo Brandt.md"),
+                      {(f["code"], f["severity"], f["path"]) for f in found})
+        self.assertFalse(any(f["code"] == "DEPENDENCY" and f["path"] == "Events/Crossing Harrow Pass.md" for f in found))
+
+
+if __name__ == "__main__":
+    unittest.main()
