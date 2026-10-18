@@ -206,6 +206,7 @@ tbody tr.selected { background: var(--soft); }
 .inspector { min-height: 0; overflow: auto; background: var(--panel); border-left: 1px solid var(--hair); padding: 18px 20px 28px; overscroll-behavior: contain; }
 .inspector-head { display: grid; gap: 4px; margin-bottom: 14px; }
 .inspector-head h2 { font: 600 22px/1.25 var(--serif); overflow-wrap: anywhere; }
+#inspector-title:focus { outline: none; }
 .inspector-head .meta { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; color: var(--muted); font-size: 13px; }
 .kind { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--ink); }
 .kind::before { content: ""; width: 10px; height: 10px; border-radius: 3px; background: var(--c); }

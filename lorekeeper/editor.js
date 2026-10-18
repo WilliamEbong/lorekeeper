@@ -19,7 +19,7 @@ const TITLES = {
   DEPENDENCY: 'Out of order with a linked item', DEAD_PARTICIPANT: 'Takes part after their death', UNBORN_PARTICIPANT: 'Takes part before their birth',
   AGE_LIMIT: 'Older than anyone could be', PARENT_AGE: 'Parent too young at the birth', TWO_PLACES: 'In two places at once',
   ORDER_REGRESSION: 'Goes back in time against its order', MAX_DURATION: 'Lasts longer than allowed', GAP: 'Wrong gap between linked items',
-  STORY_ORDER: 'Story order moves back in time', END_BEFORE_START: 'Ends before it starts',
+  STORY_ORDER: 'Story order moves back in time', END_BEFORE_START: 'Ends before it starts', AMBIGUOUS_NAME: 'One name points to two items',
 };
 const ICONS = {plus: 'M12 5v14M5 12h14', minus: 'M5 12h14', fit: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
   close: 'M6 6l12 12M18 6 6 18', left: 'M15 6l-6 6 6 6', right: 'M9 6l6 6-6 6'};
@@ -30,7 +30,7 @@ let byPath = new Map(), partOf = new Map(), findPaths = new Map(), findText = ne
 let selected = '', tab = 'Timeline', range = null, lastStamp = null;
 let refreshing = false, dragging = false, offline = false, renderPending = false;
 let refreshQueue = Promise.resolve(), checkTimer = null;
-const ui = {people: '', hidden: new Set(), sheetText: '', sheetType: '', sort: ['name', 1], findings: null,
+const ui = {people: '', hidden: new Set(), sheetText: '', sheetType: '', sheetLimit: 300, sort: ['name', 1], findings: null, allFindings: false,
   checking: false, recheck: false, checkError: null, checkedAt: null, flash: null};
 
 // ---- small helpers -----------------------------------------------------------------------
@@ -938,7 +938,8 @@ function subway(view) {
 function relationships(view) {
   view.append(peopleFilter(view, 'Ages at the events each person takes part in. Yellow: under 18. Red: before birth or after death.'));
   const q = ui.people.toLowerCase();
-  const shown = rankedPeople().filter(r => r.n > 0 && (!q || r.p.name.toLowerCase().includes(q))).map(r => r.p).sort(byName);
+  const ranked = rankedPeople().filter(r => r.n > 0 && (!q || r.p.name.toLowerCase().includes(q))), ROWS = q ? 200 : 40;
+  const shown = ranked.slice(0, ROWS).map(r => r.p).sort(byName);
   const LIMIT = 150, all = events().filter(e => shown.some(p => takesPart(p, e))), cols = all.slice(0, LIMIT);
   if (!shown.length) {
     view.append(q ? emptyState('No one matches', `No person whose name contains “${ui.people}” takes part in a dated event.`)
@@ -982,7 +983,9 @@ function relationships(view) {
   }
   box.append(table);
   view.append(box);
-  if (all.length > LIMIT) view.append(el('p', `Showing the first ${LIMIT} of ${all.length} events. Filter people to narrow the table.`, {class: 'hint'}));
+  const more = [ranked.length > shown.length && `the ${shown.length} people with the most events (of ${ranked.length})`,
+    all.length > LIMIT && `the first ${LIMIT} of ${all.length} events`].filter(Boolean);
+  if (more.length) view.append(el('p', `Showing ${more.join(' and ')}. Filter people to see others.`, {class: 'hint'}));
   // A small worker pool avoids flooding a large world's local server with age requests.
   for (let n = 0; n < Math.min(4, jobs.length); n++) (async () => { while (jobs.length && body.isConnected) await jobs.shift()(); })();
 }
@@ -1004,13 +1007,13 @@ function spreadsheet(view) {
   filter.value = ui.sheetText;
   filter.addEventListener('input', () => {
     const at = filter.selectionStart;
-    ui.sheetText = filter.value; renderView();
+    ui.sheetText = filter.value; ui.sheetLimit = 300; renderView();
     $('sheet-filter').focus(); $('sheet-filter').setSelectionRange(at, at);
   });
   const kind = el('select', null, {id: 'sheet-type', 'aria-label': 'Show one type'});
   kind.append(el('option', 'All types', {value: ''}), ...Object.keys(graph.types).sort(typeOrder).map(t => el('option', typePlural(t), {value: t})));
   kind.value = ui.sheetType;
-  kind.addEventListener('change', () => { ui.sheetType = kind.value; renderView(); });
+  kind.addEventListener('change', () => { ui.sheetType = kind.value; ui.sheetLimit = 300; renderView(); });
   const q = ui.sheetText.toLowerCase(), [sortKey, dir] = ui.sort;
   const rows = graph.items.filter(i => (!ui.sheetType || i.type === ui.sheetType) && (!q || i.name.toLowerCase().includes(q)));
   rows.sort((a, b) => { const x = sortValue(a, sortKey), y = sortValue(b, sortKey); return (x < y ? -1 : x > y ? 1 : byName(a, b)) * dir; });
@@ -1027,9 +1030,16 @@ function spreadsheet(view) {
   add(head, el('th', null, {scope: 'col'})).append(el('span', 'Open', {class: 'sr-only'}));
   add(table, el('thead')).append(head);
   table.append(body);
-  for (const item of rows) {
+  const allowed = graph.roles.location?.to || [], places = new Map(), placeList = el('datalist', null, {id: 'sheet-places'});
+  for (const place of graph.items.filter(i => !allowed.length || allowed.includes(i.type)).sort(byName)) {
+    if (places.has(place.name.toLowerCase())) continue;
+    places.set(place.name.toLowerCase(), place);
+    placeList.append(el('option', null, {value: place.name}));
+  }
+  // ponytail: rows render in pages of 300; virtualise if a world needs to scroll tens of thousands.
+  for (const item of rows.slice(0, ui.sheetLimit)) {
     const row = el('tr', null, {'data-path': item.path});
-    row.append(sheetCell(item, nameKey(item)), sheetType(item), sheetCell(item, startKey(item)), sheetCell(item, endKey(item)), sheetLocation(item));
+    row.append(sheetCell(item, nameKey(item)), sheetType(item), sheetCell(item, startKey(item)), sheetCell(item, endKey(item)), sheetLocation(item, places));
     const open = el('td', null, {class: 'open'});
     open.append(button('Open', () => selectItem(item.path, {focus: 'title', show: true}), {class: 'quiet', id: `inspect-${encodeURIComponent(item.path)}`, 'aria-label': `Open ${item.name}`}));
     row.append(open);
@@ -1037,12 +1047,20 @@ function spreadsheet(view) {
   }
   box.append(table);
   view.append(box);
+  box.append(placeList);
+  if (rows.length > ui.sheetLimit) box.append(button(`Show ${Math.min(300, rows.length - ui.sheetLimit)} more of ${rows.length - ui.sheetLimit} not shown`,
+    () => { ui.sheetLimit += 300; renderView(); }, {class: 'quiet', id: 'sheet-more'}));
   if (!rows.length) view.append(el('p', 'No items match this filter.', {class: 'hint'}));
 }
 async function saveCell(id, input, item, key, value) {
   input.classList.remove('failed', 'saved');
   status('Saving…', 'busy');
   const field = {}, unset = [], original = item.fields[key];
+  if ((value === '' || value == null) && key === nameKey(item)) {
+    input.classList.add('failed');
+    report(new ApiError('INVALID', 'An item needs a name. Type one, or press Esc to put the old name back.'));
+    return;
+  }
   if (value === '' || value == null) { if (original === undefined) { cells.delete(id); idle(); return; } unset.push(key); }
   else field[key] = value;
   try {
@@ -1099,23 +1117,38 @@ function sheetType(item) {
   cell.append(select);
   return cell;
 }
-function sheetLocation(item) {
+function sheetLocation(item, places) {
+  // One shared list of places for every row: a select per row would repeat it thousands of times.
   if (!isRole('location')) return sheetCell(item, 'location');
-  const cell = el('td'), select = el('select', null, {'aria-label': `${item.name}: Location`});
-  select.id = wireCell(select, item, 'location');
   const link = graph.links.find(l => l.from_path === item.path && l.role === 'location');
-  const allowed = graph.roles.location.to || [];
-  select.append(el('option', '—', {value: ''}));
-  for (const place of graph.items.filter(i => i.path !== item.path && (!allowed.length || allowed.includes(i.type))).sort(byName))
-    select.append(el('option', place.name, {value: place.path}));
-  if (link && !link.resolved) select.append(el('option', `${link.to} (not found)`, {value: '?'}));
-  select.value = link ? (link.resolved ? link.to_path : '?') : '';
-  select.disabled = saga;
-  select.addEventListener('change', () => {
-    const place = byPath.get(select.value);
-    saveCell(select.id, select, item, 'location', place ? `[[${place.name}]]` : '');
+  const current = link ? (byPath.get(link.to_path)?.name || link.to) : '';
+  const cell = el('td'), input = el('input', null, {list: 'sheet-places', 'aria-label': `${item.name}: Location`, autocomplete: 'off'});
+  const id = wireCell(input, item, 'location');
+  input.id = id;
+  const draft = cells.get(id);
+  input.value = draft?.value ?? current;
+  input.readOnly = saga;
+  if (draft?.failed) input.classList.add('failed');
+  input.addEventListener('input', () => { cells.set(id, {base: draft?.base || item, value: input.value}); idle(); });
+  const save = () => {
+    const d = cells.get(id);
+    if (!d || d.saving) return;
+    const text = d.value.trim(), place = places.get(text.toLowerCase());
+    if (text === current) { cells.delete(id); input.classList.remove('failed'); idle(); return; }
+    if (text && !place) {
+      input.classList.add('failed'); d.failed = true;
+      report(new ApiError('INVALID', `There is no place called “${text}”. Choose one from the list, or press Esc.`));
+      return;
+    }
+    d.saving = true;
+    saveCell(id, input, d.base, 'location', place ? `[[${place.name}]]` : '').finally(() => { d.saving = false; d.failed = input.classList.contains('failed'); });
+  };
+  input.addEventListener('blur', save);
+  input.addEventListener('keydown', event => {
+    if (event.key === 'Enter') { event.preventDefault(); save(); }
+    if (event.key === 'Escape') { cells.delete(id); input.value = current; input.classList.remove('failed'); idle(); }
   });
-  cell.append(select);
+  cell.append(input);
   return cell;
 }
 function narrative(view) {
@@ -1133,7 +1166,7 @@ function narrative(view) {
   chapters.forEach((item, index) => {
     const row = el('li', null, {'data-path': item.path}), main = el('div');
     main.append(button(item.name, () => selectItem(item.path, {show: true}), {class: 'link', id: `narrative-${encodeURIComponent(item.path)}`}),
-      el('div', `${kinds ? typeLabel(item.type) + ' · ' : ''}${item.start ? whenText(item) : 'No date'}`, {class: 'when'}));
+      el('div', `${kinds ? typeLabel(item.type) + (item.start ? ' · ' : '') : ''}${item.start ? whenText(item) : ''}`, {class: 'when'}));
     const back = latest != null && item.lo != null && item.lo < latest;
     row.append(el('span', String(index + 1), {class: 'num'}), main,
       back ? el('span', 'Earlier than the part before', {class: 'flag warn', title: 'The story steps back in time here. A flashback may be intentional.'})
@@ -1188,7 +1221,8 @@ function continuity(view) {
     if (!found.length) continue;
     box.append(el('h3', `${title} · ${found.length}`, {class: 'section-title'}));
     const list = el('ol', null, {class: 'cards findings'});
-    for (const f of found) {
+    const LIMIT = 150;
+    for (const f of ui.allFindings ? found : found.slice(0, LIMIT)) {
       const row = el('li', null, f.path && byPath.has(f.path) ? {'data-path': f.path} : {});
       const item = byPath.get(f.path), where = el('div', null, {class: 'where'});
       if (item) where.append(button(`Open ${item.name}`, () => selectItem(item.path, {reveal: true, focus: 'title'}), {class: 'link'}));
@@ -1198,6 +1232,7 @@ function continuity(view) {
       list.append(row);
     }
     box.append(list);
+    if (!ui.allFindings && found.length > LIMIT) box.append(button(`Show all ${found.length}`, () => { ui.allFindings = true; renderView(); }, {class: 'quiet'}));
   }
   view.append(box);
 }
