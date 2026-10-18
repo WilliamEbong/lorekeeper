@@ -7,7 +7,9 @@ from itertools import groupby
 
 from . import dates
 from .store import finding, link_parts
-from .timeinfo import START_KEYS, calendar_of, item_dates, shift, show_when
+from .timeinfo import END_KEYS, START_KEYS, calendar_of, item_dates, shift, show_when
+
+AGELESS = ("none", "unlimited", "ageless")    # max_age values meaning no limit (a JSON null reads "none")
 
 
 def possible(x):
@@ -118,28 +120,32 @@ def run(project):
                             compare(x, shift(y, duration, cal))) if duration else "WARN"
                 emit(severity, "DEPENDENCY", item, role, other, x, y, f"{role} {lag}".strip())
 
-        for role in ("participants", "learns"):
-            for _, person, _ in links.get(role, []):
-                if person not in people:
-                    continue
-                birth, death = times[person]
-                # Birth/death minutes are inclusive; strictly outside is a violation.
-                if start and death:
-                    emit(compare_ge(death, start), "DEAD_PARTICIPANT", item, role, person,
-                         start, death, "after death")
-                if end and birth:
-                    emit(compare_ge(end, birth), "UNBORN_PARTICIPANT", item, role, person,
-                         end, birth, "before birth")
-                if role == "participants":
-                    appearances.setdefault(person, set()).add(item)
-                    # a person's own max_age wins: "none" for the ageless (immortals, gods, AIs)
-                    own = str(person.fields.get("max_age", "")).strip().lower()
-                    if start and birth and own not in ("none", "unlimited", "ageless"):
-                        cal = calendar_of(p, birth)
-                        count = len(cal.months) if cal.type == "months" else 12
-                        years = int(own) if own.isdigit() else int(settings.get("max_age", 130))
-                        emit(compare_ge(shift(birth, (count * years, 0), cal), start),
-                             "AGE_LIMIT", item, role, person, start, birth, "exceeds maximum age")
+        end_key = next((k for k in END_KEYS if item.fields.get(k)), None)
+        if start and end and end_key:       # only a written end; derived ends follow the start
+            emit(order_check(end, start), "END_BEFORE_START", item, end_key, item, start, end,
+                 "ends before it starts")
+
+        # Only participants are people present; learns targets are what is learned (spec 003 FR-9).
+        for _, person, _ in links.get("participants", []):
+            if person not in people:
+                continue
+            birth, death = times[person]
+            # Birth/death minutes are inclusive; strictly outside is a violation.
+            if start and death:
+                emit(compare_ge(death, start), "DEAD_PARTICIPANT", item, "participants", person,
+                     start, death, "after death")
+            if end and birth:
+                emit(compare_ge(end, birth), "UNBORN_PARTICIPANT", item, "participants", person,
+                     end, birth, "before birth")
+            appearances.setdefault(person, set()).add(item)
+            # a person's own max_age wins: "none" for the ageless (immortals, gods, AIs)
+            own = str(person.fields.get("max_age", "")).strip().lower()
+            limit = own if own.isdigit() or own in AGELESS else settings.get("max_age", 130)
+            if start and birth and str(limit).strip().lower() not in AGELESS:
+                cal = calendar_of(p, birth)
+                count = len(cal.months) if cal.type == "months" else 12
+                emit(compare_ge(shift(birth, (count * int(limit), 0), cal), start),
+                     "AGE_LIMIT", item, "participants", person, start, birth, "exceeds maximum age")
         if item in people and start:
             for _, parent, _ in links.get("parent", []):
                 if parent in people and times[parent][0]:
@@ -166,41 +172,58 @@ def run(project):
                         return True
             return False
 
-        for person, events in appearances.items():
-            events = sorted((i for i in events if all(times[i]) and places[i]),
-                            key=lambda i: (times[i][0].lo, i.path))
-            active, expiry = {}, []
-            for index, item in enumerate(events):
-                start, end = times[item]
-                while expiry and expiry[0][0] <= start.lo:
+        def overlapping(events, lo, hi):
+            """(earlier, later) pairs in incompatible places whose [lo, hi) keys overlap: a sorted sweep."""
+            active, expiry, pairs = {}, [], []
+            for index, item in enumerate(sorted(events, key=lo)):
+                while expiry and expiry[0][0] <= lo(item):
                     _, _, expired = heappop(expiry)
                     bucket = active[places[expired]]
                     del bucket[expired]
                     if not bucket:
                         del active[places[expired]]
                 for locations, bucket in active.items():
-                    if compatible(places[item], locations):
-                        continue
-                    for other in bucket:
-                        a, b = times[other]
-                        core = max(start.hi - 1, a.hi - 1) <= min(end.lo, b.lo)
-                        hull = max(start.lo, a.lo) < min(end.hi, b.hi)
-                        fine = all(w.precision in ("hour", "minute") for w in (start, end, a, b))
-                        severity = "FAIL" if core else "WARN" if hull and fine else None
-                        emit(severity, "TWO_PLACES", item, "participants", other, start, a,
-                             f"{person.name} in different places", extra=(person,))
+                    if not compatible(places[item], locations):
+                        pairs.extend((other, item) for other in bucket)
                 active.setdefault(places[item], {})[item] = None
-                heappush(expiry, (end.hi, index, item))
+                heappush(expiry, (hi(item), index, item))
+            return pairs
+
+        def where(item):
+            return "/".join(sorted(o.name for o in places[item]))
+
+        for person, events in appearances.items():
+            events = sorted((i for i in events if all(times[i]) and places[i]),
+                            key=lambda i: (times[i][0].lo, i.path))
+            rank = {item: index for index, item in enumerate(events)}
+            # An appearance occupies [start, finish), at least one minute: back-to-back scenes do not
+            # clash, two moments at the same minute do. Earliest and latest possible finish:
+            finish = {i: (max(times[i][1].lo, times[i][0].lo + 1), max(times[i][1].hi - 1, times[i][0].hi))
+                      for i in events}
+            found = {}
+            # FAIL when the pair certainly overlaps: each latest start is before the other's earliest
+            # finish. Sweep on [latest start, earliest finish) so uncertain scenes drop out at once.
+            for x, y in overlapping(events, lambda i: times[i][0].hi - 1, lambda i: finish[i][0]):
+                if times[x][0].hi - 1 < finish[y][0]:
+                    found[tuple(sorted((x, y), key=rank.get))] = "FAIL"
+            # WARN when only the hulls overlap, and only between hour- or minute-precision scenes.
+            fine = [i for i in events if all(w.precision in ("hour", "minute") for w in times[i])]
+            for pair in overlapping(fine, lambda i: times[i][0].lo, lambda i: finish[i][1]):
+                found.setdefault(tuple(sorted(pair, key=rank.get)), "WARN")
+            for (other, item), severity in sorted(found.items(), key=lambda f: (rank[f[0][1]], rank[f[0][0]])):
+                emit(severity, "TWO_PLACES", item, "participants", other, times[item][0], times[other][0],
+                     f"{person.name} in different places: {where(item)} and {where(other)}", extra=(person,))
 
     def ordered(items, code, rule=None, definite_only=False):
-        # Extremal prior bounds catch regressions hidden by an uncertain neighbour.
-        prior, committed = [None, None], [None, None]
+        # order_check depends only on the earlier start's lo, so the latest prior lo is the worst
+        # case; the latest committed one is kept too, so a provisional item cannot cap a FAIL.
+        prior = committed = None
         for batch in items:
             for item in batch:
                 start = times[item][0]
                 severity, other = None, None
                 # Prefer committed evidence for FAIL before applying severity caps.
-                for candidate in (committed[0], prior[0], committed[1], prior[1]):
+                for candidate in (committed, prior):
                     if candidate:
                         other = candidate
                         severity = order_check(start, times[other][0])
@@ -210,11 +233,11 @@ def run(project):
                     emit("WARN" if definite_only else severity, code, item, _date_key(item),
                          other, start, times[other][0], "chronology runs backwards", rule)
             for item in batch:
-                for extrema in (prior,) if item in provisional else (prior, committed):
-                    if extrema[0] is None or times[item][0].lo > times[extrema[0]][0].lo:
-                        extrema[0] = item
-                    if extrema[1] is None or times[item][0].hi > times[extrema[1]][0].hi:
-                        extrema[1] = item
+                lo = times[item][0].lo
+                if prior is None or lo > times[prior][0].lo:
+                    prior = item
+                if item not in provisional and (committed is None or lo > times[committed][0].lo):
+                    committed = item
 
     for rule in p.config.get("rules", []):
         selected = [i for i in p.items if _selected(i, rule.get("select", {}))]
@@ -245,10 +268,11 @@ def run(project):
                 start, end = times[item]
                 if start and end:
                     cal = calendar_of(p, start)
-                    # Use the spec's literal core/hull lengths, including hull's exclusive end.
+                    # On possible minutes: FAIL if even the earliest end is past the latest limit,
+                    # WARN if the latest end may be; ending exactly at the maximum is allowed.
                     limit = shift(start, duration, cal)
                     severity = ("FAIL" if end.lo > limit.hi - 1 else
-                                "WARN" if end.hi > limit.lo else None)
+                                "WARN" if end.hi - 1 > limit.lo else None)
                     key = "end" if item.fields.get("end") else "duration" if item.fields.get("duration") else _date_key(item)
                     emit(severity, "MAX_DURATION", item, key, item, start, end,
                          f"span exceeds {rule['max']}", rule)
@@ -280,6 +304,8 @@ def run(project):
         except FileNotFoundError:
             narrative = ""
         links = (link_parts(link) for link in re.findall(r"\[\[[^\[\]\r\n]+\]\]", narrative))
-        story = [p.resolve(parts[0]) for parts in links if parts]
-        ordered([[i] for i in story if i and times[i][0]], "STORY_ORDER", definite_only=True)
+        # Story order is the first mention of each chapter-like item; people and places are not scenes.
+        story = dict.fromkeys(i for i in (p.resolve(parts[0]) for parts in links if parts) if i and times[i][0]
+                              and p.schema["types"].get(i.type, {}).get("category") == "narrative")
+        ordered([[i] for i in story], "STORY_ORDER", definite_only=True)
     return out

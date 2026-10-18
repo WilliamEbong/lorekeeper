@@ -41,11 +41,10 @@ def item_dates(p, item):
         end = read(*_first(f, END_KEYS))
         lo_w = read("date_min", f.get("date_min") or None)
         hi_w = read("date_max", f.get("date_max") or None)
-        if start is None and (lo_w or hi_w):          # only bounds known: they are the interval
-            lo, hi = (lo_w or hi_w).lo, (hi_w or lo_w).hi
+        if start is None and lo_w and hi_w:            # only bounds known: both make the interval
+            lo, hi = lo_w.lo, hi_w.hi                  # (a lone bound leaves the item undated)
             if lo < hi:
-                start = (lo_w or hi_w)._replace(lo=lo, hi=hi,
-                                                provisional=any(w and w.provisional for w in (lo_w, hi_w)))
+                start = lo_w._replace(lo=lo, hi=hi, provisional=lo_w.provisional or hi_w.provisional)
             else:
                 bad.append(("date_max", f"{f.get('date_max')} is before date_min {f.get('date_min')}"))
         elif start is not None and (lo_w or hi_w):     # bounds narrow a stated date, never move it
@@ -81,7 +80,11 @@ def parse_at(p, at):
     """A date string, or an item name meaning that item's whole span (start to end)."""
     when = dates.parse(at, p.calendars)
     if when is None:
-        start, end, _ = item_dates(p, p.find(at))
+        try:
+            it = p.find(at)
+        except LoreError:
+            raise LoreError("INVALID", f"{at!r} is neither a date Lorekeeper can read nor an item name") from None
+        start, end, _ = item_dates(p, it)
         if start is None:
             raise LoreError("INVALID", f"{at!r} is neither a date nor a dated item")
         when = start._replace(hi=max(start.hi, (end or start).hi))
