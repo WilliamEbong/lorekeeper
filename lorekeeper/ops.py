@@ -1,6 +1,7 @@
 """The one operations table. The CLI, MCP server and HTTP API are generated from OPS."""
 import json
 import os
+import time
 from collections import namedtuple
 
 from . import checks, dates, store
@@ -197,6 +198,48 @@ def op_knows(p, item, at):
             "may_know": [{"item": k, "learned_in": v} for k, v in maybe.items()]}
 
 
+def op_graph(p):
+    """Everything an editor or agent needs in one call: items with dates and versions, and links."""
+    items, links = [], []
+    for it in p.items:
+        start, end, _ = item_dates(p, it)
+        items.append({**it.summary(), "version": it.version, "fields": it.fields,
+                      "start": show_when(p, start), "end": show_when(p, end),
+                      "lo": start.lo if start else None, "hi": (end or start).hi if start else None})
+        for role, targets in p.links(it).items():
+            links += [{"from": it.id or it.name, "role": role, "to": (o.id or o.name) if o else t,
+                       "resolved": o is not None, "lag": lag} for t, o, lag in targets]
+    return {"items": items, "links": links, "roles": p.schema["roles"], "types": p.schema["types"]}
+
+
+def requests_dir(p):
+    folder = p.config.get("requests_dir") or os.path.join(p.root, ".lore", "requests")
+    return folder if os.path.isabs(folder) else os.path.join(p.root, folder)
+
+
+def op_request(p, item, note, field=None, unset=None):
+    """Queue a change request instead of editing (saga mode): the pipeline applies it later."""
+    it = p.find(item)
+    stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
+    rid = f"{stamp}-{store.slug(it.name)[:40].lower()}"
+    body = {"id": rid, "item": it.name, "path": it.path, "version": it.version, "note": note,
+            "set": store.clean_fields(field or {}), "unset": list(unset or []),
+            "current": {k: it.fields.get(k) for k in list(field or {}) + list(unset or [])},
+            "created_utc": stamp, "status": "open"}
+    store.atomic_write(os.path.join(requests_dir(p), rid + ".json"), to_json(body) + "\n", create=True)
+    return {"request": rid, "queued": True}
+
+
+def op_requests(p):
+    folder = requests_dir(p)
+    out = []
+    for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+        if name.endswith(".json"):
+            with open(os.path.join(folder, name), encoding="utf-8") as fh:
+                out.append(json.load(fh))
+    return {"requests": out, "count": len(out)}
+
+
 def op_check(p):
     found = p.findings()
     for it in p.items:
@@ -247,6 +290,13 @@ OPS = [
        [Param("item", S, True, "person"), Param("at", S, True, "a date, or an item name")], False, op_where),
     Op("knows", "What a person has learned by a date (learns links on events they took part in).",
        [Param("item", S, True, "person"), Param("at", S, True, "a date, or an item name")], False, op_knows),
+    Op("graph", "All items with dates, versions and fields, plus every link (for editors and agents).",
+       [], False, op_graph),
+    Op("request", "Queue a change request for an item instead of editing it (saga mode).",
+       [Param("item", S, True, "item name or id"), Param("note", S, True, "what should change and why"),
+        Param("field", D, False, "proposed values key=value"), Param("unset", L, False, "fields to remove")],
+       True, op_request),
+    Op("requests", "List queued change requests.", [], False, op_requests),
     Op("check", "Check the project; FAIL lines are definite problems, WARN lines possible ones.",
        [], False, op_check),
 ]

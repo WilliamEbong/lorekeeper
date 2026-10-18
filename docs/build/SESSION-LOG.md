@@ -152,3 +152,7 @@ Append-only. Newest entries at the bottom. Each entry gives: date/time (UTC if k
 - Decision: START_HERE is per-saga, not shared. The new intent is inserted before "## 2." and "These are the six intents" becomes "These are the intents".
 - Codex fixed checks.py items 2, 3, 5, 6 and 7. The shared-person two-places benchmark went from 10.4 s to 0.16 s. Stray check clean. **Feature 003 done.**
 - Decision: for story/rail order, `order_check` gives WARN only when the later item can start before the earlier one starts (`x.lo < y.lo`). Same-day chapters are no longer flagged (Space went from 45 to fewer WARNs). FAIL is unchanged.
+- 004 integration propagated to all three clones (shared files byte-identical; manifest keys added). Space report: 2 FAIL RAIL_REGRESSION (Cards 051/052 dated 6840 CE, after Card 050 at 6842 CE on the same rail) plus 4 impossible SRD days. Realm and Zombies show 0 findings until the backfill.
+- Backfill: 3 parallel general-purpose agents (brief `lk-scratch/snap/backfill_brief.md`), one per clone, editing only frontmatter, Provenance bullets and agent_decisions rows.
+- 005: added ops `graph`, `request`, `requests` (change-request queue, default `.lore/requests`, host may pass an absolute `requests_dir`). Codex is building serve.py and the editor UI.
+- Perf note: the load test hit 1.93 s while 3 suites and 6 agents were running; re-check when idle.
