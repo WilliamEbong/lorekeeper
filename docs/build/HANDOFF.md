@@ -1,6 +1,6 @@
 # HANDOFF — Lorekeeper build
 
-**Last updated:** 2026-10-18, session 2, after the 005 editor verification.
+**Last updated:** 2026-10-18, session 2, before the first saga landing (005 review fixes and 006 build in flight in Codex).
 **Done:**
 - 001, 002, 003 (all reviewed and fixed).
 - 005 is built and verified with Playwright (SC-1..SC-4), commit `c71ec9c`. Its Codex adversarial review is NOT yet run.
@@ -11,7 +11,7 @@
 3. Regenerate and commit `chrono-report` as `knowledge: chronology report`.
 4. Land each saga with `lk-scratch\snap\land.sh "<saga>" <live HEAD>`. Expected live HEADs: Realm 974a7bf, Space 0861be8, Zombies 06f14f0. Land all three back to back, then run the live suites.
 5. Verify the in-progress chapters: copy each live repo to a probe and run `baseline.sh` into `docs/build/baselines/probe-after`; diff status/validate against `probe-before`.
-6. Codex review of 005.
+6. Codex review of 005 done; the fix job is running (review text: `lk-scratch\snap	ask-mvd8ktc1-rmlyxq.result.txt`). The 006 interop build is running in Codex (`task-mvd8m0xr-lvik6h`); wire the ops `import`/`export` afterwards.
 7. 006 interop (ask once for Aeon access).
 8. 007 packaging + private repo.
 9. Close-out.
