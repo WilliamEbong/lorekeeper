@@ -327,3 +327,33 @@ Paths are relative to each saga root and identical in all three repos.
 - [x] User guide, agent skill, Aeon notes and spec 006 updated; full suite 240 OK; two fresh-context reviews (engine, editor) and all their findings fixed; final handoff
 
 **Later (not built).** BC dates finer than a year still display as astronomical years (`-0043-03-15`); "1800s" means the decade 1800–1809; Aeon nesting (`super`) is dropped on import; dated Aeon types all become `event`; Aeon multitext exports as JSON text; re-vendor the engine into the three sagas (they carry `eb20b30`).
+
+# Feature requests from the owner
+
+## Chapter-scoped story wiki (requested 2026-10-18; not started)
+**The request, in the owner's terms:** a story wiki tied to where the story is. Selecting chapter 3 shows only what is known by chapter 3; selecting chapter 10 shows the story state as of chapter 10, and so on.
+- **AI optional.** Everything must be possible by hand, with AI making it much faster.
+- **An upgrade to the saga system, not a replacement.** Each chapter drafting session in the owner's saga system already produces a current-state snapshot. This feature should be a more mature layer on top of that. Once the built-in chapter wrap-up has run, the AI uses its output to update that story's Lorekeeper profile.
+
+**Grounding for whoever designs it (from reading the Realm saga, 2026-10-18):**
+- In the saga pipeline (`_system/workflow/PIPELINE.md` §6), post-approval finalization already runs:
+  - one extraction pass, `extract_approved_chapter_changes`, which writes `RT/approved_deltas.md`;
+  - then the updates: `update_current_world_bible`, which writes `CURRENT_WORLD_BIBLE_OUT.md`, and `update_obsidian_wiki`;
+  - then a `finalization_auditor`, then `saga.py finalize N` and `freeze N`.
+  
+  The new step would read those approved outputs after the wrap-up and write chapter-stamped facts into Lorekeeper. Nothing may run on drafts: the pipeline forbids draft-derived facts leaving the chapter workspace.
+- The saga already keeps per-chapter state in `_system/state/CH###.json` and runtime context in `_system/runtime/CH###/` (profile packets), plus knowledge ledgers in `_system/knowledge/` (mystery ledger, setup/payoff ledger, character cards).
+- Lorekeeper already has building blocks:
+  - `knows` (what a person has learned by a date, from `learns` links);
+  - `where` (a person's last place by a date);
+  - ages at events;
+  - Narrative order for chapters and cards.
+  
+  The missing idea is a *story position* (the chapter a fact was established in, or revealed to the reader), which differs from the in-world date.
+
+**Questions to settle at specify time:**
+- Is the cut-off the reading order or the in-world chronology? (Flashbacks make these differ.)
+- Should the cut-off cover what the reader knows, what each character knows, or both?
+- How is a fact stamped with the chapter that establishes it: per field, per link, per page section?
+- Does the editor get a chapter picker that filters every view?
+- How does a hand-written world, with no saga pipeline, record the same stamps?

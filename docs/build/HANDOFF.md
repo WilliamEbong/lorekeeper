@@ -60,6 +60,9 @@ What the branch adds:
 
 ## 5. Next actions
 
+## 5. Next actions
+
+0. **Owner feature request (2026-10-18), not started:** a chapter-scoped story wiki that shows only what is known by a chosen chapter. It is AI-optional, and it builds on the saga's chapter wrap-up rather than replacing it. The full brief and its grounding are in BUILD-PLAN.md under "Feature requests from the owner". Start it with speckit-specify.
 1. Owner reviews the editor (`lore serve` in a world folder), then approves merging and pushing the branch. **← NEXT**
 2. Re-vendor the engine into the three sagas. They carry `eb20b30`; the branch changes check results: TWO_PLACES, END_BEFORE_START, AMBIGUOUS_NAME (cards are exempt) and `learns`. Use clones and `land.sh`, as in run 2, and compare saga reports before landing. The dates agent checked read-only that saga card dates and findings are unchanged.
 3. Space chronology report: cards 051/052 (RAIL_REGRESSION) and four impossible SRD days (carried over).

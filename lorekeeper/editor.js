@@ -70,6 +70,8 @@ const isRole = (key) => Object.hasOwn(graph.roles, key);
 const isDateKey = (key) => graph.properties[key]?.format === 'date' || ['born', 'died', 'date', 'end', 'start'].includes(key);
 const label = (key) => ({canonical_name: 'Name', name: 'Name', type: 'Type', id: 'ID'})[key]
   || graph.properties[key]?.label || graph.roles[key]?.label || words(key);
+// A link A -role-> B, seen from B: the role's stated inverse, else 'Sibling of' (B is A's sibling).
+const inverseLabel = (role) => graph.roles[role]?.inverse || (/ of$/i.test(label(role)) ? `${label(role)} (from)` : `${label(role)} of`);
 const startKey = (item) => ['born', 'date', 'start'].find(k => item.fields[k]) || (isPerson(item) ? 'born' : 'date');
 const endKey = (item) => ['died', 'end'].find(k => item.fields[k]) || (isPerson(item) ? 'died' : 'end');
 const nameKey = (item) => item.fields.canonical_name != null ? 'canonical_name' : 'name';
@@ -165,31 +167,42 @@ function daysFromCivil(y, m, d) {
 }
 const yearText = (y) => y > 0 ? String(y) : `${1 - y} BC`;
 function gregorian(minute, precision = 'day') {
+  // Lorekeeper's written form: 1764 · 1764-07 · 1764-07-12 · 1764-07-12 09:30; BC as 44 BC · 0044-03-15 BC.
   const {y, m, d} = civil(Math.floor(minute / 1440)), pad = (n) => String(n).padStart(2, '0');
-  if (precision === 'year') return y < 1 ? `${1 - y} BC` : String(y).padStart(4, '0');
-  let out = (y < 0 ? '-' : '') + String(Math.abs(y)).padStart(4, '0') + '-' + pad(m);
-  if (precision === 'month') return out;
-  out += '-' + pad(d);
-  if (precision === 'day') return out;
-  const time = ((Math.floor(minute) % 1440) + 1440) % 1440;
-  return `${out} ${pad(Math.floor(time / 60))}:${pad(time % 60)}`;
+  const bc = y < 1, year = String(bc ? 1 - y : y).padStart(4, '0');
+  if (precision === 'year') return bc ? `${1 - y} BC` : year;
+  let out = `${year}-${pad(m)}`;
+  if (precision !== 'month') {
+    out += '-' + pad(d);
+    const time = ((Math.floor(minute) % 1440) + 1440) % 1440;
+    if (precision !== 'day') out += ` ${pad(Math.floor(time / 60))}:${pad(time % 60)}`;
+  }
+  return bc ? `${out} BC` : out;
+}
+// Older files may still hold astronomical years (-0043-03-15 is 15 March 44 BC); both forms are read.
+const ISO = /^(-?\d{4,})(?:-(\d{2}))?(?:-(\d{2}))?(?:[ T](\d{2}):(\d{2}))?( BC)?$/;
+function readGregorian(text) {
+  const bc = /^(\d+) BC$/.exec(text);
+  if (bc) return {y: 1 - Number(bc[1]), minutes: 0};
+  const m = ISO.exec(text);
+  if (!m) return null;
+  return {y: m[6] ? 1 - Number(m[1]) : Number(m[1]), m: m[2] && Number(m[2]), d: m[3] && Number(m[3]),
+    time: m[4] && `${m[4]}:${m[5]}`, minutes: m[4] ? Number(m[4]) * 60 + Number(m[5]) : 0};
 }
 function dateWords(text) {
-  // Gregorian output reads as words: 1764 · 44 BC · July 1764 · 12 July 1764 · 12 July 1764, 09:30.
-  const m = /^(-?\d{4,})(?:-(\d{2}))?(?:-(\d{2}))?(?:[ T](\d{2}):(\d{2}))?$/.exec(text);
-  if (!m) return text;
-  const year = yearText(Number(m[1]));
-  if (!m[2]) return year;
-  const month = MONTHS[Number(m[2]) - 1];
-  if (!m[3]) return `${month} ${year}`;
-  return `${Number(m[3])} ${month} ${year}` + (m[4] ? `, ${m[4]}:${m[5]}` : '');
+  // Reads as words: 1764 · 44 BC · July 1764 · 12 July 1764 · 15 March 44 BC · 12 July 1764, 09:30.
+  const g = readGregorian(text);
+  if (!g) return text;
+  const year = yearText(g.y);
+  if (!g.m) return year;
+  const month = MONTHS[g.m - 1];
+  if (!g.d) return `${month} ${year}`;
+  return `${g.d} ${month} ${year}` + (g.time ? `, ${g.time}` : '');
 }
-const ISO = /^(-?\d{4,})(?:-(\d{2}))?(?:-(\d{2}))?(?: (\d{2}):(\d{2}))?$/;
 function minuteOf(text) {
-  // The first minute of a Gregorian date as Lorekeeper writes it (1764, 44 BC, 1764-07, 1764-07-12 09:30).
-  const bc = /^(\d+) BC$/.exec(text), m = bc ? [null, String(1 - Number(bc[1]))] : ISO.exec(text);
-  if (!m) return null;
-  return daysFromCivil(Number(m[1]), Number(m[2] || 1), Number(m[3] || 1)) * 1440 + Number(m[4] || 0) * 60 + Number(m[5] || 0);
+  // The first minute of a Gregorian date as Lorekeeper writes it.
+  const g = readGregorian(text);
+  return g ? daysFromCivil(g.y, g.m || 1, g.d || 1) * 1440 + g.minutes : null;
 }
 function shiftDate(text, precision, delta) {
   const start = minuteOf(text);
@@ -600,7 +613,7 @@ function renderLinks(panel, item) {
   if (!incoming.length) back.append(el('p', 'Nothing links here yet.', {class: 'hint'}));
   for (const [role, links] of groupBy(incoming, l => l.role)) {
     const group = el('details', null, links.length <= 6 ? {open: ''} : {});
-    group.append(el('summary', `${graph.roles[role]?.inverse || `${label(role)} (from)`} · ${links.length}`));
+    group.append(el('summary', `${inverseLabel(role)} · ${links.length}`));
     const list = el('ul', null, {class: 'links'});
     for (const link of links) {
       const source = byPath.get(link.from_path);
@@ -832,7 +845,8 @@ function timeline(view) {
         p.x1 - p.x0 < 6 ? svgEl('circle', {cx: Math.max(c.left, Math.min(c.right, p.x0)), cy: mid, r: 5.5, class: 'mark'})
           : svgEl('rect', {x: p.v0, y: mid - 5, width: Math.max(2, p.v1 - p.v0), height: 10, rx: 3, class: 'mark'}),
         svgEl('title', {}, `${item.name} · ${whenText(item)}`));
-      if (!saga) enableRedate(g, item, c, {x: p.lx + p.w + 4, y: top + 14});
+      if (!saga) enableRedate(g, item, c, {x: p.lx + p.w + 4, y: top + 14,
+        bar: p.x1 - p.x0 < 6 ? null : {v0: p.v0, v1: p.v1, x0: p.x0, x1: p.x1, mid}});
       c.svg.append(g);
     }
     y += Math.max(1, rows.length) * ROW + 12;
@@ -840,7 +854,8 @@ function timeline(view) {
   c.grid(y);
   wireItems(c.svg);
   const undated = graph.items.length - all.length, note = el('p', null, {class: 'hint'});
-  note.append(saga ? 'Select an item to propose a change. ' : 'Select an item to open it. Drag an exactly dated item sideways to change its date. ');
+  note.append(saga ? 'Select an item to propose a change. ' : 'Select an item to open it. Drag an exactly dated item sideways to move it, '
+    + 'or drag either end of a bar to change just its start or end. ');
   if (undated) note.append(`${plural(undated, 'item')} without a date ${undated === 1 ? 'is' : 'are'} not shown; `,
     button('see them in the Spreadsheet', () => activateTab($('tab-spreadsheet')), {class: 'link'}), '.');
   view.append(note);
@@ -849,30 +864,68 @@ function enableRedate(g, item, c, at) {
   const s = item.start, e = item.fields[endKey(item)] ? item.end : null;
   // A drag moves the whole written span; anything it cannot move exactly is edited in the inspector instead.
   if (!exact(s) || item.fields.date_min || item.fields.date_max || (e && (!exact(e) || minuteOf(e.from) == null))) return;
+  g.classList.add('draggable');
+  // A bar with a written end gets a handle at each visible end: drag one to change just that date.
+  const bar = e && at.bar && at.bar.v1 - at.bar.v0 >= 24 ? at.bar : null, mark = g.querySelector('.mark');
+  if (bar) for (const [edge, x, text] of [['start', bar.x0, 'Drag to change the start'], ['end', bar.x1, 'Drag to change the end']]) {
+    if (x < c.left || x > c.right) continue;
+    const handle = svgEl('rect', {class: 'handle', 'data-edge': edge, x: edge === 'start' ? x - 1 : x - 9, y: bar.mid - 9, width: 10, height: 18, rx: 3});
+    handle.append(svgEl('title', {}, text));
+    g.append(handle);
+  }
   g.addEventListener('pointerdown', event => {
     if (event.button !== 0 || event.pointerType === 'touch') return;
     event.stopPropagation();
-    const startX = event.clientX, initial = [...range], origin = c.x(item.lo);
+    const edge = event.target.dataset?.edge || 'move', startX = event.clientX, initial = [...range];
+    const minuteAt = (px) => initial[0] + (px - c.left) / (c.right - c.left) * (initial[1] - initial[0]);
     let allowed = false, moved = false;
     // Identify the parser before allowing movement, rather than guessing from the date's spelling.
+    const units = ['year', 'month', 'day', 'minute'];
     const check = convert(s.text).then(r => {
-      allowed = isGregorian(r.parsed_by) && ['year', 'month', 'day', 'minute'].includes(s.precision);
+      allowed = isGregorian(r.parsed_by) && units.includes(s.precision) && (!e || units.includes(e.precision));
       return allowed;
     });
     check.catch(() => {});
-    const target = (ev) => gregorian(Math.round(initial[0] + (origin + ev.clientX - startX - c.left) / (c.right - c.left) * (initial[1] - initial[0])), s.precision);
-    const tip = svgEl('text', {x: at.x, y: at.y, class: 'drag-date'});
+    // The new fields for a pointer position: the whole span, the start alone, or the end alone.
+    const change = (ev) => {
+      const dx = ev.clientX - startX;
+      if (edge === 'end') {
+        let value = gregorian(Math.round(minuteAt(c.x(item.hi) + dx)) - 1, e.precision);
+        if (minuteOf(value) < item.lo) value = gregorian(item.lo, e.precision);   // not before the start
+        return {[endKey(item)]: value};
+      }
+      let value = gregorian(Math.round(minuteAt(c.x(item.lo) + dx)), s.precision);
+      if (edge === 'start') {
+        if (minuteOf(value) > minuteOf(e.from)) value = gregorian(minuteOf(e.from), s.precision);   // not after the end
+        return {[startKey(item)]: value};
+      }
+      const field = {[startKey(item)]: value};
+      // Shift by minutes from the start's interval, not its spelling ("April 1747" is not ISO).
+      if (e) field[endKey(item)] = shiftDate(e.from, e.precision, minuteOf(value) - item.lo);
+      return field;
+    };
+    const describe = (field) => edge === 'end' ? `ends ${dateWords(field[endKey(item)])}`
+      : edge === 'start' ? `starts ${dateWords(field[startKey(item)])}` : dateWords(field[startKey(item)]);
+    const tip = svgEl('text', {x: at.x, y: at.y, class: 'drag-date'}), shape = mark && {x: mark.getAttribute('x'), width: mark.getAttribute('width')};
     dragging = true; g.setPointerCapture(event.pointerId);
     const move = (ev) => {
       const dx = ev.clientX - startX;
       if (Math.abs(dx) >= DRAG_THRESHOLD) moved = true;
       if (!moved || !allowed) return;
-      g.classList.add('dragging'); g.setAttribute('transform', `translate(${dx},0)`);
-      tip.textContent = dateWords(target(ev));
+      g.classList.add('dragging');
+      if (edge === 'move') g.setAttribute('transform', `translate(${dx},0)`);
+      else {
+        const left = edge === 'start' ? Math.max(c.left, Math.min(bar.v1 - 2, bar.v0 + dx)) : bar.v0;
+        const right = edge === 'end' ? Math.min(c.right, Math.max(bar.v0 + 2, bar.v1 + dx)) : bar.v1;
+        mark.setAttribute('x', left); mark.setAttribute('width', right - left);
+      }
+      const text = describe(change(ev));
+      tip.textContent = edge === 'move' ? text : text.charAt(0).toUpperCase() + text.slice(1);
       if (!tip.isConnected) g.append(tip);
     };
     const cleanup = () => {
       dragging = false; g.removeAttribute('transform'); g.classList.remove('dragging'); tip.remove();
+      if (shape?.x != null) { mark.setAttribute('x', shape.x); mark.setAttribute('width', shape.width); }
       g.removeEventListener('pointermove', move); g.removeEventListener('pointerup', finish); g.removeEventListener('pointercancel', cleanup);
     };
     const finish = async (ev) => {
@@ -881,14 +934,12 @@ function enableRedate(g, item, c, at) {
       try {
         if (!await check) { toast('This date can’t be dragged. Edit it in the inspector instead.'); return; }
         if (dirty(drafts.get(item.path))) { toast('Save or discard your changes in the inspector before dragging this item.', {kind: 'error'}); return; }
-        const key = startKey(item), value = target(ev), field = {[key]: value};
-        // Shift by minutes from the start's interval, not its spelling ("April 1747" is not ISO).
-        if (e) field[endKey(item)] = shiftDate(e.from, e.precision, minuteOf(value) - item.lo);
-        const before = snapshot(item, Object.keys(field));
+        const field = change(ev), before = snapshot(item, Object.keys(field));
+        if (Object.entries(field).every(([k, v]) => item.fields[k] === v)) return;
         status('Saving…', 'busy');
         const result = await api('set', {item: ref(item), field, version: item.version, expect: before});
         await refresh();
-        offerUndo(item, before, field, result, `Moved ${item.name} to ${dateWords(value)}.`);
+        offerUndo(item, before, field, result, edge === 'move' ? `Moved ${item.name} to ${describe(field)}.` : `${item.name} now ${describe(field)}.`);
       } catch (error) { report(error); }
     };
     g.addEventListener('pointermove', move); g.addEventListener('pointerup', finish); g.addEventListener('pointercancel', cleanup);
@@ -953,8 +1004,8 @@ function subway(view) {
   wireItems(c.svg);
   if (!q && ranked.length > lanes.length) view.append(el('p', `Showing the ${lanes.length} people with the most events. Filter to find the other ${ranked.length - lanes.length}.`, {class: 'hint'}));
 }
-function relationships(view) {
-  view.append(peopleFilter(view, 'Ages at the events each person takes part in. Yellow: under 18. Red: before birth or after death.'));
+function agesView(view) {
+  view.append(peopleFilter(view, 'Ages at the events each person takes part in. Yellow: under 18. Red: before birth or after death. Who is related to whom is under Relationships.'));
   const q = ui.people.toLowerCase();
   const ranked = rankedPeople().filter(r => r.n > 0 && (!q || r.p.name.toLowerCase().includes(q))), ROWS = q ? 200 : 40;
   const shown = ranked.slice(0, ROWS).map(r => r.p).sort(byName);
@@ -1011,6 +1062,49 @@ function paintAge(cell, age) {
   cell.textContent = age.text;
   cell.classList.toggle('bad', age.status !== 'alive');
   cell.classList.toggle('young', age.status === 'alive' && age.years?.[1] < 18);
+}
+function relationships(view) {
+  // A relationship is a resolved link between two people or groups (parent, spouse, member of...);
+  // events, places and timing links belong to the other views.
+  view.append(peopleFilter(view, 'Who is related to whom. Add relationships in the inspector under Add a connection.'));
+  const related = (i) => ['person', 'group'].includes(typeInfo(i.type).category);
+  const links = graph.links.map(l => [l, byPath.get(l.from_path), byPath.get(l.to_path)])
+    .filter(([l, a, b]) => l.resolved && a && b && a !== b && related(a) && related(b));
+  const cards = new Map(), own = new Set(links.map(([l, a, b]) => `${a.path}\0${l.role}\0${b.path}`));
+  const put = (item, kind, other) => {
+    if (!cards.has(item.path)) cards.set(item.path, new Map());
+    const kinds = cards.get(item.path);
+    if (!kinds.has(kind)) kinds.set(kind, new Map());
+    kinds.get(kind).set(other.path, other);
+  };
+  for (const [l, a, b] of links) {
+    put(a, label(l.role), b);
+    // The other side reads the role's inverse (Children, Members), unless it states the link itself.
+    if (!own.has(`${b.path}\0${l.role}\0${a.path}`)) put(b, inverseLabel(l.role), a);
+  }
+  const q = ui.people.toLowerCase();
+  const shown = [...cards.keys()].map(path => byPath.get(path)).filter(i => !q || i.name.toLowerCase().includes(q))
+    .sort((a, b) => typeRank(a.type) - typeRank(b.type) || byName(a, b));
+  if (!shown.length) {
+    view.append(q ? emptyState('No one matches', `No person or group whose name contains “${ui.people}” has a relationship yet.`)
+      : emptyState('No relationships yet', 'Connect people with Parent, Spouse or Member of under Add a connection in the inspector, and they appear here.'));
+    return;
+  }
+  const box = scrollBox('pad'), grid = el('div', null, {class: 'relations'});
+  for (const item of shown) {
+    const card = el('article', null, {class: 'relation', 'data-path': item.path}), head = el('header'), list = el('dl');
+    head.append(button(item.name, () => selectItem(item.path, {show: true}), {class: 'link', id: `related-${encodeURIComponent(item.path)}`}),
+      el('span', typeLabel(item.type), {class: `kind cat-${category(item)}`}));
+    for (const [kind, others] of [...cards.get(item.path)].sort((a, b) => a[0].localeCompare(b[0]))) {
+      const names = el('dd');
+      for (const other of [...others.values()].sort(byName)) names.append(button(other.name, () => selectItem(other.path, {show: true}), {class: 'link'}));
+      list.append(el('dt', kind), names);
+    }
+    card.append(head, list);
+    grid.append(card);
+  }
+  box.append(grid);
+  view.append(box);
 }
 function sortValue(item, key) {
   if (key === 'name') return item.name.toLowerCase();
@@ -1261,7 +1355,7 @@ function continuity(view) {
   }
   view.append(box);
 }
-const VIEWS = {Timeline: timeline, Subway: subway, Relationships: relationships, Spreadsheet: spreadsheet, Narrative: narrative, Continuity: continuity};
+const VIEWS = {Timeline: timeline, Subway: subway, Relationships: relationships, Ages: agesView, Spreadsheet: spreadsheet, Narrative: narrative, Continuity: continuity};
 function rememberScroll() {
   const box = $('view').querySelector('.scroll');
   if (box) scrolls.set(box.dataset.tab, [box.scrollTop, box.scrollLeft]);

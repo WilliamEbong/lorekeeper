@@ -47,7 +47,7 @@ For a different new project, use `lore init --template series` or `lore init --t
 
 From your story folder, run `lore serve`. Open the printed `http://127.0.0.1:…/` address in your browser and leave the terminal running. Ctrl+C stops the server. It serves only on your own computer and loads no CDN assets.
 
-Use Timeline to explore dates, Subway to follow people through events, Ages to see how old everyone is at each event, Spreadsheet for quick edits, Narrative for the story in reading order, and Continuity for the problems `lore check` finds. Press `/` to find an item; its fields and connections open in the inspector, and every save can be undone. Disk edits appear automatically. The [user guide](docs/user-guide.md) explains each view, uncertainty and conflict messages.
+Use Timeline to explore dates, Subway to follow people through events, Relationships to see who is related to whom, Ages to see how old everyone is at each event, Spreadsheet for quick edits, Narrative for the story in reading order, and Continuity for the problems `lore check` finds. Press `/` to find an item; its fields and connections open in the inspector, and every save can be undone. Disk edits appear automatically. The [user guide](docs/user-guide.md) explains each view, uncertainty and conflict messages.
 
 `lore serve --saga` queues proposed changes for a host writing pipeline instead of editing canon. This restriction belongs to the editor; CLI and MCP callers must follow the host's own canon rules.
 
