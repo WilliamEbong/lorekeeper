@@ -204,3 +204,4 @@ Append-only. Newest entries at the bottom. Each entry gives: date/time (UTC if k
 - Private repo created and pushed: https://github.com/WilliamEbong/lorekeeper (visibility PRIVATE, verified with gh).
 - **Close-out:** ACTIVE removed, hooks unregistered (settings keeps permissions only), memory updated (aeon project + lorekeeper-build), final HANDOFF written. Skipped a final whole-repo reviewer pass: every feature already had a Codex adversarial review (7 reviews, about 60 findings fixed). **BUILD COMPLETE.**
 - Last background probe (probe-after2, live copies after the fix): all three saga suites OK, health exit 0, and no status/validate DIFF for any chapter.
+- 2026-10-18: Standalone confirmed: the installed `lore` ran end to end with the Aeon bundle hidden and no sagas; the full suite passed (190, 5 skipped). The handoff was redrafted with the chat-transfer template; the previous handoff was kept as `docs/build/BUILD-NOTES.md`.

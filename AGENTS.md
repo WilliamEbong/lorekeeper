@@ -1,6 +1,6 @@
 # Lorekeeper — agent rules
 
-Before anything, read docs/build/HANDOFF.md, docs/build/BUILD-PLAN.md and the tail of docs/build/SESSION-LOG.md.
+Before anything, read docs/build/HANDOFF.md (and, for detail, BUILD-PLAN.md and the SESSION-LOG tail).
 
 Spec Kit project: plan and build features with the speckit-* skills (constitution once; then specify → plan → tasks → implement → converge). Do not use superpowers brainstorming, writing-plans, executing-plans, or subagent-driven-development here; superpowers debugging, TDD, and verification skills are still fine.
 
