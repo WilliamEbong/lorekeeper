@@ -83,7 +83,7 @@ class Source:
                 # (an entry written as "## HO-104 — title" already has its section; its **ID:** line adds none)
                 ident = ID_LINE.match(line)[1]
                 out.append({"level": 7, "title": ident, "number": ident, "bare": ident, "line": i,
-                            "example": example or "example" in line.lower()})
+                            "example": "example" in line.lower()})   # real entries may follow an example block
         for k, s in enumerate(out):
             s["end"] = next((t["line"] for t in out[k + 1:] if t["level"] <= s["level"]), len(self._lines))
             s["ref"] = s["number"] or s["title"]

@@ -122,6 +122,12 @@ class ReviewFindingTests(unittest.TestCase):
         self.assertLess(text.index("`HO-001`"), text.index("EXAMPLE"))
         mixed = self.source("**ID:** `HO-031`\n\n**ID:** `AD-050`\n\n**ID:** `HO-032`\n", "overrides")
         self.assertEqual(mixed.next_id(), "HO-033")
+        # real entries may follow an example block under the same heading (one saga's register does)
+        after = self.source("**ID:** `HO-021`\n\n## Example block\n\n**ID:** `HO-000` *(example)*\n\n"
+                            "**ID:** `HO-022`\n\n**ID:** `HO-033`\n\nLast entry.\n", "overrides")
+        self.assertEqual(after.next_id(), "HO-034")
+        self.assertGreater(planning._register(after, ["**ID:** `HO-034`"]).index("`HO-034`"),
+                           planning._register(after, ["**ID:** `HO-034`"]).index("Last entry."))
         # an entry written as a heading that also carries its **ID:** line is one entry, not two
         headed = self.source("## HO-104 — The pumps\n\n**ID:** `HO-104`\n\nText.\n", "overrides")
         self.assertEqual(headed.find("HO-104")["title"], "HO-104 — The pumps")
