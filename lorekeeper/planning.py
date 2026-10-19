@@ -431,7 +431,7 @@ class Plan:
     # ---- views ----
     def label(self, type_):
         spec = self.p.schema["types"].get(type_, {})
-        return spec.get("plural") or spec.get("label") or type_ or "Other"
+        return spec.get("plural") or spec.get("label") or type_[:1].upper() + type_[1:] or "Other"
 
     def index(self):
         groups = {}
@@ -572,8 +572,8 @@ def fact(p, item, section=None, text=None, source=None, fact=None, remove=False,
             if not type_:
                 raise LoreError("NOT_FOUND", f"no planning entry named {item!r}; pass type (e.g. character) to start "
                                              "a planning page for it")
-            if type_ not in p.schema["types"]:
-                raise LoreError("INVALID", f"unknown type {type_!r}; types: {', '.join(p.schema['types'])}")
+            if not re.fullmatch(r"[a-z_]+", str(type_)):   # planning-only kinds (species, concept) are allowed
+                raise LoreError("INVALID", f"type must be lower-case letters, e.g. {', '.join(p.schema['types'])}")
             name = str(item).strip()
             if not name or store.BAD_NAME.search(name):
                 raise LoreError("INVALID", "name must be one line without [ ] | # ^ / \\ (they break wikilinks)")
