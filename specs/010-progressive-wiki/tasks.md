@@ -24,13 +24,13 @@
 - [x] T15 User guide, agent skill, README (MCP setup for any world). (FR-26, FR-23)
 
 ## Sagas (clones and probes under lk-scratch)
-- [ ] T16 Before-baseline on probes; fresh clones.
-- [ ] T17 Re-vendor; `story_wiki` key; `story_wiki_update` skill, README listing and one pointer; `.mcp.json`; saga suites with parity. (FR-19 to FR-21, FR-23)
-- [ ] T18 MCP handshake test on each clone: lists `wiki`, `fact-add`, `fact-end`; calls `wiki`. (SC-7)
-- [ ] T19 Backfill, three parallel agents, approved sources only, decisions in `agent_decisions.md`. (FR-22, SC-6)
-- [ ] T20 Replay on probes: suites, byte-identical status and validate, untouched Wiki, skills, roles and templates, profile packets verify; after-freeze routine re-run from scratch on a probe matches the backfill; reviewer on three characters per saga. (SC-5, SC-6)
-- [ ] T21 Playwright on `saga.py timeline` (Wiki tab, Add a fact queues a request). (SC-3)
-- [ ] T22 Land fast-forward only with `land.sh`. (FR-24)
+- [x] T16 Before-baseline on probes; fresh clones.
+- [x] T17 Re-vendor; `story_wiki` key; `story_wiki_update` skill, README listing and one pointer; `.mcp.json`; saga suites with parity. (FR-19 to FR-21, FR-23)
+- [x] T18 MCP handshake test on each clone: lists `wiki`, `fact-add`, `fact-end`; calls `wiki`. (SC-7)
+- [x] T19 Backfill, three parallel agents, approved sources only, decisions in `agent_decisions.md`. (FR-22, SC-6)
+- [x] T20 Replay on probes: suites, byte-identical status and validate, untouched Wiki, skills, roles and templates, profile packets verify; after-freeze routine re-run from scratch on a probe matches the backfill; reviewer on three characters per saga. (SC-5, SC-6)
+- [x] T21 Playwright on `saga.py timeline` (Wiki tab, Add a fact queues a request). (SC-3)
+- [x] T22 Land fast-forward only with `land.sh`. (FR-24)
 
 ## Finish
-- [ ] T23 Full suite, stdlib and `open()` scans, saga suites, Playwright, detector, MCP tests; two fresh-context reviews and their fixes. (SC-8)
+- [x] T23 Full suite, stdlib and `open()` scans, saga suites, Playwright, detector, MCP tests; two fresh-context reviews and their fixes. (SC-8)

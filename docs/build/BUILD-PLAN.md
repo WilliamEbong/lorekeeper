@@ -357,10 +357,10 @@ Paths are relative to each saga root and identical in all three repos.
 - [x] Ops: `wiki`, `fact-add`, `fact-end`, `fact-remove`; `--config`; `mcp --saga`; check codes; schema defaults; MCP golden
 - [x] Editor: Wiki tab, picker, card toggle, Add a fact with Undo, saga requests; Playwright; detector
 - [x] Templates, user guide, agent skill, README
-- [ ] Sagas: baseline, clones, vendor and config, skill and pointer, `.mcp.json`, handshake test
-- [ ] Sagas: backfill (three parallel agents), probe replay, after-freeze proof, reviewer
-- [ ] Land the three sagas (fast-forward only)
-- [ ] Finish: all checks, two reviewers, docs, handoff, memory, cron deleted, notification
+- [x] Sagas: baseline, clones, vendor and config, skill and pointer, `.mcp.json`, handshake test
+- [x] Sagas: backfill (three parallel agents), probe replay, after-freeze proof, reviewer
+- [x] Land the three sagas (fast-forward only)
+- [x] Finish: all checks, two reviewers, docs, handoff, memory, cron deleted, notification
 
 # Feature requests from the owner
 
