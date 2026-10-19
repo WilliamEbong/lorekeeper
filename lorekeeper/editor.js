@@ -1412,8 +1412,9 @@ async function wikiLoad() {
   try {
     const plan = planMode();
     if (wiki.hasPlan == null || plan) {   // a world has a planning layer when the planning op answers
-      try { wiki.planIndex = await api('planning'); wiki.hasPlan = true; }
-      catch (error) { if (error.code !== 'INVALID' || !/no planning wiki/.test(error.message)) throw error; wiki.hasPlan = false; wiki.planIndex = null; }
+      // NOT_FOUND: the world has no planning layer. Any other error (bad settings) shows in Planning only.
+      try { wiki.planIndex = await api('planning'); wiki.hasPlan = true; wiki.planError = null; }
+      catch (error) { wiki.planIndex = null; wiki.hasPlan = error.code !== 'NOT_FOUND'; wiki.planError = wiki.hasPlan ? error : null; }
     }
     if (plan && !wiki.hasPlan) wiki.asOf = null;
     const index = await api('wiki', typeof wiki.asOf === 'number' ? {as_of: wiki.asOf} : {});
@@ -1433,7 +1434,8 @@ async function wikiLoad() {
 }
 function openEntry(key, name, fromIndex = false) {
   // From the index a card starts at the picker's chapter; a link inside a card keeps that card's chapter.
-  Object.assign(wiki, {open: key, openName: name, cardAsOf: fromIndex || !wiki.open ? wiki.asOf : wiki.cardAsOf, form: null});
+  Object.assign(wiki, {open: key, openName: name, cardAsOf: fromIndex || !wiki.open ? wiki.asOf : wiki.cardAsOf, form: null,
+    ...(key !== wiki.open ? {cite: null, citeText: null, review: null} : {})});
   if (wiki.open !== wiki.card?.key) wiki.card = null;
   renderView();
   requestAnimationFrame(() => $('wiki-title')?.focus({preventScroll: true}));
@@ -1467,6 +1469,7 @@ function wikiView(view) {
   if (wiki.error) { view.append(emptyState('The wiki could not load', explain(wiki.error))); return; }
   if (!wiki.index) { view.append(emptyState('Opening the wiki…', 'Lorekeeper is reading the story pages.')); return; }
   const layout = el('div', null, {class: 'wiki'});
+  if (planMode() && wiki.planError) { view.append(emptyState('The planning wiki could not load', explain(wiki.planError))); return; }
   layout.append(...(planMode() && wiki.planIndex ? [planIndex(), planCard()] : [wikiIndex(), wikiCard()]));
   view.append(layout);
 }
@@ -1694,9 +1697,9 @@ async function openCite(id, source, section) {
   // A citation chip shows the cited section of the source document under the fact; a second click hides it.
   if (wiki.cite === id) { wiki.cite = null; renderView(); return; }
   wiki.cite = id; wiki.citeText = null; renderView();
-  try { wiki.citeText = await api('planning-source', {source, section}); }
-  catch (error) { wiki.citeText = {error}; }
-  if (wiki.cite === id) renderView();
+  let got;
+  try { got = await api('planning-source', {source, section}); } catch (error) { got = {error}; }
+  if (wiki.cite === id) { wiki.citeText = got; renderView(); }   // another chip clicked meanwhile: drop this answer
 }
 function citeBox(id) {
   if (wiki.cite !== id) return null;
@@ -1752,10 +1755,10 @@ function planCard() {
       const li = add(ul, el('li', null, {class: 'fact'}));
       inline(add(li, el('span', null, {class: 'text'})), f.text);
       chips(add(li, el('span', null, {class: 'marks'})), f.sources, f.id);
-      const quote = citeBox(`${f.id}|0`) || citeBox(`${f.id}|1`); if (quote) li.append(quote);
+      f.sources.forEach((_, i) => { const quote = citeBox(`${f.id}|${i}`); if (quote) li.append(quote); });
     }
     ideas.sections.forEach((s, i) => {
-      const li = add(ul, el('li', null, {class: 'fact'})), id = `idea-${i}`;
+      const li = add(ul, el('li', null, {class: 'fact'})), id = `${card.key}-idea-${i}`;
       li.append(el('span', s.title, {class: 'text'}));
       chips(add(li, el('span', null, {class: 'marks'})), [{source: s.source, section: s.section, title: s.title, found: true}], id);
       const quote = citeBox(`${id}|0`); if (quote) li.append(quote);
@@ -1798,9 +1801,9 @@ function planLinks(card) {
     const ul = add(dd, el('ul', null, {class: 'link-list'}));
     links.dialogues.forEach((d, i) => {
       const li = add(ul, el('li'));
-      chips(li, [{source: d.source, section: d.section, title: d.title, found: true}], `dlg-${i}`);
+      chips(li, [{source: d.source, section: d.section, title: d.title, found: true}], `${card.key}-dlg-${i}`);
       li.append(' ', d.title);
-      const quote = citeBox(`dlg-${i}|0`); if (quote) li.append(quote);
+      const quote = citeBox(`${card.key}-dlg-${i}|0`); if (quote) li.append(quote);
     });
   });
   row(`Appears in · ${links.appears_in.length}`, dd => {
@@ -1810,8 +1813,8 @@ function planLinks(card) {
       const li = add(ul, el('li'));
       const name = chapterName({n: c.n, name: c.title});
       if (c.source && c.section) {
-        li.append(button(name, () => openCite(`ch-${i}|0`, c.source, c.section), {class: 'link', 'aria-expanded': String(wiki.cite === `ch-${i}|0`), id: `appears-${c.n}`}));
-        const quote = citeBox(`ch-${i}|0`); if (quote) li.append(quote);
+        li.append(button(name, () => openCite(`${card.key}-ch-${i}|0`, c.source, c.section), {class: 'link', 'aria-expanded': String(wiki.cite === `${card.key}-ch-${i}|0`), id: `appears-${c.n}`}));
+        const quote = citeBox(`${card.key}-ch-${i}|0`); if (quote) li.append(quote);
       } else li.append(name);
     });
   });

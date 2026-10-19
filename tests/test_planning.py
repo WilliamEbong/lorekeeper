@@ -91,6 +91,113 @@ class SourceReaderTests(unittest.TestCase):
         self.assertEqual(conv.find("A.252")["title"], "§A.252 — The Bound (Dec 2048)")
 
 
+class ReviewFindingTests(unittest.TestCase):
+    """Fixes from the run-5 review (each failed before its fix)."""
+
+    def source(self, text, role=None):
+        d = tempfile.mkdtemp(prefix="lk-src-")
+        self.addCleanup(shutil.rmtree, d, True)
+        path = os.path.join(d, "doc.md")
+        with open(path, "w", encoding="utf-8", newline="") as fh:
+            fh.write(text)
+        return planning.Source("Doc", path, 1, role)
+
+    def test_numbers_match_numbers_only_and_duplicates_need_a_title(self):
+        src = self.source("## 1.10 Ten\nx\n## X.7 Fleet doctrine\na\n## X.7 Fleet losses\nb\n## VIII.2 Late part\nc\n")
+        with self.assertRaises(LoreError) as cm:
+            src.find("1.1")   # not "1.10 Ten"
+        self.assertEqual(cm.exception.code, "NOT_FOUND")
+        self.assertIn("1.10", cm.exception.message)   # close matches are listed
+        with self.assertRaises(LoreError) as cm:
+            src.find("X.7")
+        self.assertIn("X.7 Fleet losses", cm.exception.message)
+        self.assertEqual(src.find("§X.7 Fleet losses")["title"], "X.7 Fleet losses")
+        self.assertEqual(src.find("X.7 Fleet d")["title"], "X.7 Fleet doctrine")
+        self.assertEqual(src.find("VIII.2")["title"], "VIII.2 Late part")
+
+    def test_register_skips_examples_and_numbers_within_the_main_prefix(self):
+        reg = self.source("## Register\n\n### EXAMPLE ENTRY\n\n**ID:** `HO-000` *(example)*\n", "overrides")
+        self.assertEqual(reg.next_id(), "HO-001")
+        text = planning._register(reg, ["**ID:** `HO-001`"])
+        self.assertLess(text.index("`HO-001`"), text.index("EXAMPLE"))
+        mixed = self.source("**ID:** `HO-031`\n\n**ID:** `AD-050`\n\n**ID:** `HO-032`\n", "overrides")
+        self.assertEqual(mixed.next_id(), "HO-033")
+
+    def test_write_back_to_a_parent_section_goes_before_its_first_subsection(self):
+        src = self.source("## 3. Machines\nIntro.\n\n### 3.1 Fighter\nFast.\n")
+        text, _ = planning._amend(src, src.find("3"), "> **Amended:** x")
+        self.assertLess(text.index("Amended"), text.index("### 3.1"))
+        self.assertGreater(text.index("Amended"), text.index("Intro."))
+
+    def test_dialogue_entries_survive_a_deeper_heading(self):
+        base, root = copy_fixture()
+        self.addCleanup(shutil.rmtree, base, True)
+        path = os.path.join(base, "planning", "docs", "conversations.md")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        with open(path, "w", encoding="utf-8", newline="") as fh:
+            fh.write(text.replace("**Sava:** asks about the data.\n", "#### Beats\n**Sava:** asks about the data.\n"))
+        self.assertEqual([d["section"] for d in run("planning", {"item": "Sava"}, root)["links"]["dialogues"]],
+                         ["A.252"])
+
+    def test_canonical_names_win_over_aliases(self):
+        base, root = copy_fixture()
+        self.addCleanup(shutil.rmtree, base, True)
+        with open(os.path.join(root, "Planning", "Characters", "Aaron (plan).md"), "w", encoding="utf-8",
+                  newline="") as fh:
+            fh.write("---\ntype: character\ncanonical_name: Aaron\naliases: [Sava]\n---\n\n# Aaron\n")
+        self.assertEqual(run("planning", {"item": "Sava"}, root)["name"], "Sava")
+
+    def test_written_default_ignores_wiki_first_appearance(self):
+        base, root = copy_fixture()
+        self.addCleanup(shutil.rmtree, base, True)
+        path = os.path.join(root, "Characters", "Edran.md")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        with open(path, "w", encoding="utf-8", newline="") as fh:
+            fh.write(text.replace("first_appearance: 2", "first_appearance: 9"))
+        self.assertEqual(run("planning-impact", {"terms": ["Sava"]}, root)["written"], 2)
+
+    def test_change_refuses_a_missing_cited_section_before_writing(self):
+        base, root = copy_fixture()
+        self.addCleanup(shutil.rmtree, base, True)
+        docs = os.path.join(base, "planning", "docs")
+        before = read_bytes(os.path.join(docs, "overrides.md"))
+        card = run("planning", {"item": "Will Marsh"}, root)   # cites World Bible §9.9, which does not exist
+        with self.assertRaises(LoreError) as cm:
+            run("planning-change", {"item": "Will Marsh", "fact": card["sections"][0]["facts"][0]["id"],
+                                    "text": "x", "decision": "y"}, root)
+        self.assertEqual(cm.exception.code, "INVALID")
+        self.assertIn("planning-source", cm.exception.message)
+        self.assertEqual(read_bytes(os.path.join(docs, "overrides.md")), before)
+
+    def test_change_on_an_entry_with_only_a_short_name(self):
+        base, root = copy_fixture()
+        self.addCleanup(shutil.rmtree, base, True)
+        out = run("planning-change", {"item": "Bo", "section": "Identity", "text": "Bo hums.", "decision": "He hums."},
+                  root)
+        self.assertEqual(out["override"], "HO-002")
+
+    def test_settings_refuse_overlapping_folders_and_bad_prose_patterns(self):
+        for cfg, word in (({"folder": ".", "sources": []}, "folder"),
+                          ({"folder": "..", "sources": []}, "folder"),
+                          ({"folder": "Story", "sources": []}, "story"),
+                          ({"folder": "P", "sources": [{"name": "C", "file": "CH{n}-{title}.md", "prose": True}]},
+                           "{n}")):
+            with self.subTest(cfg=cfg):
+                p = store.Project(tempfile.mkdtemp(), {"story_wiki": "Story", "planning_wiki": cfg})
+                with self.assertRaises(LoreError) as cm:
+                    planning.plan(p)
+                self.assertIn(word, cm.exception.message)
+
+    def test_a_readme_in_the_planning_folder_is_not_a_problem(self):
+        base, root = copy_fixture()
+        self.addCleanup(shutil.rmtree, base, True)
+        with open(os.path.join(root, "Planning", "README.md"), "w", encoding="utf-8") as fh:
+            fh.write("What this folder is.\n")
+        self.assertNotIn("README.md", json.dumps(run("planning", {}, root)["problems"]))
+
+
 class CitationTests(unittest.TestCase):
     def test_read_citation(self):
         self.assertEqual(planning.read_citation("Born in 1782. [src: World Bible 2.1; Conversations §A.252]"),

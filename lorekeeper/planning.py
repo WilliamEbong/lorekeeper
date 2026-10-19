@@ -1,6 +1,8 @@
 """The planning wiki: the author's designed end state as per-entity pages whose facts cite their
 source documents, link lists Lorekeeper computes, an impact search, and the recorded planning change."""
+import collections
 import datetime
+import difflib
 import os
 import re
 
@@ -14,7 +16,7 @@ IDEAS = "ideas"
 CITE = re.compile(r"[ \t]*\[\s*src\s*:\s*([^\]\n]*)\]\s*\Z", re.I)
 CITE_ANY = re.compile(r"\[\s*src\s*:", re.I)
 # a heading's section number: 23, 0.8.4, A.252, B.2A, HO-031 (a leading § is ignored)
-NUMBER = re.compile(r"§?\s*(\d\w*(?:\.\w+)*|[A-Za-z]{1,3}\.\d\w*(?:\.\w+)*|[A-Za-z]{1,4}-\d+)(?=\Z|[\s.:)—–-])")
+NUMBER = re.compile(r"§?\s*(\d\w*(?:\.\w+)*|[A-Za-z]{1,4}\.\d\w*(?:\.\w+)*|[A-Za-z]{1,4}-\d+)(?=\Z|[\s.:)—–-])")
 ID_LINE = re.compile(r"\s*\*\*ID:\*\*\s*`?([A-Za-z]{1,4}-\d+)`?")   # an override register entry
 SPEAKER = re.compile(r"\s*\*\*([^*:\n]+?)(?:\s*\([^)\n]*\))?:\*\*")
 CHAPTER_HEAD = re.compile(r"(?:chapter|ch)\.?\s*0*(\d+)\b\s*[:.—–-]?\s*(.*)", re.I)
@@ -64,7 +66,7 @@ class Source:
     def _parse(self):
         # ponytail: code fences are not tracked; planning documents use bare ``` lines as separators, unbalanced,
         # and the sagas' own card parser reads headings the same way. Track fences if a world needs it.
-        out = []
+        out, example = [], False
         for i, raw in enumerate(self._lines):
             line = raw.rstrip("\r")
             m = wiki.HEADING.fullmatch(line) if line[:1] == "#" else None
@@ -73,10 +75,13 @@ class Source:
                 num = NUMBER.match(title)
                 number = num[1] if num and any(c.isdigit() for c in num[1]) else None
                 bare = title[num.end():].lstrip(" .:)—–-") if number else title
-                out.append({"level": len(m[1]), "title": title, "number": number, "bare": bare, "line": i})
+                example = "example" in title.lower()   # a register's illustration, not an entry
+                out.append({"level": len(m[1]), "title": title, "number": number, "bare": bare, "line": i,
+                            "example": example})
             elif self.role == "overrides" and ID_LINE.match(line):
                 ident = ID_LINE.match(line)[1]
-                out.append({"level": 7, "title": ident, "number": ident, "bare": ident, "line": i})
+                out.append({"level": 7, "title": ident, "number": ident, "bare": ident, "line": i,
+                            "example": example or "example" in line.lower()})
         for k, s in enumerate(out):
             s["end"] = next((t["line"] for t in out[k + 1:] if t["level"] <= s["level"]), len(self._lines))
             s["ref"] = s["number"] or s["title"]
@@ -85,10 +90,6 @@ class Source:
     def sections(self):
         self.lines()
         return self._sections
-
-    def path_pattern(self, n):
-        """A prose source's file for chapter n (its file is a pattern such as CH{n:03d}.md)."""
-        return self.path.format(n=n)
 
     def outline(self):
         lines = self.lines()
@@ -103,18 +104,24 @@ class Source:
             raise LoreError("INVALID", f"give a section of {self.name}: a number such as 23.4 or a heading's "
                                        f"title; list them with: lore planning-source {self.name!r}")
         secs = self.sections()
-        hits = [s for s in secs if s["number"] and s["number"].lower() == want.lower()]
-        n = norm(want)
-        hits = hits or [s for s in secs if n in (norm(s["title"]), norm(s["bare"]))]
+        num = NUMBER.match(want)
+        if num and any(c.isdigit() for c in num[1]):   # a number, optionally followed by the start of the title
+            rest = norm(want[num.end():])
+            hits = [s for s in secs if s["number"] and s["number"].lower() == num[1].lower()
+                    and norm(s["bare"]).startswith(rest)]
+        else:
+            n = norm(want)
+            hits = [s for s in secs if n in (norm(s["title"]), norm(s["bare"]))] or \
+                [s for s in secs if n and (norm(s["title"]).startswith(n) or norm(s["bare"]).startswith(n))]
+        if len(hits) > 1:
+            some = "; ".join(s["title"] for s in hits[:8])
+            raise LoreError("INVALID", f"{ref!r} matches several sections of {self.name}: {some}; give the number "
+                                       f"and the start of the title, e.g. §{hits[1]['ref']} {hits[1]['bare'][:20]}")
         if not hits:
-            hits = [s for s in secs if n and (norm(s["title"]).startswith(n) or norm(s["bare"]).startswith(n))]
-            if len(hits) > 1:
-                some = "; ".join(s["title"] for s in hits[:8])
-                raise LoreError("INVALID", f"{ref!r} matches several sections of {self.name}: {some}; "
-                                           "give the section number or more of the title")
-        if not hits:
-            raise LoreError("NOT_FOUND", f"no section {ref!r} in {self.name}; list its sections with: "
-                                         f"lore planning-source {self.name!r}")
+            close = difflib.get_close_matches(want, [s["title"] for s in secs] + [s["ref"] for s in secs], 6, 0.6)
+            raise LoreError("NOT_FOUND", f"no section {ref!r} in {self.name}"
+                            + (f"; close: {'; '.join(close)}" if close else "")
+                            + f"; list its sections with: lore planning-source {self.name!r}")
         return hits[0]
 
     def text(self, sec):
@@ -130,13 +137,16 @@ class Source:
                 best = s
         return best
 
+    def entries(self):
+        """A register's real entries (sections whose ref is an id such as HO-031), examples left out."""
+        return [s for s in self.sections() if not s["example"] and re.fullmatch(r"[A-Za-z]+-\d+", s["number"] or "")]
+
     def next_id(self):
-        ids = [s["number"] for s in self.sections() if re.fullmatch(r"[A-Za-z]+-\d+", s["number"] or "")]
+        ids = [s["number"].upper().split("-") for s in self.entries()]
         if not ids:
             return "HO-001"
-        top = max(ids, key=lambda x: int(x.split("-")[1]))
-        prefix, number = top.split("-")
-        return f"{prefix.upper()}-{int(number) + 1:03d}"
+        prefix = collections.Counter(p for p, _ in ids).most_common(1)[0][0]   # the register's own series
+        return f"{prefix}-{max(int(n) for p, n in ids if p == prefix) + 1:03d}"
 
 
 # ---- settings, pages and entries -------------------------------------------------------------
@@ -166,8 +176,14 @@ def _settings(cfg):
         names.add(s["name"].lower())
         if sum(bool(s.get(r)) for r in ROLES) > 1:
             bad(f"{where} ({s['name']}) takes at most one of {', '.join(ROLES)}")
-        if s.get("prose") and "{n" not in s["file"]:
-            bad(f"{where} ({s['name']}): a prose file is a pattern with {{n}}, e.g. ../Chapters/CH{{n:03d}}/CHAPTER.md")
+        if s.get("prose"):
+            try:
+                ok = s["file"].format(n=1) != s["file"]
+            except (KeyError, IndexError, ValueError):
+                ok = False
+            if not ok:
+                bad(f"{where} ({s['name']}): a prose file is a pattern with {{n}} and no other braces, "
+                    "e.g. ../Chapters/CH{n:03d}/CHAPTER.md")
         if not isinstance(s.get("skip", []), list) or not all(isinstance(x, str) for x in s.get("skip", [])):
             bad(f"{where}.skip must be a list of line starts, e.g. [\"Meanwhile:\"]")
     if sum(bool(s.get("overrides")) for s in sources) > 1:
@@ -253,14 +269,28 @@ class Plan:
     def __init__(self, p):
         cfg = p.config.get("planning_wiki")
         if not cfg:
-            raise LoreError("INVALID", "this world has no planning wiki: add a planning_wiki setting with folder and "
+            raise LoreError("NOT_FOUND", "this world has no planning wiki: add a planning_wiki setting with folder and "
                                        "sources to the settings file (see the user guide, 'The planning wiki')")
         _settings(cfg)
         self.p = p
         self.folder = os.path.normpath(os.path.join(p.root, cfg["folder"]))
-        self.sources = [Source(s["name"], os.path.normpath(os.path.join(p.root, s["file"])), rank,
-                               next((r for r in ROLES if s.get(r)), None), s.get("skip", []))
-                        for rank, s in enumerate(cfg.get("sources", []), 1)]
+        here, root = (os.path.normcase(os.path.realpath(x)) for x in (self.folder, p.root))
+        if here == root or root.startswith(here.rstrip(os.sep) + os.sep):
+            raise LoreError("INVALID", "planning_wiki.folder must not be the project folder or contain it, or every "
+                                       "page would count as a planning page; use a folder of its own, e.g. "
+                                       "\"../Planning Wiki\"")
+        story = wiki.folder(p)
+        if story:
+            story = os.path.normcase(os.path.realpath(story))
+            if here == story or here.startswith(story + os.sep) or story.startswith(here + os.sep):
+                raise LoreError("INVALID", "planning_wiki.folder must not overlap the story_wiki folder; give each "
+                                           "layer a folder of its own")
+        self.sources = []
+        for rank, s in enumerate(cfg.get("sources", []), 1):
+            src = Source(s["name"], os.path.normpath(os.path.join(p.root, s["file"])), rank,
+                         next((r for r in ROLES if s.get(r)), None), s.get("skip", []))
+            src.pattern = s["file"]   # a prose source's chapter files: pattern.format(n=...) under the project root
+            self.sources.append(src)
         self.exclude = {n.lower() for n in cfg.get("exclude_names", [])}
         self.problems = []
         self.entries = []
@@ -278,6 +308,8 @@ class Plan:
         self.by_item = by_item
         self.by_key = {e.key: e for e in self.entries}
         self.by_name = {}
+        for e in self.entries:   # canonical names first: an alias never hides another entry's own name
+            self.by_name.setdefault(e.name.lower(), e)
         for e in self.entries:
             for n in e.names:
                 self.by_name.setdefault(n.lower(), e)
@@ -290,7 +322,7 @@ class Plan:
         for dirpath, dirnames, filenames in os.walk(self.folder):
             dirnames[:] = sorted(d for d in dirnames if d not in store.SKIP_DIRS and not d.startswith("."))
             for name in sorted(filenames):
-                if not name.endswith(".md") or name.startswith(("~$", ".")):
+                if not name.endswith(".md") or name.startswith(("~$", ".")) or name.lower() == "readme.md":
                     continue
                 path = os.path.join(dirpath, name)
                 with open(path, "rb") as fh:
@@ -379,7 +411,9 @@ class Plan:
                 continue
             lines, secs = s.lines(), [x for x in s.sections() if x["level"] <= 6]
             if s.role == "dialogues":
-                deepest = max((x["level"] for x in secs), default=0)
+                # entries are the deepest numbered headings (§A.252 …); a deeper unnumbered "#### Beats" stays inside
+                deepest = max((x["level"] for x in secs if x["number"]), default=None) or \
+                    max((x["level"] for x in secs), default=0)
                 for x in secs:
                     if x["level"] != deepest:
                         continue
@@ -520,7 +554,8 @@ def page_path(p, pl, type_, name):
     stem = store.DEVICE.sub(r"\1_", store.BAD_FILENAME.sub("-", name).strip(" ."))
     path = os.path.normpath(os.path.join(pl.folder, sub, stem + SUFFIX + ".md"))
     if not store.inside(pl.folder, path):
-        raise LoreError("INVALID", f"type {type_!r} folder points outside the planning folder")
+        raise LoreError("INVALID", f"type {type_!r} has a folder that points outside the planning folder; fix its "
+                                   "folder in the settings' types, or use another type")
     return path
 
 
@@ -622,16 +657,17 @@ def impact(p, item=None, terms=None, written=None, limit=40):
     pl = plan(p)
     phrases = []
     if item:
-        phrases += [n for n in pl.get(item).names if len(re.sub(r"\W", "", n)) >= 3 and n.lower() not in pl.exclude]
+        e = pl.get(item)
+        phrases += [n for n in e.names if len(re.sub(r"\W", "", n)) >= 3 and n.lower() not in pl.exclude] or [e.name]
     phrases += [t.strip() for t in terms or [] if isinstance(t, str) and t.strip()]
     if not phrases:
         raise LoreError("INVALID", "give item or terms: an entry whose names to search for, or phrases such as "
                                    "\"Mach 20\"")
     if limit < 1:
         raise LoreError("INVALID", "limit must be 1 or more")
-    if written is None:
-        chapters = wiki.story(p).chapters()
-        written = chapters[-1]["n"] if chapters else 0
+    if written is None:   # the last chapter the story wiki has recorded (stamped facts only, not page appearances)
+        written = max((x for e in wiki.story(p).entries if e.page is not None for s in e.parsed for f in s["facts"]
+                       if f["stamped"] for x in (f["from"], f["to"]) if x is not None), default=0)
     alts = sorted({r"\s+".join(map(re.escape, x.split())) for x in phrases}, key=len, reverse=True)
     rx = re.compile(r"(?<!\w)(?:" + "|".join(alts) + r")(?!\w)", re.I)
     more = {}
@@ -668,7 +704,7 @@ def impact(p, item=None, terms=None, written=None, limit=40):
                                      "status": _status(n, written), "lines": found})
         elif s.role == "prose":
             for n in range(0, written + 2):
-                path = os.path.normpath(os.path.join(p.root, s.path_pattern(n)))
+                path = os.path.normpath(os.path.join(p.root, s.pattern.format(n=n)))
                 if not os.path.isfile(path):
                     continue
                 with open(path, encoding="utf-8", errors="replace") as fh:
@@ -708,9 +744,11 @@ def _lines(text):
 
 
 def _amend(src, sec, note):
-    """The source text with note added at the end of the section, before its trailing blank lines."""
+    """The source text with note added at the end of the section's own text (before its first subsection and
+    its trailing blank lines)."""
     lines, cr = _lines(src.raw)
-    k = max(i for i in range(sec["line"], min(sec["end"], len(lines))) if lines[i].strip() or i == sec["line"])
+    stop = next((t["line"] for t in src.sections() if t["line"] > sec["line"]), sec["end"])
+    k = max(i for i in range(sec["line"], min(sec["end"], stop, len(lines))) if lines[i].strip() or i == sec["line"])
     add = [cr, note + cr]
     if k + 1 < len(lines) and lines[k + 1].strip():
         add.append(cr)
@@ -721,12 +759,11 @@ def _amend(src, sec, note):
 def _register(reg, block):
     """The register text with block inserted after the newest entry (before any example after it)."""
     lines, cr = _lines(reg.raw)
-    ids = [s for s in reg.sections() if re.fullmatch(r"[A-Za-z]+-\d+", s["number"] or "")]
-    if ids:
-        top = max(int(s["number"].split("-")[1]) for s in ids)
-        pos = max(s["end"] for s in ids if int(s["number"].split("-")[1]) == top)
-    else:
-        pos = len(lines) - 1
+    ids, examples = reg.entries(), [s["line"] for s in reg.sections() if s["example"] and s["level"] <= 6]
+    if ids:   # after the last real entry
+        pos = max(s["end"] for s in ids if s["line"] == max(t["line"] for t in ids))
+    else:     # the first entry: before an example, else at the end
+        pos = min(examples, default=len(lines) - 1)
     pos = min(pos, len(lines) - 1)
     while pos > 0 and not lines[pos - 1].strip():
         pos -= 1
@@ -759,6 +796,10 @@ def change(p, item, decision=None, fact=None, text=None, remove=False, section=N
     if fact is not None:
         sec, old = _hit(lines, e, fact)
     resolved = [pl.resolve(r) for r in (old["refs"] if old else [])]
+    for r in resolved:   # a citation that does not resolve would leave the write-back undone: stop before writing
+        if not r["found"] and r["role"] not in ("ideas", "overrides", "prose"):
+            raise LoreError("INVALID", f"{e.name}'s fact cites {r['ref']!r}, which does not resolve; fix the citation "
+                                       "first (lore planning-source <source> lists the sections), then retry")
     target = min((r for r in resolved if r["found"] and r["role"] not in ("ideas", "overrides", "prose")),
                  key=lambda r: r["rank"], default=None)
     src = pl.source(target["source"]) if target else None
@@ -772,19 +813,17 @@ def change(p, item, decision=None, fact=None, text=None, remove=False, section=N
     today = datetime.date.today().isoformat()
     heading = sec["heading"] if sec else section
     new_text = None if remove else text
-    if remove:
-        note_text = f"No longer true: {old['text']}"
-    else:
-        note_text = new_text
+    note_text = f"No longer true: {old['text']}" if remove else new_text
     done = []
 
     def step(label, fn):
         try:
-            fn()
+            value = fn()
         except LoreError as exc:
             raise LoreError(exc.code, exc.message + (f" (already written: {', '.join(done)})" if done else ""),
                             exc.data) from exc
         done.append(label)
+        return value
     counts = _counts(review)
     if reg is not None:
         quote = decision.splitlines()
@@ -814,11 +853,10 @@ def change(p, item, decision=None, fact=None, text=None, remove=False, section=N
         lines[old["first"]:old["last"] + 1] = [f"- {cite(new_text, refs)}{cr}"]
     else:
         wiki.append_fact(lines, section, f"- {cite(new_text, refs)}{cr}", cr)
-    new_version = [None]
-    step(e.page.path, lambda: new_version.__setitem__(0, store.atomic_write(path, head + "\n".join(lines), expect=sha)))
+    new_version = step(e.page.path, lambda: store.atomic_write(path, head + "\n".join(lines), expect=sha))
     _done(p)
     fid = None if remove else _id_of(lines, heading, new_text)
-    out = {"override": hid, "item": e.name, "path": e.page.path, "version": new_version[0], "section": heading,
+    out = {"override": hid, "item": e.name, "path": e.page.path, "version": new_version, "section": heading,
            "old": old["text"] if old else None, "text": new_text, "removed": bool(remove), "sources": refs,
            "id": fid, "write_back": write_back, "written": written, "impact": review}
     out["report"] = report(out, decision)
