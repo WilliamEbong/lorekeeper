@@ -100,7 +100,7 @@ function worldCard(world) {
   actions.append(button('Remove from list', async () => {
     if (!await ask(`Remove ${world.name} from the list?`, 'Only the list changes. The world’s folder and files stay exactly where they are.',
       'Remove from list')) return;
-    await post('forget', {folder: world.folder}).catch(error => status(error.message));
+    try { await post('forget', {folder: world.folder}); } catch (error) { status(error.message); return; }
     status(`${world.name} was removed from the list. Its files are untouched.`);
     await load();
     $('open-folder').focus();
@@ -140,7 +140,7 @@ async function openFolder(folder, make = false) {
   const reply = await post('open', {folder, make});
   if (reply.offer === 'make') {
     const yes = await ask(`“${reply.name}” isn’t a Lorekeeper world yet`,
-      'Make it one? Your files stay exactly as they are. Lorekeeper adds a small settings file so it can open the folder as a world.',
+      'Make it one? Your files stay exactly as they are. Lorekeeper adds a small settings file (lore.json), and notes for AI assistants (AGENTS.md, CLAUDE.md, .mcp.json and a hidden .lore folder).',
       'Make it a world');
     if (yes) return openFolder(folder, true);
     return;
@@ -152,7 +152,7 @@ $('new-name').addEventListener('input', () => { showPlace(); $('new-error').text
 $('change-place').addEventListener('click', () => busy($('change-place'), 'Choosing…', async () => {
   const {folder} = await post('pick', {title: 'Choose where to keep your world', start: parent || state.parent});
   if (folder) { parent = folder; showPlace(); }
-}).catch(error => { $('new-error').textContent = error.message; }));
+}).catch(error => { state.picker = false; render(); $('new-error').textContent = error.message; }));
 $('new-form').addEventListener('submit', event => {
   event.preventDefault();
   const name = $('new-name').value.trim();
@@ -171,8 +171,8 @@ $('new-form').addEventListener('submit', event => {
 });
 $('open-folder').addEventListener('click', () => busy($('open-folder'), 'Choosing…', async () => {
   let folder;
-  if (state.picker) folder = (await post('pick', {title: 'Choose a folder to open'})).folder;
-  else folder = window.prompt('Type the location of the folder to open');
+  try { if (state.picker) folder = (await post('pick', {title: 'Choose a folder to open'})).folder; else throw new Error(); }
+  catch { state.picker = false; render(); folder = window.prompt('Type the location of the folder to open'); }
   if (folder) await openFolder(folder.trim());
 }).catch(error => status(error.message)));
 $('close-app').addEventListener('click', async () => {

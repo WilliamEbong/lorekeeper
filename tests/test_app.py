@@ -83,6 +83,27 @@ class CreateAndAIFileTests(AppTestCase):
         # The AI files are not items and add no findings.
         self.assertEqual(ops.run("check", {}, root=str(root)), before)
 
+    def test_saga_mode_mcp_and_a_persons_own_entry(self):
+        root = Path(app.create_world("Canon", None, str(self.tmp / "Canon")))
+        settings = json.loads((root / "lore.json").read_text(encoding="utf-8"))
+        (root / "lore.json").write_text(json.dumps(dict(settings, mode="saga")), encoding="utf-8")
+        app.write_ai_files(str(root))
+        args = json.loads((root / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]["lorekeeper"]["args"]
+        self.assertIn("--saga", args)
+        own = {"mcpServers": {"lorekeeper": {"command": "lore", "args": ["mcp", "--root", str(root), "--saga"]}}}
+        (root / ".mcp.json").write_text(json.dumps(own), encoding="utf-8")
+        app.write_ai_files(str(root))
+        self.assertEqual(json.loads((root / ".mcp.json").read_text(encoding="utf-8")), own)
+
+    def test_a_new_world_never_goes_into_a_saga(self):
+        saga = self.tmp / "Saga"
+        (saga / "_system" / "scripts").mkdir(parents=True)
+        (saga / "_system" / "scripts" / "saga.py").write_text("", encoding="utf-8")
+        (saga / "_system" / "lorekeeper.json").write_text("{}", encoding="utf-8")
+        with self.assertRaises(app.AppError):
+            app.create_world("Saga", None, str(saga))
+        self.assertFalse((saga / "lore.json").exists())
+
     def test_invalid_mcp_json_is_left_alone(self):
         root = Path(app.create_world("Salt", None, str(self.tmp / "Salt")))
         (root / ".mcp.json").write_text("{broken", encoding="utf-8")

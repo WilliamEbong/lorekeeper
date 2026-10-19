@@ -89,7 +89,9 @@ const takesPart = (person, event) => partOf.get(person.path)?.has(event.path) ||
 // The engine gives every dated event an end (its start, if none is written); only a written one counts here.
 const hasEnd = (item) => Boolean(item.fields[endKey(item)] || item.fields.duration);
 // Dates as written, with year-month-day forms read out in words ("2 April 1988").
-const whenText = (item) => item.start ? dateWords(item.start.text) + (hasEnd(item) && item.end ? ` to ${dateWords(item.end.text)}` : '') : 'Undated';
+const everyday = calendars.every(c => c.type === 'gregorian');   // a custom calendar's months have their own names
+const shownDate = (text) => everyday ? dateWords(text) : text;
+const whenText = (item) => item.start ? shownDate(item.start.text) + (hasEnd(item) && item.end ? ` to ${shownDate(item.end.text)}` : '') : 'Undated';
 const narrow = () => matchMedia('(max-width: 900px)').matches;
 const typing = (node) => Boolean(node?.closest?.('input, textarea, select, [contenteditable="true"]'));
 // ponytail: label width from the character count; measure text if long names collide in practice.
@@ -146,7 +148,9 @@ function explain(error) {
   }
   if (error.code === 'FORBIDDEN') return /token/i.test(message) ? 'This page is from an earlier run of Lorekeeper. Reload the page to keep working.'
     : saga ? 'This world takes proposals only. Use Propose change.' : 'Lorekeeper didn’t allow that. Reload the page and try again.';
-  return PLAIN[error.code] || plainText(message);
+  const stale = error.code === 'CONFLICT' ? /changed (since|during)|version/i.test(message)
+    : error.code === 'NOT_FOUND' ? /reference 'path:/.test(message) : true;
+  return (stale && PLAIN[error.code]) || plainText(message);
 }
 // A gap on a timing connection ("+2d") in words: "2 days later".
 const UNIT_WORDS = {y: 'year', yr: 'year', mo: 'month', w: 'week', wk: 'week', d: 'day', h: 'hour', hr: 'hour', m: 'minute', min: 'minute'};
@@ -179,7 +183,7 @@ function findingText(f) {
   if (f.code === 'DATE_UNPARSED' && (m = /^(\w+): (.*)$/.exec(f.detail)))
     return `${label(m[1])} “${m[2]}” can’t be read as a date. Try 1764, July 1764, 12 July 1764 or about 1764.`;
   if ((m = /^(.+) \(([^()]*)\): (.+); (.+) \(([^()]*)\)$/.exec(f.detail))) {
-    const when = (d) => d === 'undated' ? 'no date' : dateWords(d);
+    const when = (d) => d === 'undated' ? 'no date' : shownDate(d);
     const [key, ...rest] = m[3].split(' ');
     const timing = graph.roles[key] && (!rest.length || /^[+-]?\s*\d/.test(rest.join(' ')));   // "after 2d", not "parent too young"
     const what = timing ? [label(key).toLowerCase(), ...(rest.length ? [lagWords(rest.join(' '))] : [])].join(', ') : m[3];
@@ -972,7 +976,7 @@ function timeline(view) {
     y += BAND;
     for (const p of placed) {
       const top = y + p.row * ROW, item = p.item, mid = top + 24;
-      const when = whenText(item) + (item.reborn ? `, reborn ${dateWords(item.reborn.text)}` : p.living ? ', alive (no death recorded)' : '');
+      const when = whenText(item) + (item.reborn ? `, reborn ${shownDate(item.reborn.text)}` : p.living ? ', alive (no death recorded)' : '');
       const g = svgEl('g', {class: `item cat-${category(item)}${fuzzy(item) ? ' fuzzy' : ''}`, role: 'button', tabindex: '-1',
         'data-path': item.path, 'aria-label': `${item.name}, ${typeLabel(item.type)}, ${when}`,
         id: `timeline-${encodeURIComponent(item.path)}`});
@@ -2043,8 +2047,8 @@ async function loadGraph() {
   refreshing = true;
   try {
     // Stamp before graph: a concurrent file edit during graph loading is caught on the next poll.
-    const stampResponse = await fetch('/api/stamp');
-    if (!stampResponse.ok) throw new ApiError('OFFLINE', 'Could not check the world for changes.');
+    const stampResponse = await fetch('/api/stamp').catch(() => { throw new ApiError('OFFLINE', 'No contact.'); });
+    if (!stampResponse.ok) throw new ApiError('IO_ERROR', 'Could not check the world for changes.');
     const stamp = (await stampResponse.json()).stamp;
     graph = await api('graph');
     lastStamp = stamp;

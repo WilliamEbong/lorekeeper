@@ -98,14 +98,19 @@ def same(a, b):
     return os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b))
 
 
+WORLDS_LOCK = threading.Lock()   # two tabs opening worlds at once must not lose an entry
+
+
 def remember(folder, name, kind_, when=None):
     when = when or datetime.datetime.now().isoformat(timespec="seconds")
-    worlds = [w for w in load_worlds() if not same(w["folder"], folder)]
-    save_worlds([{"folder": os.path.abspath(folder), "name": name, "kind": kind_, "opened": when}] + worlds)
+    with WORLDS_LOCK:
+        worlds = [w for w in load_worlds() if not same(w["folder"], folder)]
+        save_worlds([{"folder": os.path.abspath(folder), "name": name, "kind": kind_, "opened": when}] + worlds)
 
 
 def forget(folder):
-    save_worlds([w for w in load_worlds() if not same(w["folder"], folder)])
+    with WORLDS_LOCK:
+        save_worlds([w for w in load_worlds() if not same(w["folder"], folder)])
 
 
 def kind(folder):
@@ -124,16 +129,23 @@ def folder_name(name):
     return text or "My world"
 
 
-def world_name(folder):
+def world_settings(folder):
     try:
         with open(os.path.join(folder, store.CONFIG), encoding="utf-8") as fh:
-            return str(json.load(fh).get("name") or os.path.basename(folder))
-    except (OSError, ValueError, AttributeError):
-        return os.path.basename(folder)
+            settings = json.load(fh)
+    except (OSError, ValueError):
+        return {}
+    return settings if isinstance(settings, dict) else {}
+
+
+def world_name(folder):
+    return str(world_settings(folder).get("name") or os.path.basename(folder))
 
 
 def create_world(name, template, folder):
     folder = os.path.abspath(folder)
+    if kind(folder) == "saga":
+        raise AppError(f"{folder} is a saga. Open it with Open a folder, or choose another name or place.", 409)
     if kind(folder) == "world":
         raise AppError(f"There is already a world in {folder}. Open it from Your worlds, or choose another name or place.", 409)
     made = not os.path.exists(folder)
@@ -264,21 +276,34 @@ def write_ai_files(root):
             return   # a person's own file that Lorekeeper cannot read: leave it alone
         if not isinstance(settings, dict) or not isinstance(settings.get("mcpServers", {}), dict):
             return
-    settings.setdefault("mcpServers", {})["lorekeeper"] = {"command": console_python(), "args": [HERE, "mcp", "--root", root]}
+    servers = settings.setdefault("mcpServers", {})
+    old = servers.get("lorekeeper")
+    # Lorekeeper's own entry ends with this world's folder (and --saga); anything else is the person's and stays.
+    if old is not None and not (isinstance(old, dict) and isinstance(old.get("args"), list) and old["args"][1:4] == ["mcp", "--root", root]):
+        return
+    saga = world_settings(root).get("mode") == "saga"
+    servers["lorekeeper"] = {"command": console_python(), "args": [HERE, "mcp", "--root", root] + (["--saga"] if saga else [])}
     write_if_changed(path, json.dumps(settings, ensure_ascii=False, indent=2) + "\n")
 
 
 # ---- folder picker, file manager, sagas ------------------------------------------------------
-PICKER = importlib.util.find_spec("tkinter") is not None
+PICKER = importlib.util.find_spec("_tkinter") is not None
 PICK_LOCK = threading.Lock()
+NO_PICKER = "The folder picker didn't open on this computer. Type the folder's location instead."
 
 
 def pick_folder(title="Choose a folder", start=None):
     """The system folder picker, in front of the browser. None when the person cancels."""
-    import tkinter
-    from tkinter import filedialog
+    try:
+        import tkinter
+        from tkinter import filedialog
+    except ImportError as exc:
+        raise AppError(NO_PICKER, 503) from exc
     with PICK_LOCK:
-        window = tkinter.Tk()
+        try:
+            window = tkinter.Tk()
+        except tkinter.TclError as exc:
+            raise AppError(NO_PICKER, 503) from exc
         window.withdraw()
         window.attributes("-topmost", True)
         try:
@@ -410,7 +435,7 @@ def act_open(state, args):
 
 def act_pick(state, args):
     if not PICKER:
-        raise AppError("The folder picker isn't available on this computer. Type the folder's location instead.")
+        raise AppError(NO_PICKER, 503)
     title = args.get("title") if isinstance(args.get("title"), str) else "Choose a folder"
     return {"folder": pick_folder(title[:80], args.get("start") if isinstance(args.get("start"), str) else None)}
 
@@ -521,7 +546,11 @@ def run(port=PORT, browser=True):
         return 0
     try:
         server, url, _ = make_app(port)
-    except OSError:   # another program has the port
+    except OSError:   # a second double-click racing the first, or another program on the port
+        time.sleep(1.5)
+        if running(port):
+            webbrowser.open(f"http://127.0.0.1:{port}/")
+            return 0
         server, url, _ = make_app(0)
     print(f"Lorekeeper: {url}", flush=True)
     if browser:
@@ -531,7 +560,7 @@ def run(port=PORT, browser=True):
     except KeyboardInterrupt:
         pass
     finally:
-        threading.Thread(target=stop_all, args=(server,), daemon=True).start()
+        stop_all(server)   # serve_forever has ended, so its shutdown returns at once
         server.server_close()
     return 0
 
