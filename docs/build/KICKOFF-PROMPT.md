@@ -35,6 +35,7 @@ My decisions, which are locked:
 - Complete mode shows everything, with one card holding all of a character's identities.
 - My three saga systems must keep working exactly the way they work now. The progressive wiki is added on top: a separate Story Wiki layer, written after each chapter is frozen, from approved outputs only, never from drafts.
 - Lorekeeper is easy for AI to use: the built-in MCP server (registered in each saga's .mcp.json) and the CLI with --json, writing facts only through the new fact operations.
+- Out of scope for this run: the planning wiki (feature 011, in BUILD-PLAN under "Planning wiki"). Don't build any of it. It comes after this run.
 
 How to work:
 - Spec Kit: the spec exists. Run clarify (answer the questions yourself and record the answers in the spec), then plan, tasks, analyze, implement and converge. Don't change my locked decisions. Anything else you decide, log it in SESSION-LOG with how to undo it.

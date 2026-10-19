@@ -373,3 +373,49 @@ Paths are relative to each saga root and identical in all three repos.
 - How is a fact stamped with the chapter that establishes it: per field, per link, per page section?
 - Does the editor get a chapter picker that filters every view?
 - How does a hand-written world, with no saga pipeline, record the same stamps?
+
+## Planning wiki (requested 2026-10-19; shape confirmed; to be specified as feature 011 after run 4 builds 010)
+**The request, in the owner's terms:** a third wiki, the planning wiki: the intended end state of the story, everything the author has designed, including what no reader knows yet. Today the bibles and some other documents together play this role.
+- **Flow of information:** design happens in the planning wiki → it is used to create the chapter cards → the cards are used to draft → the full and progressive wikis are updated from the written story.
+- **Audience:** a back-end reference for the author and the AI, to plan and keep continuity.
+- **Editing:** the author changes a planning fact (example: "the fighter jet's top speed is Mach 30"), or tells the AI to. The AI then reviews and updates everything linked to it.
+- **Constraint:** the existing saga systems keep working exactly as they do now; the wikis are added on top.
+
+**Grounding (read 2026-10-19):**
+- Realm's `_system/workflow/AUTHORITY.md` ranks the sources:
+  1. The Master World Bible is binding for setting canon and "may contain facts the audience and the characters do not yet know".
+  2. Chapter Cards (extracted from the story architecture) and the Conversations document are binding per chapter.
+  3. The Style Bible.
+  4. Approved prose.
+  5. Derived systems (Current World Bible, Obsidian Wiki, ledgers, the agent-decisions register), which never overrule anything above. When they conflict, the derived data is repaired.
+- A decision that supersedes an authority is a HUMAN OVERRIDE and goes to the override register (`_system/knowledge/overrides.md`).
+- Plot ideas, the tech ledger and the review reports are reconciling context, not authorities.
+- Sizes in Realm: World Bible 387 KB, story architecture 712 KB, plot ideas 898 KB. Building a planning wiki means reading the World Bible once, split by section. Impact reviews should use a mechanical search (names and aliases across the bible, the cards, the chapters and the wikis) so the AI reads only the passages that match.
+
+**Shape (confirmed by the owner, 2026-10-19):**
+- The World Bible stays the authority, so the saga works unchanged. The planning wiki is a derived, per-entity view of it, each fact citing its section.
+- An author's edit in the planning wiki is recorded as a HUMAN OVERRIDE and written back into the World Bible by the AI.
+- An impact review then covers the matching planning pages, bible sections, unwritten chapter cards and the in-progress chapter.
+- A change that contradicts frozen chapters is flagged for the author, never applied to approved prose.
+- It is a separate feature (011), built after 010, reusing its Wiki tab, cards and fact operations. The Wiki tab's toggle becomes Planning | Full | Chapter N.
+
+**Owner decisions (2026-10-19):** the World Bible stays the master; any conflict with written (frozen) chapters is flagged to the author, never applied to approved prose; build 010 first, then specify this as feature 011.
+
+**Sources (owner, 2026-10-19):** every planning document, not just the World Bible. Examples:
+- Space's Military Systems Bible;
+- the Conversations documents (saved dialogues);
+- the character, species, faction and combatant card libraries;
+- tech ledgers, author rulings and overrides;
+- mystery and setup/payoff ledgers.
+
+The saga's `AUTHORITY.md` ranking still decides which document wins a conflict.
+
+**Linking (owner, 2026-10-19):** pages are well linked. For example, the Vampire page has a "Notable vampires" section linking each vampire's card, such as Sava's. Sava's card lists the saved dialogues that feature her, each linked. Characters, items and places have an "Appears in" section listing their chapters, kept current from the chapter cards.
+
+**Token-efficient design for links (proposed):** link lists are computed by Lorekeeper, never written by the AI, so they cost no tokens and never go stale:
+- **Notable X:** pages tagged or linked to the kind. Saga Wiki pages already carry tags such as `species-heavenian`.
+- **Dialogues:** Conversations entries (each is a heading, such as `### §A.252 — The Bound`) whose speaker lines (`Name:`) or text name the character, plus the entries a chapter card points to.
+- **Appears in:** a whole-word search for each page's names and aliases across the parsed chapter cards (the `**POV:**`, `**Location:**` and summary text of every card; the saga's `cards.py` already parses them). Planned chapters come from the cards; written chapters come from approved chapters.
+- **Limits:** a card that only says "the vampire captain" is missed unless that phrase is one of her names. Names that are ordinary words need an exclusion list.
+
+**Undecided material (owner, 2026-10-19):** plot ideas, opportunities portfolios and unapproved-decisions reports are shown in the planning wiki, clearly labelled as ideas. They are kept visibly apart from decided facts, and are never used as decided canon (for chapter cards, impact reviews or link lists).

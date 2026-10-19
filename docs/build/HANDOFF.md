@@ -80,8 +80,9 @@ The spec's FRs and SCs are the definition of done.
 ## 6. Next actions
 
 1. **Run 4: build feature 010 with build-continuously.** Use the prompt in [KICKOFF-PROMPT.md](KICKOFF-PROMPT.md). **← NEXT**
-2. Space chronology report: cards 051/052 (RAIL_REGRESSION) and four impossible SRD days (the author's call, carried over).
-3. Apply the deferred saga keys in each saga's `chronology_deferred.md` as chapters freeze (carried over).
+2. **After run 4: specify feature 011, the planning wiki.** The owner's request and decisions are in BUILD-PLAN.md under "Planning wiki". The World Bible stays the master, and conflicts with written chapters are flagged, never applied. It is not part of run 4.
+3. Space chronology report: cards 051/052 (RAIL_REGRESSION) and four impossible SRD days (the author's call, carried over).
+4. Apply the deferred saga keys in each saga's `chronology_deferred.md` as chapters freeze (carried over).
 
 ## 7. Constraints & preferences
 
