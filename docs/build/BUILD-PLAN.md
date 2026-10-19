@@ -334,6 +334,34 @@ Paths are relative to each saga root and identical in all three repos.
 
 **Later (not built).** ~~BC dates finer than a year display as astronomical years~~; ~~"1800s" means the decade~~; ~~Aeon nesting is dropped on import~~; ~~dated Aeon types all become `event`~~; ~~Aeon multitext exports as JSON text~~ (all done in run 3b, spec 009); re-vendor the engine into the three sagas (run 3b).
 
+# Run 4: progressive story wiki, built and applied to the sagas (2026-10-19)
+
+**Goal.** Build feature 010 into Lorekeeper (engine, CLI, MCP, editor) and add a Story Wiki layer to Realm, Space and Zombies without changing how the sagas work. Spec: [specs/010-progressive-wiki](../../specs/010-progressive-wiki/spec.md) ([plan](../../specs/010-progressive-wiki/plan.md), [tasks](../../specs/010-progressive-wiki/tasks.md)). Branch `feat/010-progressive-wiki`, local commits only.
+
+**Deepened brief.**
+1. A professional would add: errors that say how to fix them (every refusal names the fix); a `check` warning for bad stamps; Undo for facts in the editor; MCP writes in a saga limited to the Story Wiki, so no tool can touch canon; a spoiler guard (hidden pages become plain text, frontmatter hidden in progressive mode); live reload for the Story Wiki folder; the 3,000-item timing test.
+2. Rawest material: the code; the saga repos as they are (Wiki pages, `CURRENT_WORLD_BIBLE_OUT.md`, approved deltas, git history of the Wiki between freezes); the saga test suites; the running editor; Claude Code's MCP docs.
+3. Methods: Spec Kit (clarify, plan, tasks, analyze, implement, converge); TDD for stamps, visibility, names and folding; Playwright; the Impeccable detector; three parallel backfill subagents (one per saga); the run-3b clone, probe and land method; two fresh-context reviewers.
+4. Independent proof: the unit suite; the MCP golden test (MCP equals `--json`); an MCP handshake against each saga clone; saga suites with parity; byte-identical `status`/`validate` before and after; Playwright screenshots; reviewer subagents.
+
+**Acceptance checks.**
+- Spec SC-1 to SC-8.
+- AI use: every new capability (`wiki`, `fact-add`, `fact-end`, `fact-remove`) is one op, so it is a CLI command with `--json`, an MCP tool and an editor API; tool descriptions say what, when, returns and an example; errors say what went wrong and how to fix it; the MCP golden test covers the new tools; `docs/agent-skill.md` is enough on its own to use the wikis; each saga's `.mcp.json` passes a handshake that lists the tools and calls `wiki` on a clone; the README shows the MCP setup for any world.
+- Sagas: re-vendored engine, `story_wiki` key, backfilled `Story Wiki/`, shared `story_wiki_update` skill with one pointer, `.mcp.json`, the Wiki tab in `saga.py timeline` (Playwright); the after-freeze routine re-run from scratch on a probe matches the backfill; landed fast-forward only.
+
+**Steps.**
+- [x] Set up: cron, keep-awake, branch, live state re-checked
+- [x] Clarify (5 answers in the spec)
+- [ ] Plan, tasks, analyze
+- [ ] Engine: stamps, story pages, names, folding, visibility, worked-out facts, chapter list (TDD)
+- [ ] Ops: `wiki`, `fact-add`, `fact-end`, `fact-remove`; `--config`; `mcp --saga`; check codes; schema defaults; MCP golden
+- [ ] Editor: Wiki tab, picker, card toggle, Add a fact with Undo, saga requests; Playwright; detector
+- [ ] Templates, user guide, agent skill, README
+- [ ] Sagas: baseline, clones, vendor and config, skill and pointer, `.mcp.json`, handshake test
+- [ ] Sagas: backfill (three parallel agents), probe replay, after-freeze proof, reviewer
+- [ ] Land the three sagas (fast-forward only)
+- [ ] Finish: all checks, two reviewers, docs, handoff, memory, cron deleted, notification
+
 # Feature requests from the owner
 
 ## Chapter-scoped story wiki (requested 2026-10-18; specified 2026-10-19 as [specs/010-progressive-wiki](../../specs/010-progressive-wiki/spec.md), which settles the questions below; to be built in run 4)

@@ -15,6 +15,16 @@ Constraints are unchanged:
 - Frontmatter stays flat (`key: value`, lists inline).
 - In a saga, nothing is ever taken from a draft.
 
+## Clarifications
+
+### Session 2026-10-19
+Answered by the build agent with the recommended option (run 4, owner away; each is logged in SESSION-LOG with how to undo it).
+- Q: How does a world whose settings are not in a `lore.json` (a saga keeps them in `_system/lorekeeper.json`, with the Wiki folder as the project) reach its settings and its Story Wiki from the CLI and MCP? → A: A global `--config FILE` option names the settings file and `--root` is then the project folder as given. `story_wiki` is a folder relative to the project root and may sit beside it (`"../Story Wiki"`). `lore mcp --saga` lists and runs only the read operations and the fact operations, so an MCP session can never write Wiki pages. `python <vendor>/lorekeeper ...` runs the vendored engine without installing it.
+- Q: How does the editor undo "Add a fact" and "No longer true after chapter…"? → A: A `fact-remove` operation removes one fact (Undo of an add), and `fact-end --reopen` clears a fact's end (Undo of an end). Both are also CLI commands and MCP tools; agents use them only to undo their own mistakes.
+- Q: Where is a companion page written, and how is one created for someone who has no Wiki page? → A: At `<story_wiki>/<type plural>/<name> (story).md`, so its file name never clashes with a page name. `fact-add` with `--type` creates a standalone companion when the name matches nothing; its `first_appearance` is the fact's from-chapter.
+- Q: Which items does the wiki index list? → A: Every item except narrative items (chapters, books, sessions, saga chapter cards). Narrative items only label the chapter list; planned chapter cards never become entries.
+- Q: Where do `## Names` entries resolve links? → A: In the wiki, the fact operations and `check`. They resolve only after names, file stems and aliases (existing links never change target), and they never count as names for DUPLICATE_NAME or AMBIGUOUS_NAME.
+
 ## Terms
 - **Chapter number:** a position in reading order.
   - In a saga, the number in `CH004`.
@@ -56,11 +66,12 @@ Constraints are unchanged:
     - progressive cards use companion facts only, because the working pages are written for the present and would leak;
     - complete cards show the working page's body followed by the companion's facts and their ranges;
     - a page with no companion still appears in the index from its first appearance, and its card says no story facts are recorded yet.
-  - Companion pages are never separate items in other views or checks, and never make a name ambiguous. Their file names never clash with page names, so Obsidian links stay unambiguous.
+  - Companion pages are never separate items in other views or checks, and never make a name ambiguous. Their file names never clash with page names, so Obsidian links stay unambiguous: a companion is written at `<story_wiki>/<type plural>/<name> (story).md`.
+  - `story_wiki` is relative to the project root and may sit beside it (`"../Story Wiki"`).
 - **FR-3 Names.**
   - A story page may have a `## Names` section. Each fact in it is a name the reader knows the item by, with its stamp (`- the hooded rider [ch 2-5]`, `- Kresh [ch 6]`).
   - The shown name at chapter N is the latest-starting name whose range covers N. If no name covers N, it is the item's own name.
-  - These names also resolve links, as `aliases` do.
+  - These names also resolve links, as `aliases` do, in the wiki, the fact operations and `check`, but only after names, file stems and aliases, and never for DUPLICATE_NAME or AMBIGUOUS_NAME.
 - **FR-4 Secret identities.**
   - A new default role, `revealed_as` (label "Revealed to be", inverse "Also known as", single), links a story page to the one it turns out to be. Its stamp is the reveal chapter: `revealed_as: "[[Kresh]] [ch 9]"`.
   - From the reveal chapter on, and always in complete mode, the revealed page is folded into its target:
@@ -82,13 +93,16 @@ Constraints are unchanged:
 - **FR-7 Fact operations (CLI, MCP and editor API).**
   - `lore fact-add NAME --section S --text T --from N [--to M]` appends a stamped fact to the end of section S of NAME's story page. It creates the companion page, with its starter sections, when the world has a story-wiki folder and none exists yet.
   - `lore fact-end NAME --section S --fact TEXT --after M` closes the range of the first fact in S that starts with TEXT.
-  - Both check versions like `set` does (CONFLICT on a clashing edit), refuse unreadable chapters and ranges, and return the new version.
+  - With `--type`, when NAME matches nothing, `fact-add` creates a standalone companion of that type whose `first_appearance` is the from-chapter.
+  - `lore fact-end ... --reopen` clears a fact's end, and `lore fact-remove NAME --section S --fact TEXT` removes a fact. They are the editor's Undo.
+  - All three check versions like `set` does (CONFLICT on a clashing edit), refuse unreadable chapters and ranges, and return the new version.
   - These operations are how AI updates the wiki. Agents never hand-edit stamps.
+- **FR-7a Settings elsewhere.** A global `--config FILE` names the settings file for worlds without a `lore.json`; `--root` is then the project folder as given. `lore mcp --saga` offers only read operations and the fact operations. `python <vendor>/lorekeeper ...` runs a vendored engine.
 
 ### Reading
 - **FR-8 The `wiki` operation (CLI, MCP and editor API).**
   - `lore wiki [--as-of N]` returns the index:
-    - entries grouped by type (plural label), sorted by shown name;
+    - entries grouped by type (plural label), sorted by shown name; narrative items (chapters, books, sessions, chapter cards) are never entries;
     - each entry with its shown name, type, page and the chapter it appears in;
     - pages that have not appeared by N, and pages folded into another, are left out.
   - `lore wiki NAME [--as-of N]` returns the card:
@@ -158,7 +172,7 @@ Constraints are unchanged:
   - It reads each frozen chapter's snapshot and approved deltas, and the Wiki's changes between freeze commits (`git diff`, not every page at every version). It searches chapter text only to settle specific questions, such as how the reader first saw someone or where a name is first given.
   - The after-freeze skill (FR-21) follows the same limits for one chapter.
 - **FR-23 MCP in the sagas.**
-  - Each saga gets a project `.mcp.json` that runs the vendored engine's MCP server (`lore mcp`) on that saga. Any Claude Code session opened in the saga then has Lorekeeper's tools, the new `wiki` and fact tools included. Claude Code asks once to approve it.
+  - Each saga gets a project `.mcp.json` that runs the vendored engine's MCP server (`lore mcp --saga`, with `--config _system/lorekeeper.json`) on that saga. Any Claude Code session opened in the saga then has Lorekeeper's tools, the new `wiki` and fact tools included. Claude Code asks once to approve it.
   - The README shows the same setup for any world.
 - **FR-24 Landing.**
   - The saga work is done in clones under `lk-scratch` and landed by fast-forward only, together with re-vendoring the engine.
