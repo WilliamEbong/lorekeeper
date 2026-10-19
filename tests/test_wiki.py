@@ -423,6 +423,20 @@ class CliTests(unittest.TestCase):
         self.assertIn("cannot read --config", missing.stderr)
 
 
+class TemplateTests(unittest.TestCase):
+    def test_starter_worlds_show_the_progressive_wiki(self):   # FR-25
+        for template in ("novel", "series", "campaign"):
+            with self.subTest(template=template):
+                base = tempfile.mkdtemp(prefix="lk-wiki-")
+                self.addCleanup(shutil.rmtree, base, True)
+                ops.run("init", {"template": template}, root=base)
+                self.assertIn("the stranger in the grey coat", names(run(base, "wiki", as_of=1)))
+                at2 = run(base, "wiki", as_of=2)
+                ash = [e for g in at2["groups"] for e in g["entries"] if e["name"] == "Ash"][0]
+                self.assertEqual(ash["also"], ["The Cartographer"])
+                self.assertEqual(run(base, "check")["findings"], [])
+
+
 class CreateTests(unittest.TestCase):
     def test_starter_sections_only_without_story_folder(self):
         base = tempfile.mkdtemp(prefix="lk-wiki-")

@@ -105,6 +105,13 @@ def human(op, args, result):
     at = args.get("at")
     if op == "wiki":
         return wiki_text(result)
+    if op == "fact-add":
+        return f"Added to {result['item']} › {result['section']}: {result['text']} {chapters(result['from'], result['to'])}" \
+            + (f" (new story page {result['path']})" if result["created"] else "")
+    if op == "fact-end":
+        return f"{result['item']} › {result['section']}: {result['text']} {chapters(result['from'], result['to'])}"
+    if op == "fact-remove":
+        return f"Removed from {result['item']} › {result['section']}: {result['removed']}"
     if op == "timeline":
         rows = [(span(i["start"], i["end"]), i) for i in result["items"]]
         width = max((len(d) for d, _ in rows), default=0)

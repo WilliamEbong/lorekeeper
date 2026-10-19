@@ -21,6 +21,7 @@ const TITLES = {
   AGE_LIMIT: 'Older than anyone could be', PARENT_AGE: 'Parent too young at the birth', TWO_PLACES: 'In two places at once',
   ORDER_REGRESSION: 'Goes back in time against its order', MAX_DURATION: 'Lasts longer than allowed', GAP: 'Wrong gap between linked items',
   STORY_ORDER: 'Story order moves back in time', END_BEFORE_START: 'Ends before it starts', AMBIGUOUS_NAME: 'One name points to two items',
+  STAMP_UNREADABLE: 'A chapter stamp can’t be read', STAMP_RANGE: 'A chapter range ends before it starts',
 };
 const ICONS = {plus: 'M12 5v14M5 12h14', minus: 'M5 12h14', fit: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
   close: 'M6 6l12 12M18 6 6 18', left: 'M15 6l-6 6 6 6', right: 'M9 6l6 6-6 6'};

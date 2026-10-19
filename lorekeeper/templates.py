@@ -1,8 +1,21 @@
 """Small starter worlds as Python data, so vendoring needs no template directory."""
 
 WORLD_ITEMS = [
-    {"type": "character", "name": "Mira Vale", "fields": {"born": "1990"},
-     "body": "\n# Mira Vale\n\nA mapmaker looking for her missing sister. Replace these example details with your own.\n"},
+    {"type": "character", "name": "Mira Vale", "fields": {"born": "1990", "first_appearance": "1"},
+     "body": "\n# Mira Vale\n\nA mapmaker looking for her missing sister. Replace these example details with your own.\n"
+             "<!-- A chapter stamp such as [ch 2] at the end of a fact says from which chapter the reader knows it. "
+             "Open the Wiki tab to see it work. -->\n"
+             "\n## Beliefs\n\n- Believes her sister is still alive. [ch 1]\n"
+             "\n## Wants\n\n- To find her sister. [ch 1]\n"
+             "\n## Important events\n\n- Read a letter in her sister's hand. [ch 1]\n- Left Lantern Harbour with [[Ash]]. [ch 2]\n"},
+    {"type": "character", "name": "Ash", "fields": {"first_appearance": "1"},
+     "body": "\n# Ash\n\n<!-- Seen in chapter 1 before the reader learns the name: see Names. -->\n"
+             "\n## Names\n\n- the stranger in the grey coat [ch 1-1]\n- Ash [ch 2]\n"
+             "\n## Important events\n\n- Watched Mira read the letter. [ch 1]\n- Offered to guide Mira. [ch 2]\n"},
+    {"type": "character", "name": "The Cartographer",
+     "fields": {"first_appearance": "1", "revealed_as": "[[Ash]] [ch 2]"},
+     "body": "\n# The Cartographer\n\n<!-- A secret identity: a separate card until chapter 2 reveals it is Ash. -->\n"
+             "\n## Important events\n\n- Signed the maps Mira follows. [ch 1]\n"},
     {"type": "location", "name": "Lantern Harbour", "fields": {},
      "body": "\n# Lantern Harbour\n\nA harbour where a letter begins the journey.\n"},
     {"type": "event", "name": "The Letter",

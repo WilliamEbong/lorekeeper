@@ -47,9 +47,22 @@ For a different new project, use `lore init --template series` or `lore init --t
 
 From your story folder, run `lore serve`. Open the printed `http://127.0.0.1:…/` address in your browser and leave the terminal running. Ctrl+C stops the server. It serves only on your own computer and loads no CDN assets.
 
-Use Timeline to explore dates, Subway to follow people through events, Relationships to see who is related to whom, Ages to see how old everyone is at each event, Spreadsheet for quick edits, Narrative for the story in reading order, and Continuity for the problems `lore check` finds. Press `/` to find an item; its fields and connections open in the inspector, and every save can be undone. Disk edits appear automatically. The [user guide](docs/user-guide.md) explains each view, uncertainty and conflict messages.
+Use Timeline to explore dates, Subway to follow people through events, Relationships to see who is related to whom, Ages to see how old everyone is at each event, Spreadsheet for quick edits, Narrative for the story in reading order, Wiki for the story as a reader knows it at any chapter, and Continuity for the problems `lore check` finds. Press `/` to find an item; its fields and connections open in the inspector, and every save can be undone. Disk edits appear automatically. The [user guide](docs/user-guide.md) explains each view, uncertainty and conflict messages.
 
 `lore serve --saga` queues proposed changes for a host writing pipeline instead of editing canon. This restriction belongs to the editor; CLI and MCP callers must follow the host's own canon rules.
+
+## The story wiki
+
+End a fact with a chapter stamp, `[ch 4]`, or `[ch 2-5]` for something true only from chapter 2 to 5, and Lorekeeper can show the story as a reader knows it after any chapter. The starter worlds include examples: a stranger named only in chapter 2, and a secret identity revealed there.
+
+```text
+lore wiki --as-of 1
+lore wiki "Ash" --as-of 2
+lore fact-add "Mira Vale" Wants "To read the second letter." --from 2
+lore wiki "Mira Vale"
+```
+
+Without `--as-of` you get the complete wiki, everything the author knows. The editor's **Wiki** tab shows the same index and cards, with a chapter picker and Add a fact. The [user guide](docs/user-guide.md#the-story-wiki) explains stamps, names, reveals and story-wiki folders.
 
 ## Connect an agent
 
@@ -66,7 +79,23 @@ For a client that reads `.mcp.json`, add this configuration, replacing the path 
 }
 ```
 
-On Windows, a JSON path can use forward slashes, such as `C:/Stories/My Novel`. For clients with another configuration format, register the same stdio command: `lore mcp --root <project>`. The server supports both legacy `initialize` and modern per-request discovery/version metadata; it exposes the operations as tools. The [agent skill](docs/agent-skill.md) documents every operation and safe editing rules.
+On Windows, a JSON path can use forward slashes, such as `C:/Stories/My Novel`. For clients with another configuration format, register the same stdio command: `lore mcp --root <project>`.
+
+The same setup works for any world, including one that keeps a copy of Lorekeeper inside it and its settings in another file. Put a `.mcp.json` in the world's folder; Claude Code asks once to approve it. This is the form the sagas use, with the engine in `_system/vendor/lorekeeper`, the pages in `Wiki` and the settings in `_system/lorekeeper.json`:
+
+```json
+{
+  "mcpServers": {
+    "lorekeeper": {
+      "command": "python",
+      "args": ["${CLAUDE_PROJECT_DIR:-.}/_system/vendor/lorekeeper", "--root", "${CLAUDE_PROJECT_DIR:-.}/Wiki",
+               "--config", "${CLAUDE_PROJECT_DIR:-.}/_system/lorekeeper.json", "mcp", "--saga"]
+    }
+  }
+}
+```
+
+`--config` names a settings file to use instead of `lore.json`. `--saga` offers only the reading tools and the story-wiki fact tools, for worlds whose pages belong to a writing pipeline. Agents read the wiki with the `wiki` tool and record what a chapter reveals with `fact-add` and `fact-end`. The server supports both legacy `initialize` and modern per-request discovery/version metadata; it exposes the operations as tools. The [agent skill](docs/agent-skill.md) documents every operation and safe editing rules.
 
 ## Date cheat sheet
 
