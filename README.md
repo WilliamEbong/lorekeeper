@@ -107,7 +107,7 @@ The same setup works for any world, including one that keeps a copy of Lorekeepe
 }
 ```
 
-`--config` names a settings file to use instead of `lore.json`. `--saga` offers only the reading tools and the story-wiki fact tools, for worlds whose pages belong to a writing pipeline. Agents read the wiki with the `wiki` tool and record what a chapter reveals with `fact-add` and `fact-end`. The server supports both legacy `initialize` and modern per-request discovery/version metadata; it exposes the operations as tools. The [agent skill](docs/agent-skill.md) documents every operation and safe editing rules.
+`--config` names a settings file to use instead of `lore.json`. `--saga` offers only the reading tools and the story-wiki fact tools, for worlds whose pages belong to a writing pipeline. Agents read the wiki with the `wiki` tool and record what a chapter reveals with `fact-add` and `fact-end`. The server supports both legacy `initialize` and modern per-request discovery/version metadata; it exposes the operations as tools. The [agent skill](lorekeeper/agent-skill.md) documents every operation and safe editing rules.
 
 ## Date cheat sheet
 

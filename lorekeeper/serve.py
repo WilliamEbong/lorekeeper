@@ -73,11 +73,45 @@ def stamp(root, config=None, config_path=None):
     return hashlib.sha256(ops.to_json(sorted(rows)).encode("utf-8")).hexdigest()
 
 
+STATUSES = {"NOT_FOUND": 404, "CONFLICT": 409, "INVALID": 400, "FORBIDDEN": 403, "IO_ERROR": 500}
+
+
+class LocalHandler(BaseHTTPRequestHandler):
+    """A loopback-only request handler: Host check, security headers and JSON error replies."""
+    def log_message(self, *args):
+        pass  # Keep stdout usable by the saga host; the UI reports operation errors.
+
+    def parse_request(self):
+        if not super().parse_request():
+            return False
+        hosts = self.headers.get_all("Host", [])
+        if len(hosts) != 1 or hosts[0] not in {f"127.0.0.1:{self.server.server_port}",
+                                             f"localhost:{self.server.server_port}"}:
+            self.fail(LoreError("FORBIDDEN", "Host must be this local editor's address"))
+            return False
+        return True
+
+    def send(self, status, body, content_type="application/json"):
+        data = body.encode("utf-8", errors="backslashreplace")
+        self.send_response(status)
+        self.send_header("Content-Type", content_type + "; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; "
+                         "connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def fail(self, error, status=None):
+        self.send(status or STATUSES.get(error.code, 500), ops.to_json(error.as_dict()))
+
+
 ASSETS = {"/": "text/html", "/editor.js": "text/javascript", "/editor.css": "text/css",
           "/favicon.svg": "image/svg+xml"}
 
 
-def make_server(root, port=0, saga=False, config=None, factory=None, config_path=None):
+def make_server(root, port=0, saga=False, config=None, factory=None, config_path=None, home=None):
     root = os.path.abspath(root)
     settings = config
     if settings is None:
@@ -89,37 +123,8 @@ def make_server(root, port=0, saga=False, config=None, factory=None, config_path
     saga_mode = bool(saga or settings.get("mode") == "saga")
     token = secrets.token_urlsafe(32)
     assets = os.path.dirname(__file__)
-    statuses = {"NOT_FOUND": 404, "CONFLICT": 409, "INVALID": 400, "FORBIDDEN": 403, "IO_ERROR": 500}
 
-    class Handler(BaseHTTPRequestHandler):
-        def log_message(self, *args):
-            pass  # Keep stdout usable by the saga host; the UI reports operation errors.
-
-        def parse_request(self):
-            if not super().parse_request():
-                return False
-            hosts = self.headers.get_all("Host", [])
-            if len(hosts) != 1 or hosts[0] not in {f"127.0.0.1:{self.server.server_port}",
-                                                 f"localhost:{self.server.server_port}"}:
-                self.fail(LoreError("FORBIDDEN", "Host must be this local editor's address"))
-                return False
-            return True
-
-        def send(self, status, body, content_type="application/json"):
-            data = body.encode("utf-8", errors="backslashreplace")
-            self.send_response(status)
-            self.send_header("Content-Type", content_type + "; charset=utf-8")
-            self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; "
-                             "connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
-            self.end_headers()
-            self.wfile.write(data)
-
-        def fail(self, error, status=None):
-            self.send(status or statuses.get(error.code, 500), ops.to_json(error.as_dict()))
-
+    class Handler(LocalHandler):
         def do_GET(self):
             path = urlsplit(self.path).path
             try:
@@ -136,6 +141,7 @@ def make_server(root, port=0, saga=False, config=None, factory=None, config_path
                         body = body.replace("__LORE_TOKEN__", token).replace("__LORE_SAGA__", str(saga_mode).lower())
                         calendars = settings.get("calendars") or [{"id": "gregorian", "type": "gregorian"}]
                         body = body.replace("__LORE_CALENDARS__", html.escape(ops.to_json(calendars), quote=True))
+                        body = body.replace("__LORE_HOME__", html.escape(home or "", quote=True))   # the start screen, if any
                         body = body.replace("__LORE_NAME__", html.escape(str(settings.get("name") or os.path.basename(root)), quote=True))
                     self.send(200, body, ASSETS[path])
                     return

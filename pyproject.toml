@@ -21,4 +21,4 @@ include-package-data = false
 version = {attr = "lorekeeper.__version__"}
 
 [tool.setuptools.package-data]
-lorekeeper = ["editor.html", "editor.js", "editor.css", "favicon.svg"]
+lorekeeper = ["editor.html", "editor.js", "editor.css", "favicon.svg", "app.html", "app.js", "app.css", "lorekeeper.ico", "agent-skill.md"]

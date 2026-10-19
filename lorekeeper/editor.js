@@ -2074,6 +2074,8 @@ new ResizeObserver(() => {
 
 document.title = `${worldName} · Lorekeeper`;
 $('mode').hidden = !saga;
+// Opened from the start screen (lore app): a way back to the list of worlds.
+if (meta('lore-home')) { $('home-link').href = meta('lore-home'); $('home-link').hidden = false; }
 $('new-item').hidden = saga;
 try { await refresh(); idle(); }
 catch (error) { report(error, [], 'Could not load'); }

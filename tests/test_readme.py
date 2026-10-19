@@ -32,7 +32,7 @@ class Readme(unittest.TestCase):
             self.assertEqual(json.loads(result.stdout), {"findings": [], "fail": 0, "warn": 0})
 
     def test_agent_reference_covers_the_operations_and_parameters(self):
-        guide = Path(REPO, "docs", "agent-skill.md").read_text(encoding="utf-8")
+        guide = Path(REPO, "lorekeeper", "agent-skill.md").read_text(encoding="utf-8")
         rows = re.findall(r"(?m)^\| `([^`]+)` \| ([^|]+) \| ([^|]+) \| (.+) \|$", guide)
         reference = {name: (required, optional, example) for name, required, optional, example in rows}
         self.assertEqual(set(reference), {op.name for op in ops.OPS})

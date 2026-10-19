@@ -391,6 +391,30 @@ Paths are relative to each saga root and identical in all three repos.
 - [x] Land the three sagas (fast-forward only)
 - [x] Finish: all checks, docs, handoff, memory, cron deleted, notification
 
+# Run 6: the Lorekeeper app and a plain-language editor (2026-10-19)
+
+**Goal.** Make Lorekeeper usable by creative people who are not programmers, with no terminal at any point (feature 012: setup, a double-click launcher, a start screen, an AI guide inside each world), then a plain-language pass over the editor (feature 013). Spec: [specs/012-app](../../specs/012-app/spec.md) ([plan](../../specs/012-app/plan.md), [tasks](../../specs/012-app/tasks.md)); 013 to be specified after 012 lands on the branch. Branch `feat/012-app` (worktree `lk-scratch/lk-app`), local commits only.
+
+**Deepened brief.**
+1. A professional would add: friendly errors for every start-screen action (folder exists, no permission, Python missing); an empty state that leads with "Start a new world"; a missing-folder state; keyboard and screen-reader basics; a second-launch check so two copies never fight over a port; AI files that never overwrite a person's own; a handshake test proving an AI can connect from a new world's `.mcp.json`.
+2. Rawest material: serve.py, cli.py, ops.op_init, templates.py, editor.html/css/js, the saga launchers (`Open * Lorekeeper.bat`, `chrono.serve`), docs/agent-skill.md, the running pages.
+3. Methods: Spec Kit (spec, plan, tasks, implement, converge); TDD for the world list, folder kinds, AI files and the app API; Playwright through isolated Chromium (the MCP profile is shared); the Impeccable detector; a fresh-context reviewer.
+4. Independent proof: the unit suite; an MCP handshake on a world the app created; Playwright screenshots (light, dark, 390 px) and console; a real `pythonw` launch and a second launch; the shortcut files on disk; the detector; the reviewer.
+
+**Acceptance checks.** Spec 012 success criteria; for 013, every editor screen reviewed for programmer language, with fixes verified in Playwright and the suite green.
+
+**Steps.**
+- [x] Set up: cron, keep-awake, worktree, spec 012
+- [ ] 012 plan and tasks
+- [ ] 012 engine: world list, folder kinds, AI guide files, app server and API (TDD)
+- [ ] 012 start screen page, editor "All worlds" link, icon
+- [ ] 012 setup batch file, shortcuts, launch and second launch
+- [ ] 012 docs (README, user guide, agent skill move), Playwright, detector, suite
+- [ ] 013 specify, plan, tasks, implement, verify
+- [ ] Reviewer and fixes; finish (handoff, cron deleted, notification)
+
+**Later.** An installer that brings its own Python; macOS and Linux shortcuts; stopping automatically when the browser closes.
+
 # Feature requests from the owner
 
 ## Chapter-scoped story wiki (requested 2026-10-18; specified 2026-10-19 as [specs/010-progressive-wiki](../../specs/010-progressive-wiki/spec.md), which settles the questions below; to be built in run 4)
