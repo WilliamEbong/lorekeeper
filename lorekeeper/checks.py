@@ -158,6 +158,25 @@ def run(project):
                     emit(compare_ge(start, shift(birth, minimum, cal)),
                          "PARENT_AGE", item, "parent", parent, start, birth, "parent too young")
 
+    # Someone with no recorded death who would be older than the age limit by the latest date in the
+    # story is almost surely dead by then: a possible gap (WARN), never a definite error.
+    last = max((end or start for i, (start, end) in times.items() if start and i not in people),
+               key=lambda w: w.hi, default=None)
+    for person in people:
+        birth, death = times[person]
+        own = str(person.fields.get("max_age", "")).strip().lower()
+        limit = own if own.isdigit() or own in AGELESS else str(settings.get("max_age", 130))
+        if not last or not birth or death or limit.strip().lower() in AGELESS:
+            continue
+        cal = calendar_of(p, birth)
+        count = len(cal.months) if cal.type == "months" else 12
+        if shift(birth, (count * int(limit), 0), cal).hi <= last.lo:
+            shown = lambda w: show_when(p, w)["from"]
+            key = next((k for k in START_KEYS if person.fields.get(k)), "born")
+            out.append(finding("WARN", "PROBABLY_DEAD", f"{person.name} (born {shown(birth)}) has no recorded death "
+                               f"but would be over {limit} by the story's latest date ({shown(last)}); record died, "
+                               "or set max_age (none for the ageless)", person.path, person.line(key)))
+
     if settings.get("two_places", "on") != "off":
         places = {i: frozenset(o for _, o, _ in p.links(i).get("location", []) if o) for i in p.items}
         place_cache = {}
