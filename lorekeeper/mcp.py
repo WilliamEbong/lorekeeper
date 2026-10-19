@@ -3,7 +3,7 @@ import json
 import os
 import sys
 
-from . import __version__, ops
+from . import __version__, ops, planning
 from .store import LoreError
 
 SUPPORTED = ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
@@ -14,25 +14,32 @@ INSTRUCTIONS = (
     "set merges or returns CONFLICT; pass the version and expect values you read. "
     "The story wiki shows what the reader knows by a chapter: read it with wiki (as_of = chapter), "
     "and record what a written chapter reveals with fact-add and fact-end, never by editing [ch N] stamps by hand. "
-    "Run check after edits."
+    "The planning wiki (planning) is the author's intended end state, spoilers included: use it to plan, never "
+    "in reader-facing text; read cited sections with planning-source and find what a change touches with "
+    "planning-impact. Run check after edits."
 )
 FACT_OPS = {"fact-add", "fact-end", "fact-remove"}
 CACHEABLE = {"tools/list"}   # with server/discover: the 2026-07-28 CacheableResult methods Lorekeeper answers
 
 
-def story_folder(root, config):
+def settings(root, config):
     if config is None:
         try:
             with open(os.path.join(root, "lore.json"), encoding="utf-8") as fh:
                 config = json.load(fh)
         except (OSError, ValueError):
             config = {}
-    return isinstance(config, dict) and config.get("story_wiki")
+    return config if isinstance(config, dict) else {}
+
+
+def story_folder(root, config):
+    return settings(root, config).get("story_wiki")
 
 
 def offered(op, saga):
-    """In a saga, Wiki pages change only through the saga pipeline: offer reads and the story-wiki fact tools."""
-    return not saga or not op.writes or op.name in FACT_OPS
+    """In a saga, Wiki pages and authority documents change only through the saga's own routes: offer reads,
+    the story-wiki fact tools and planning-fact (which writes only the derived planning folder)."""
+    return not saga or not op.writes or op.name in FACT_OPS or op.name == "planning-fact"
 
 
 def _error(id_, code, message, data=None):
@@ -110,9 +117,16 @@ def handle(message: dict, root: str, config: dict | None = None, saga: bool = Fa
             return _error(id_, -32602, "Invalid params: arguments must be an object")
         is_error = False
         try:   # bad argument values come back from ops.run as INVALID tool errors
+            if saga and name == "planning-change":
+                raise LoreError("FORBIDDEN", "planning-change writes authority documents, so it is not offered in a "
+                                             "saga: run it through the vendored CLI under the saga's planning change "
+                                             "skill (_system/skills/planning_wiki_change.md).")
             if not offered(ops.BY_NAME[name], saga):
                 raise LoreError("FORBIDDEN", f"{name} is not offered in a saga: Wiki pages change only through the "
                                              "saga pipeline. Record story facts with fact-add and fact-end.")
+            if saga and name == "planning-fact" and not planning.folder_of(settings(root, config)):
+                raise LoreError("FORBIDDEN", "planning-fact needs a planning folder in the settings: add "
+                                             "\"planning_wiki\": {\"folder\": \"../Planning Wiki\", ...}")
             if saga and name in FACT_OPS and not story_folder(root, config):
                 raise LoreError("FORBIDDEN", "the fact tools need a story wiki folder in a saga, or they would write "
                                              "Wiki pages: add \"story_wiki\": \"../Story Wiki\" to the settings file")

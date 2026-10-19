@@ -64,6 +64,18 @@ lore wiki "Mira Vale"
 
 Without `--as-of` you get the complete wiki, everything the author knows. The editor's **Wiki** tab shows the same index and cards, with a chapter picker and Add a fact. The [user guide](docs/user-guide.md#the-story-wiki) explains stamps, names, reveals and story-wiki folders.
 
+## The planning wiki
+
+A third view holds the author's intended end state, spoilers included: one page per entity, each fact citing the section of your planning documents it comes from (`[src: World Bible §2.1]`). Lorekeeper works out the links (notable members, dialogues, the chapters an entry appears in) and keeps undecided ideas apart. A change to a planning fact is recorded as a decision, written back into the cited source and followed by an impact review that flags written chapters instead of editing them.
+
+```text
+lore planning "Mira Vale"
+lore planning-source "World Bible" --section 2.1
+lore planning-impact "Mira Vale" --written 3
+```
+
+Turn it on with a `planning_wiki` setting and pick **Planning** in the Wiki tab. The [user guide](docs/user-guide.md#the-planning-wiki) shows the setting and the change flow.
+
 ## Connect an agent
 
 For a client that reads `.mcp.json`, add this configuration, replacing the path with your story folder:

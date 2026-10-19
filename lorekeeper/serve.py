@@ -37,10 +37,13 @@ def stamp(root, config=None, config_path=None):
 
     story = config.get("story_wiki")
     story = os.path.normpath(os.path.join(root, story)) if story else None   # may sit beside the project
+    plan = config.get("planning_wiki") if isinstance(config.get("planning_wiki"), dict) else {}
+    folder = os.path.normpath(os.path.join(root, plan["folder"])) if isinstance(plan.get("folder"), str) else None
+    layers = [f for f in (story, folder) if f]
 
     def scan(folder):
         key = os.path.normcase(os.path.realpath(folder))
-        if key in visited or os.path.islink(folder) or not (store.inside(root, folder) or story and store.inside(story, folder)):
+        if key in visited or os.path.islink(folder) or not (store.inside(root, folder) or any(store.inside(f, folder) for f in layers)):
             return
         visited.add(key)
         if not os.path.isdir(folder):
@@ -61,8 +64,11 @@ def stamp(root, config=None, config_path=None):
         if not store.inside(root, top):
             raise LoreError("INVALID", f"{store.CONFIG} path {base!r} is outside the project folder")
         scan(top)
-    if story:
-        scan(story)
+    for layer in layers:
+        scan(layer)
+    for source in plan.get("sources", []) if isinstance(plan.get("sources"), list) else []:   # planning documents
+        if isinstance(source, dict) and isinstance(source.get("file"), str) and "{" not in source["file"]:
+            record(os.path.normpath(os.path.join(root, source["file"])))
     record(config_path)
     return hashlib.sha256(ops.to_json(sorted(rows)).encode("utf-8")).hexdigest()
 

@@ -74,7 +74,30 @@ In the owner's sagas (a `_system/lorekeeper.json` with `"story_wiki": "../Story 
 4. Commit only `Story Wiki/` paths, in their own commit: `wiki: story wiki after CHnnn`.
 5. Record any value you had to decide (such as the reader's description of an unnamed character) in `_system/knowledge/agent_decisions.md`.
 
-Each saga's `.mcp.json` runs the vendored server as `lore mcp --saga`, which offers the reading tools and the three fact tools only, so an MCP session can never write Wiki pages.
+Each saga's `.mcp.json` runs the vendored server as `lore mcp --saga`, which offers the reading tools, the three fact tools and `planning-fact` only, so an MCP session can never write Wiki pages or authority documents.
+
+## The planning wiki: the author's intended end state
+
+The planning wiki holds everything the author has designed, including what no reader knows yet, as one page per entity. It is a back-end reference for the author and for you; information flows one way: planning wiki, then chapter cards, then drafting, then the story wiki. It exists when the settings have a `planning_wiki` key (`folder`, and `sources` listed highest authority first; source flags `dialogues`, `chapters`, `ideas`, `overrides`, `prose`; `exclude_names`).
+
+- **Spoilers.** Never copy planning facts into reader-facing text, the story wiki (`fact-add`), a profile packet or drafting context unless the chapter you are writing reveals them. `wiki` in either mode never shows them.
+- **Pages.** `<folder>/<Type plural>/<Name> (plan).md`, frontmatter `type`, optional `page: "[[Wiki page]]"`, `aliases`, `tags`, `member_tags` (on a kind page: the tags its members carry), `kind` and `member_of` links. Each decided fact ends with its citation: `- Top speed Mach 20. [src: World Bible §3.1]`; several refs are separated by `;`. A ref is a source name and a section: a heading's number (`23.4`, `A.252`, `HO-031`, the `§` is optional) or its title.
+- **Ideas.** Undecided material (plot ideas, proposals, unapproved decisions) goes only under `## Ideas`, cited to its idea source. Cards return it under `ideas`, apart from `sections`, together with the idea-document sections whose heading names the entry. Ideas are never canon: never use them for chapter cards, impact reviews or link lists.
+- **Link lists are computed, never written.** `links.members` (entries whose `kind` or `member_of` links here, or whose tags match `member_tags`), `links.dialogues` (dialogue-source entries whose heading names the entry or whose speaker label `**Name:**` is the entry) and `links.appears_in` (chapter cards in `chapters` sources, and chapter pages, that name the entry). Names match whole-word and case-sensitively; names under three letters and names in `exclude_names` (ordinary words such as "Will") never match. To fix a missing link, add an alias or tag; to fix a false one, add the name to `exclude_names`.
+
+**When to read it.** Before planning a chapter or writing its card, before drafting, and whenever you need what the author intends rather than what the reader knows. `planning` without `item` gives the index and `problems`; `planning` with `item` gives the card. Follow a citation with `planning-source` (`source`, `section`) instead of opening the whole document; call it without `section` for the outline with each section's size.
+
+**Building or syncing pages** (the derived view follows its sources): read each large source once, section by section with `planning-source`; write facts with `planning-fact` (`item`, `section`, `text`, `source` refs; `type` for a new page; `fact` with `text` to replace, with `remove` to delete). Then `planning` must show zero `problems` (PLAN_UNCITED, PLAN_SOURCE_UNKNOWN, PLAN_SECTION_MISSING, PLAN_IDEA_AS_FACT, PLAN_PAGE_UNREADABLE, PLAN_SOURCE_MISSING); each says how to fix it.
+
+**A planning change** (the author changes a fact, or tells you to) is never a `planning-fact` edit. It is recorded:
+1. `planning-change` with `item`, the fact's `id` as `fact`, the new `text` (or `remove`), the author's own words as `decision`, any old value as `terms`, and `written` = the last written (frozen) chapter. It appends a HUMAN OVERRIDE to the `overrides` source (next free `HO-NNN`), adds `> **Amended by HO-NNN (date):** …` at the end of the highest-ranked source section the fact cites (the write-back), updates the planning fact (citing the override first) and returns the impact review (`impact`, plus `report` in Markdown). A new fact uses `section` and `text` instead of `fact`.
+2. Work through the review: reconcile the source passages it lists (the amendment line is the record; bring the surrounding prose into line); update the other planning facts with `planning-fact`; update planned chapter cards; update the current chapter and refresh its sources.
+3. **Frozen chapters** (status `frozen`, at or before `written`) are flagged to the author in one line each. Never edit approved prose.
+Use `planning-impact` (`item` and/or `terms`, `written`) on its own to see what a change would touch before proposing it.
+
+### Sagas: planning changes
+
+In the owner's sagas the planning wiki is `Planning Wiki/`, built from the planning documents in AUTHORITY.md order. A planning change follows `_system/skills/planning_wiki_change.md`, which runs the saga's own human-change route: `impact_analyze_human_change`, the override register, `planning-change` through the vendored CLI (`python _system/vendor/lorekeeper --root Wiki --config _system/lorekeeper.json planning-change ...`; `lore mcp --saga` refuses it), then `python _system/scripts/saga.py refresh-sources N` for the in-progress chapter, because editing an authority stales its recorded source hashes. In the editor (`saga.py timeline`), a planning change becomes a change request (`layer: planning`) for that routine.
 
 ## Operation reference
 
@@ -108,6 +131,11 @@ All examples below assume an initialized novel template unless stated otherwise.
 | `fact-add` | `item`, `section`, `text`, `from` | `to`, `version`, `type` | `lore fact-add "Mira Vale" Beliefs "Believes her sister is alive." --from 1 --version "<version>" --json` |
 | `fact-end` | `item`, `section`, `fact` | `after`, `reopen`, `version` | `lore fact-end "Mira Vale" Beliefs "Believes her sister" --after 2 --json` |
 | `fact-remove` | `item`, `section`, `fact` | `version` | `lore fact-remove "Mira Vale" Wants "To go home" --json` |
+| `planning` | none | `item` | `lore planning "Mira Vale" --json` (leave out the name for the index and its problems) |
+| `planning-source` | `source` | `section` | `lore planning-source "World Bible" --section 3.1 --json` (leave out `--section` for the outline) |
+| `planning-fact` | `item` | `section`, `text`, `source`, `fact`, `remove`, `type`, `version` | `lore planning-fact "Mira Vale" --section Identity --text "Born in 1990." --source "World Bible §2.1" --json` |
+| `planning-impact` | none | `item`, `terms`, `written`, `limit` | `lore planning-impact "Mira Vale" --terms "the letter" --written 2 --json` |
+| `planning-change` | `item`, `decision` | `fact`, `text`, `remove`, `section`, `terms`, `written`, `version` | `lore planning-change "Mira Vale" "She is older: born 1988." --fact "fact:1a2b3c4d5e6f" --text "Born in 1988." --written 2 --json` |
 
 Global CLI options are `--root <project>`, `--config <file>`, `--json`, `--version` and help. `--config` names a settings file to use instead of `lore.json` (a saga keeps its settings in `_system/lorekeeper.json`); `--root` is then the project folder exactly as given. A vendored copy runs without installing: `python <vendor>/lorekeeper --root <project> wiki`. `--root` may name the project folder or any folder inside it; with no `lore.json` there or above, the command stops with NOT_FOUND (exit 2), and `mcp` and `serve` refuse to start. Every face checks parameter types the same way: a wrong type is INVALID, MCP `arguments` that are not an object get JSON-RPC -32602, and an unexpected server failure returns HTTP 500 INTERNAL. Without `--json`, `timeline`, `age`, `when`, `where` and `knows` print plain sentences; use `--json` for data. `serve` and `mcp` are CLI adapters, not operations or MCP tools. Start the editor with `lore serve --root <project>`, optionally `--port 8765` or `--saga`; start MCP with `lore mcp --root <project>`. The editor prints its loopback URL; it does not automatically open a browser. CLI check exits 1 on any FAIL, 0 otherwise; operational errors exit 2. A `--json` operational error is printed as JSON on stdout and also described on stderr.
 

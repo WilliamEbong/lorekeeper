@@ -252,13 +252,15 @@ class Project:
     def files(self):
         skip = SKIP_DIRS | set(self.config.get("exclude", []))
         story = self.config.get("story_wiki")
-        story = os.path.normcase(os.path.normpath(os.path.join(self.root, story))) if story else None
+        plan = self.config.get("planning_wiki")
+        plan = plan.get("folder") if isinstance(plan, dict) and isinstance(plan.get("folder"), str) else None
+        layers = {os.path.normcase(os.path.normpath(os.path.join(self.root, f))) for f in (story, plan) if f}
         for base in self.config.get("paths", ["."]):
             top = os.path.normpath(os.path.join(self.root, base))
             if not inside(self.root, top):
                 raise LoreError("INVALID", f"{CONFIG} path {base!r} is outside the project folder")
             for dirpath, dirnames, filenames in os.walk(top):
-                if not inside(self.root, dirpath) or os.path.normcase(dirpath) == story:   # elsewhere, or companions
+                if not inside(self.root, dirpath) or os.path.normcase(dirpath) in layers:   # elsewhere, story or planning
                     dirnames[:] = []
                     continue
                 dirnames[:] = sorted(d for d in dirnames if d not in skip and not d.startswith("."))

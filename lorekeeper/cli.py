@@ -100,11 +100,76 @@ def wiki_text(result):
     return "\n".join(lines)
 
 
+def refs(sources):
+    return "[" + "; ".join(s["ref"] + ("" if s["found"] else " (not found)") for s in sources) + "]" if sources else ""
+
+
+def planning_text(op, result):
+    if op == "planning-change":
+        return result["report"].rstrip()
+    if op == "planning-fact":
+        if "removed" in result:
+            return f"Removed from {result['item']} › {result['section']}: {result['removed']}"
+        return f"{result['item']} › {result['section']}: {result['text']} " + \
+            (f"[src: {'; '.join(result['sources'])}]" if result["sources"] else "") + \
+            (f" (new planning page {result['path']})" if result["created"] else "")
+    if op == "planning-source":
+        if "text" in result:
+            return f"{result['source']} §{result['section']} (lines {result['line']}-{result['end']})\n\n{result['text']}"
+        return "\n".join([f"{result['source']} ({result['file']})"] + [
+            f"{'  ' * (min(s['level'], 7) - 1)}§{s['ref']}  {s['title']}  (line {s['line']}, {s['bytes']} bytes)"
+            for s in result["sections"]])
+    if op == "planning-impact":
+        lines = [f"Impact of {', '.join(result['terms'])} (chapters written through {result['written']})"]
+        lines += [f"planning  {h['entry']} › {h['section']}: {h['text']}" for h in result["planning"]]
+        for g in result["sources"]:
+            lines += [f"{g['source']}  §{h['section']} {h['title']} (line {h['line']}, {len(h['lines'])} lines)"
+                      for h in g["hits"]]
+        lines += [f"chapter {c['n']} {c['kind']} [{c['status']}]: {c['lines'][0]}" for c in result["chapters"]]
+        lines += [f"page  {h['name']}" + (f" [ch {h['from']}, {h['status']}]: {h['text']}" if "from" in h
+                                          else f": {h['lines'][0]}") for h in result["pages"]]
+        return "\n".join(lines)
+    if "groups" in result:
+        lines = [f"Planning wiki: {result['count']} entries"]
+        for group in result["groups"]:
+            lines.append(f"{group['label']} ({group['count']})")
+            lines += [f"  {e['name']}  {e['facts']} facts" + (f", {e['ideas']} ideas" if e["ideas"] else "")
+                      for e in group["entries"]]
+        if result["problems"]:
+            lines.append(f"Problems ({len(result['problems'])}):")
+            lines += [f"  {f['code']} {f['detail']} {f['path']}:{f['line']}" for f in result["problems"]]
+        return "\n".join(lines)
+    lines = [f"{result['name']} ({result['type']}), planning"]
+    if result["page"]:
+        lines.append(f"Wiki page: {result['page']}")
+    if result["aliases"]:
+        lines.append(f"Also called: {', '.join(result['aliases'])}")
+    for section in result["sections"]:
+        lines += ["", f"## {section['heading'] or '(untitled)'}"]
+        lines += [f"- {f['text']}  {refs(f['sources'])}".rstrip() for f in section["facts"]]
+    ideas = result["ideas"]
+    if ideas["facts"] or ideas["sections"]:
+        lines += ["", "Ideas (not decided)"]
+        lines += [f"- {f['text']}  {refs(f['sources'])}".rstrip() for f in ideas["facts"]]
+        lines += [f"- {s['source']} §{s['section']} {s['title']}" for s in ideas["sections"]]
+    links = result["links"]
+    lines.append("")
+    if links["members"]:
+        lines.append("Notable members: " + ", ".join(m["name"] for m in links["members"]))
+    if links["dialogues"]:
+        lines.append("Dialogues: " + ", ".join(f"{d['source']} §{d['section']}" for d in links["dialogues"]))
+    if links["appears_in"]:
+        lines.append("Appears in: " + ", ".join(f"{c['n']} {c['title']}".strip() for c in links["appears_in"]))
+    return "\n".join(lines).rstrip()
+
+
 def human(op, args, result):
     """Plain text for people; --json prints the data unchanged."""
     at = args.get("at")
     if op == "wiki":
         return wiki_text(result)
+    if op.startswith("planning"):
+        return planning_text(op, result)
     if op == "fact-add":
         return f"Added to {result['item']} › {result['section']}: {result['text']} {chapters(result['from'], result['to'])}" \
             + (f" (new story page {result['path']})" if result["created"] else "")

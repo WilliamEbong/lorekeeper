@@ -98,6 +98,36 @@ From the command line, `lore wiki --as-of 5` lists the index at chapter 5, `lore
 
 `lore check` reports a marker it cannot read as `STAMP_UNREADABLE` and a range that ends before it starts as `STAMP_RANGE`.
 
+## The planning wiki
+
+The story wiki shows what readers know. The **planning wiki** shows what you, the author, intend: everything you have designed, including what no reader knows yet, as one page per character, place, group or thing. Use it to plan; it feeds your chapter outline, the outline feeds the drafts, and the drafts feed the story wiki.
+
+Your planning documents stay the master: a world bible, dialogue drafts, a chapter outline, notes. The planning pages are a tidy per-entity view of them, and every fact says where it comes from, so you can check it in one click. Turn it on in `lore.json`:
+
+```json
+"planning_wiki": {
+  "folder": "Planning",
+  "sources": [
+    {"name": "World Bible", "file": "../World Bible.md"},
+    {"name": "Dialogues", "file": "../Dialogues.md", "dialogues": true},
+    {"name": "Outline", "file": "../Outline.md", "chapters": true, "skip": ["Meanwhile:"]},
+    {"name": "Ideas", "file": "../Ideas.md", "ideas": true},
+    {"name": "Decisions", "file": "../Decisions.md", "overrides": true}
+  ],
+  "exclude_names": ["Will", "Hope"]
+}
+```
+
+- **Sources** are listed with the most authoritative first; that order decides conflicts. Flags say what a document is: `dialogues` (one heading per conversation, with speaker lines such as `**Mira:**`), `chapters` (an outline with one `Chapter N: Title` heading per chapter), `ideas` (undecided material), `overrides` (your record of decisions), `prose` (chapter files, such as `../Chapters/CH{n:03d}.md`).
+- **A planning page** lives at `Planning/Characters/Mira Vale (plan).md`, with `type: character` and, if it describes one of your pages, `page: "[[Mira Vale]]"`. Each fact ends with its source: `- Born in 1990. [src: World Bible §2.1]`. A section is named by its heading's number (`2.1`, `A.12`) or its title.
+- **Ideas** go under `## Ideas` and show in their own block, labelled as not decided. Lorekeeper also lists the sections of your ideas documents whose heading names the entry. Ideas never count as canon.
+- **Links are worked out for you.** A kind page (give it `member_tags: [species-vampire]`, or point pages at it with `kind`) lists its notable members; a character lists the dialogues where they speak or are named in the heading; everything lists the chapters whose outline card names it. Names match as whole words with their capitals; add ordinary-word names to `exclude_names` so "Will" does not match every "Will".
+- **Problems.** `lore planning` lists facts without a source, sources it cannot find, and sections that do not exist, each with how to fix it.
+
+In the editor's **Wiki** tab, pick **Planning** in the picker (next to Complete and the chapters). Each card shows its facts with source chips; click one to read that section of the source. **Change…** on a fact asks for the new wording and your decision in your own words. Lorekeeper records the decision in your `overrides` document, adds a dated "Amended" line to the cited section of the source, updates the planning page, and shows an **impact review**: every other planning fact, source passage, chapter card, written chapter and page that mentions it. Chapters already written are only flagged for you; Lorekeeper never edits written prose.
+
+From the command line: `lore planning` (the index), `lore planning "Mira Vale"` (a card), `lore planning-source "World Bible" --section 2.1` (one section), `lore planning-impact "Mira Vale" --written 3` (what mentions her, with chapters 1 to 3 as written), and `lore planning-change "Mira Vale" "She is older." --fact <id> --text "Born in 1988."`. AI agents use the same operations through MCP; `planning-fact` is how they build and sync pages from your documents.
+
 ## Dates and uncertainty
 
 Use the detail you know: `2025`, `2025-04`, `2025-04-02`, or `2025-04-02 09:30`. `April 2, 2025` works too. A day without a time means any time during that day, not a promise that something happened at midnight.
@@ -178,6 +208,6 @@ Lorekeeper skips `.obsidian`, hidden folders and `_TEMPLATES`. It normally scans
 
 ## When a saga pipeline owns canon
 
-With `lore serve --saga`, or a project whose `mode` is `"saga"`, the editor shows **Propose change**. Enter the proposed values and a change note. This queues a request, normally in `.lore/requests`, for the host pipeline to review and apply. It does not change the canon item. Creating items, direct link controls and spreadsheet edits are disabled in this mode. In the Wiki tab, **Propose a fact** and **Propose an end** queue the same kind of request.
+With `lore serve --saga`, or a project whose `mode` is `"saga"`, the editor shows **Propose change**. Enter the proposed values and a change note. This queues a request, normally in `.lore/requests`, for the host pipeline to review and apply. It does not change the canon item. Creating items, direct link controls and spreadsheet edits are disabled in this mode. In the Wiki tab, **Propose a fact** and **Propose an end** queue the same kind of request, and so does **Propose a change** on a planning card: the pipeline's own planning-change routine then records it.
 
 Lorekeeper does not provide a standalone approval or apply-request operation. The host decides how requests become canon. The saga restriction is enforced by the editor's HTTP interface; people or agents using CLI/MCP must also respect that workflow.

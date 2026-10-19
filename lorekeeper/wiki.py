@@ -570,6 +570,21 @@ def _match(lines, section, fact, e):
     return hits[0]
 
 
+def append_fact(lines, section, line, cr):
+    """Put one fact line at the end of section (lines from _split), adding the heading when it is missing."""
+    found = [sec for sec in sections("\n".join(lines)) if sec["heading"].lower() == section.lower()]
+    if not found:
+        while len(lines) > 1 and not lines[-2].strip():   # keep the final "" (the closing newline)
+            lines.pop(-2)
+        lines[-1:] = [cr, f"## {section}{cr}", cr, line, ""]
+    else:
+        last = next((sec["facts"][-1]["last"] for sec in reversed(found) if sec["facts"]), None)
+        if last is None:
+            lines[found[-1]["line"] + 1:found[-1]["line"] + 1] = [cr, line]
+        else:
+            lines[last + 1:last + 1] = [line]
+
+
 def _write(p, path, text, sha):
     version = store.atomic_write(path, text, expect=sha, create=sha is None)
     p.__dict__.pop("_story", None)
@@ -605,18 +620,7 @@ def fact_add(p, item, section, text, start, end=None, version=None, type_=None):
         raise LoreError("CONFLICT", f"{p.rel(path)} exists but is not {name}'s story page; give it "
                                     f"'type: {e.type if e else type_}' and 'page: \"[[{name}]]\"' in its frontmatter")
     head, lines, cr = _split(page)
-    line = f"- {text} {stamp_text(start, end)}{cr}"
-    found = [sec for sec in sections("\n".join(lines)) if sec["heading"].lower() == section.lower()]
-    if not found:
-        while len(lines) > 1 and not lines[-2].strip():   # keep the final "" (the closing newline)
-            lines.pop(-2)
-        lines[-1:] = [cr, f"## {section}{cr}", cr, line, ""]
-    else:
-        last = next((sec["facts"][-1]["last"] for sec in reversed(found) if sec["facts"]), None)
-        if last is None:
-            lines[found[-1]["line"] + 1:found[-1]["line"] + 1] = [cr, line]
-        else:
-            lines[last + 1:last + 1] = [line]
+    append_fact(lines, section, f"- {text} {stamp_text(start, end)}{cr}", cr)
     new = _write(p, path, head + "\n".join(lines), sha)
     mine = [f for sec in _parsed(lines, e) if sec["heading"].lower() == section.lower() for f in sec["facts"]
             if norm(f["text"]) == norm(text)]

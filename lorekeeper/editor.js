@@ -1362,8 +1362,9 @@ function continuity(view) {
 // Page text is drawn as DOM text nodes (never innerHTML): a small Markdown subset, links as buttons.
 const AS_OF_KEY = 'lore-wiki-as-of';
 const wiki = {asOf: null, filter: '', open: null, openName: '', cardAsOf: null, index: null, card: null,
-  cardError: null, error: null, loaded: null, loading: null, form: null};
-try { const kept = localStorage.getItem(AS_OF_KEY); if (/^\d+$/.test(kept || '')) wiki.asOf = Number(kept); } catch { /* private window */ }
+  cardError: null, error: null, loaded: null, loading: null, form: null, hasPlan: null, planIndex: null, cite: null, citeText: null, review: null};
+// asOf: null = Complete, a number = Chapter N, 'plan' = Planning
+try { const kept = localStorage.getItem(AS_OF_KEY); if (/^\d+$/.test(kept || '')) wiki.asOf = Number(kept); else if (kept === 'plan') wiki.asOf = 'plan'; } catch { /* private window */ }
 const chText = (from, to) => from == null ? '' : to == null ? `ch ${from}` : `ch ${from}–${to}`;
 // "Chapter 003 — First Boots" reads "Chapter 3 — First Boots"; a bare "Chapter 3" adds nothing.
 const chapterName = (c) => {
@@ -1401,10 +1402,16 @@ async function wikiLoad() {
   if (wiki.loaded === want || wiki.loading === want) return;
   wiki.loading = want;
   try {
-    const index = await api('wiki', wiki.asOf == null ? {} : {as_of: wiki.asOf});
+    const plan = planMode();
+    if (wiki.hasPlan == null || plan) {   // a world has a planning layer when the planning op answers
+      try { wiki.planIndex = await api('planning'); wiki.hasPlan = true; }
+      catch (error) { if (error.code !== 'INVALID' || !/no planning wiki/.test(error.message)) throw error; wiki.hasPlan = false; wiki.planIndex = null; }
+    }
+    if (plan && !wiki.hasPlan) wiki.asOf = null;
+    const index = await api('wiki', typeof wiki.asOf === 'number' ? {as_of: wiki.asOf} : {});
     let card = null, cardError = null;
     if (wiki.open) {
-      try { card = await api('wiki', {item: wiki.open, ...(wiki.cardAsOf == null ? {} : {as_of: wiki.cardAsOf})}); }
+      try { card = planMode() ? await api('planning', {item: wiki.open}) : await api('wiki', {item: wiki.open, ...(wiki.cardAsOf == null ? {} : {as_of: wiki.cardAsOf})}); }
       catch (error) { if (error.code !== 'NOT_FOUND') throw error; cardError = error; }
     }
     if (wiki.loading !== want) return;   // a newer request is on its way: never show this older answer
@@ -1421,12 +1428,13 @@ function openEntry(key, name, fromIndex = false) {
   requestAnimationFrame(() => $('wiki-title')?.focus({preventScroll: true}));
 }
 function setCardChapter(value) { wiki.cardAsOf = value; wiki.form = null; renderView(); }
-function chapterSelect(id, value, onChange, labelText) {
+function chapterSelect(id, value, onChange, labelText, withPlan = false) {
   const select = el('select', null, {id, 'aria-label': labelText});
+  if (withPlan && wiki.hasPlan) select.append(el('option', 'Planning', {value: 'plan'}));
   select.append(el('option', 'Complete', {value: ''}));
   for (const c of wiki.index?.chapters || []) select.append(el('option', chapterName(c), {value: String(c.n)}));
   select.value = value == null ? '' : String(value);
-  select.addEventListener('change', () => onChange(select.value === '' ? null : Number(select.value)));
+  select.addEventListener('change', () => onChange(select.value === '' ? null : select.value === 'plan' ? 'plan' : Number(select.value)));
   return select;
 }
 function wikiView(view) {
@@ -1435,18 +1443,20 @@ function wikiView(view) {
   filter.value = wiki.filter;
   filter.addEventListener('input', () => { wiki.filter = filter.value; $('view').querySelector('.wiki-index')?.replaceWith(wikiIndex()); });
   const picker = chapterSelect('wiki-as-of', wiki.asOf, (value) => {
-    wiki.asOf = value; wiki.cardAsOf = value; wiki.form = null;
+    if ((value === 'plan') !== planMode() && wiki.open) { wiki.open = wiki.openName; wiki.card = null; }   // the same entry, by name
+    wiki.asOf = value; wiki.cardAsOf = value === 'plan' ? null : value; wiki.form = null; wiki.cite = null; wiki.review = null;
     try { value == null ? localStorage.removeItem(AS_OF_KEY) : localStorage.setItem(AS_OF_KEY, String(value)); } catch { /* not kept */ }
     renderView();
-  }, 'Show the wiki as of');
+  }, 'Show the wiki as of', true);
   const label = el('label', null, {for: 'wiki-as-of'});
-  label.append('Wiki as of ', picker);
-  bar.append(label, filter, el('span', wiki.asOf == null ? 'Everything, for the author.' : `Only what a reader knows after chapter ${wiki.asOf}.`, {class: 'hint'}));
+  label.append(wiki.hasPlan ? 'Wiki ' : 'Wiki as of ', picker);
+  bar.append(label, filter, el('span', planMode() ? 'The author’s plan: everything designed, spoilers included. Never shown to readers.'
+    : wiki.asOf == null ? 'Everything written so far, for the author.' : `Only what a reader knows after chapter ${wiki.asOf}.`, {class: 'hint'}));
   view.append(bar);
   if (wiki.error) { view.append(emptyState('The wiki could not load', explain(wiki.error))); return; }
   if (!wiki.index) { view.append(emptyState('Opening the wiki…', 'Lorekeeper is reading the story pages.')); return; }
   const layout = el('div', null, {class: 'wiki'});
-  layout.append(wikiIndex(), wikiCard());
+  layout.append(...(planMode() && wiki.planIndex ? [planIndex(), planCard()] : [wikiIndex(), wikiCard()]));
   view.append(layout);
 }
 function wikiIndex() {
@@ -1640,6 +1650,207 @@ function endForm(card, section, fact, formId) {
       toast('Undone.');
     }]]});
   }, 'wiki-title');
+}
+// ---- planning wiki: the author's intended end state, every fact with its source --------------
+const planMode = () => wiki.asOf === 'plan';
+function planIndex() {
+  const list = el('nav', null, {class: 'scroll pad wiki-index', 'data-tab': 'Wiki', 'aria-label': 'Planning entries'});
+  const q = wiki.filter.trim().toLowerCase(), index = wiki.planIndex;
+  if (index.problems.length) {
+    const box = add(list, el('details', null, {class: 'plan-problems'}));
+    box.append(el('summary', `${index.problems.length} ${index.problems.length === 1 ? 'problem' : 'problems'} in the planning pages`));
+    const ul = add(box, el('ul'));
+    for (const f of index.problems) ul.append(el('li', `${f.detail} (${f.path}:${f.line})`));
+  }
+  let shown = 0;
+  for (const group of index.groups) {
+    const entries = group.entries.filter(e => !q || e.name.toLowerCase().includes(q));
+    if (!entries.length) continue;
+    shown += entries.length;
+    list.append(el('h3', `${group.label} · ${entries.length}`, {class: 'section-title'}));
+    const ul = add(list, el('ul', null, {class: 'wiki-list'}));
+    for (const e of entries) {
+      const li = add(ul, el('li'));
+      li.append(button(e.name, () => openEntry(e.key, e.name, true), {class: 'wiki-entry', id: `wiki-${encodeURIComponent(e.key)}`,
+        'aria-current': wiki.card?.key === e.key || wiki.open === e.key ? 'true' : null}));
+      li.append(el('span', `${e.facts} ${e.facts === 1 ? 'fact' : 'facts'}${e.ideas ? `, ${e.ideas} ${e.ideas === 1 ? 'idea' : 'ideas'}` : ''}`, {class: 'hint'}));
+    }
+  }
+  if (!shown) list.append(el('p', q ? `No entry matches “${wiki.filter}”.` : 'No planning pages yet. An AI agent builds them from the planning documents with planning-fact.', {class: 'hint'}));
+  return list;
+}
+async function openCite(id, source, section) {
+  // A citation chip shows the cited section of the source document under the fact; a second click hides it.
+  if (wiki.cite === id) { wiki.cite = null; renderView(); return; }
+  wiki.cite = id; wiki.citeText = null; renderView();
+  try { wiki.citeText = await api('planning-source', {source, section}); }
+  catch (error) { wiki.citeText = {error}; }
+  if (wiki.cite === id) renderView();
+}
+function citeBox(id) {
+  if (wiki.cite !== id) return null;
+  const box = el('blockquote', null, {class: 'cite-text', 'aria-live': 'polite'}), got = wiki.citeText;
+  if (!got) box.append(el('p', 'Opening the source…', {class: 'hint'}));
+  else if (got.error) box.append(el('p', explain(got.error), {class: 'hint'}));
+  else { box.append(el('p', `${got.source} §${got.section}, lines ${got.line}–${got.end}`, {class: 'hint'}), markdown(got.text)); }
+  return box;
+}
+function chips(parent, sources, owner) {
+  sources.forEach((s, i) => {
+    const id = `${owner}|${i}`, label = s.source ? `${s.source} §${s.section}` : s.ref;
+    parent.append(button(label, () => s.source && s.found ? openCite(id, s.source, s.section) : null,
+      {class: `cite${s.found ? '' : ' missing'}`, id: `cite-${owner}-${i}`.replace(/[^\w-]/g, '-'),
+       'aria-expanded': s.found ? String(wiki.cite === id) : null, disabled: s.found ? null : '',
+       title: s.found ? `${s.title} (open the source)` : s.source ? `${s.source} has no section ${s.section}` : 'No planning source has this name'}));
+  });
+}
+function planCard() {
+  const box = el('article', null, {class: 'scroll pad wiki-card plan-card', 'aria-labelledby': 'wiki-title'});
+  if (!wiki.open) {
+    box.append(emptyState('Pick an entry', 'Each planning card holds what the author has designed for one character, place, group or thing, with the source of every fact. Spoilers included.'));
+    return box;
+  }
+  const card = wiki.card, head = el('header', null, {class: 'wiki-head'}), title = el('div');
+  title.append(el('h2', card?.name || wiki.openName, {id: 'wiki-title', tabindex: '-1'}));
+  head.append(title);
+  box.append(head);
+  if (wiki.cardError) { box.append(el('p', `There is no planning page for ${wiki.openName}.`, {class: 'hint'})); return box; }
+  if (!card) { box.append(el('p', 'Opening…', {class: 'hint'})); return box; }
+  const meta = el('p', null, {class: 'meta'});
+  meta.append(el('span', typeLabel(card.type), {class: `kind cat-${CATEGORIES.includes(typeInfo(card.type).category) ? typeInfo(card.type).category : 'other'}`}),
+    el('span', 'The plan, spoilers included'));
+  if (card.page) meta.append(el('span', `Wiki page: ${card.page}`));
+  title.append(meta);
+  if (card.aliases.length) title.append(el('p', `Also called: ${card.aliases.join(', ')}`, {class: 'hint'}));
+  if (wiki.review) {
+    const review = add(box, el('section', null, {class: 'review', 'aria-labelledby': 'review-title'}));
+    const top = add(review, el('div', null, {class: 'row'}));
+    top.append(el('h3', 'Impact review', {id: 'review-title'}), button('Dismiss', () => { wiki.review = null; renderView(); }, {class: 'quiet small', id: 'review-dismiss'}));
+    review.append(markdown(wiki.review));
+  }
+  const sections = card.sections.filter(s => s.facts.length);
+  if (!sections.length) box.append(el('p', 'No decided facts yet.', {class: 'hint'}));
+  sections.forEach((section, index) => box.append(planSection(card, section, index)));
+  const ideas = card.ideas;
+  if (ideas.facts.length || ideas.sections.length) {
+    const sec = add(box, el('section', null, {class: 'wiki-section ideas', 'aria-labelledby': 'ideas-title'}));
+    sec.append(el('h3', 'Ideas, not decided', {id: 'ideas-title'}),
+      el('p', 'Plot ideas and proposals. Never canon: not used for chapter cards, impact reviews or link lists.', {class: 'hint'}));
+    const ul = add(sec, el('ul', null, {class: 'facts', 'aria-labelledby': 'ideas-title'}));
+    for (const f of ideas.facts) {
+      const li = add(ul, el('li', null, {class: 'fact'}));
+      inline(add(li, el('span', null, {class: 'text'})), f.text);
+      chips(add(li, el('span', null, {class: 'marks'})), f.sources, f.id);
+      const quote = citeBox(`${f.id}|0`) || citeBox(`${f.id}|1`); if (quote) li.append(quote);
+    }
+    ideas.sections.forEach((s, i) => {
+      const li = add(ul, el('li', null, {class: 'fact'})), id = `idea-${i}`;
+      li.append(el('span', s.title, {class: 'text'}));
+      chips(add(li, el('span', null, {class: 'marks'})), [{source: s.source, section: s.section, title: s.title, found: true}], id);
+      const quote = citeBox(`${id}|0`); if (quote) li.append(quote);
+    });
+  }
+  box.append(planLinks(card));
+  const other = add(box, el('section', null, {class: 'wiki-section'}));
+  if (wiki.form === 'plan-add') other.append(planForm(card, null, null, 'plan-add'));
+  else other.append(button([icon('plus'), saga ? 'Propose a new fact' : 'Add a decided fact'], () => { wiki.form = 'plan-add'; renderView(); requestAnimationFrame(() => $('wiki-form-section')?.focus()); },
+    {class: 'quiet small', id: 'plan-add'}));
+  return box;
+}
+function planSection(card, section, index) {
+  const box = el('section', null, {class: 'wiki-section'}), id = `plan-sec-${index}`;
+  box.append(el('h3', section.heading || 'Overview', {id}));
+  const ul = add(box, el('ul', null, {class: 'facts', 'aria-labelledby': id}));
+  section.facts.forEach((fact, n) => {
+    const li = add(ul, el('li', null, {class: 'fact'})), formId = `plan:${index}:${n}`;
+    inline(add(li, el('span', null, {class: 'text'})), fact.text);
+    const marks = add(li, el('span', null, {class: 'marks'}));
+    if (!fact.sources.length) marks.append(el('span', 'no source', {class: 'tag'}));
+    chips(marks, fact.sources, fact.id);
+    for (let i = 0; i < fact.sources.length; i++) { const quote = citeBox(`${fact.id}|${i}`); if (quote) li.append(quote); }
+    if (wiki.form === formId) li.append(planForm(card, section, fact, formId));
+    else marks.append(button(saga ? 'Propose a change' : 'Change…', () => { wiki.form = formId; renderView(); requestAnimationFrame(() => $('wiki-form-input')?.focus()); },
+      {class: 'quiet small', id: `plan-change-${index}-${n}`}));
+  });
+  return box;
+}
+function planLinks(card) {
+  const box = el('section', null, {class: 'wiki-section links', 'aria-labelledby': 'links-title'}), links = card.links;
+  box.append(el('h3', 'Links', {id: 'links-title'}), el('p', 'Worked out by Lorekeeper from tags, the dialogue documents and the chapter cards.', {class: 'hint'}));
+  const dl = add(box, el('dl', null, {class: 'wiki-fields'}));
+  const row = (label, fill) => { dl.append(el('dt', label)); fill(add(dl, el('dd'))); };
+  row(`Notable members · ${links.members.length}`, dd => links.members.length
+    ? links.members.forEach((m, i) => { if (i) dd.append(', '); dd.append(button(m.name, () => openEntry(m.key, m.name), {class: 'link'})); })
+    : dd.append(el('span', 'none', {class: 'hint'})));
+  row(`Dialogues · ${links.dialogues.length}`, dd => {
+    if (!links.dialogues.length) { dd.append(el('span', 'none', {class: 'hint'})); return; }
+    const ul = add(dd, el('ul', null, {class: 'link-list'}));
+    links.dialogues.forEach((d, i) => {
+      const li = add(ul, el('li'));
+      chips(li, [{source: d.source, section: d.section, title: d.title, found: true}], `dlg-${i}`);
+      li.append(' ', d.title);
+      const quote = citeBox(`dlg-${i}|0`); if (quote) li.append(quote);
+    });
+  });
+  row(`Appears in · ${links.appears_in.length}`, dd => {
+    if (!links.appears_in.length) { dd.append(el('span', 'no chapter card names it', {class: 'hint'})); return; }
+    const ul = add(dd, el('ul', null, {class: 'link-list'}));
+    links.appears_in.forEach((c, i) => {
+      const li = add(ul, el('li'));
+      const name = chapterName({n: c.n, name: c.title});
+      if (c.source && c.section) {
+        li.append(button(name, () => openCite(`ch-${i}|0`, c.source, c.section), {class: 'link', 'aria-expanded': String(wiki.cite === `ch-${i}|0`), id: `appears-${c.n}`}));
+        const quote = citeBox(`ch-${i}|0`); if (quote) li.append(quote);
+      } else li.append(name);
+    });
+  });
+  return box;
+}
+function planForm(card, section, fact, formId) {
+  // Change one fact (or add one): the author's decision is recorded with it. Saga mode queues a request.
+  const fields = [];
+  let sectionInput = null;
+  if (!fact) {
+    const wrap = el('label', null, {for: 'wiki-form-section', class: 'chapter-field'}), list = el('datalist', null, {id: 'plan-sections'});
+    sectionInput = el('input', null, {id: 'wiki-form-section', list: 'plan-sections', required: '', autocomplete: 'off', placeholder: 'e.g. Identity'});
+    for (const s of card.sections) list.append(el('option', null, {value: s.heading}));
+    wrap.append('Section ', sectionInput, list);
+    fields.push(wrap);
+  }
+  const text = el('input', null, {id: fact ? 'wiki-form-input' : 'wiki-form-text', autocomplete: 'off', 'aria-label': fact ? 'The fact as it should read' : 'New fact', placeholder: 'One fact, e.g. Top speed Mach 30.'});
+  if (fact) text.value = fact.text;
+  fields.push(text);
+  let remove = null;
+  if (fact) {
+    const wrap = el('label', null, {class: 'check'});
+    remove = el('input', null, {type: 'checkbox', id: 'plan-remove'});
+    remove.addEventListener('change', () => { text.disabled = remove.checked; });
+    wrap.append(remove, ' No longer true: remove it');
+    fields.push(wrap);
+  }
+  const why = el('label', null, {for: 'plan-decision', class: 'chapter-field'}), decision = el('input', null, {id: 'plan-decision', required: '', autocomplete: 'off', placeholder: 'e.g. Make the jet faster.'});
+  why.append('Your decision, in your words ', decision);
+  fields.push(why, el('p', saga ? 'Queued as a change request. The AI records it as a human override, writes it back into the source, and reviews what it touches.'
+    : 'Recorded as a human override and written back into the cited source; the impact review appears on this card.', {class: 'hint'}));
+  return wikiForm(fields, saga ? 'Propose' : 'Record the change', async () => {
+    const words = decision.value.trim(), newText = text.value.trim(), heading = fact ? section.heading : sectionInput.value.trim(), removing = remove?.checked;
+    if (!fact && !heading) { sectionInput.focus(); throw new ApiError('INVALID', 'Name the section first, for example Identity.'); }
+    if (!removing && !newText) { text.focus(); throw new ApiError('INVALID', 'Write the fact first.'); }
+    if (!words) { decision.focus(); throw new ApiError('INVALID', 'Say what you decided; it is quoted in the override.'); }
+    if (saga) {
+      const what = fact ? (removing ? `remove "${fact.text}"` : `change "${fact.text}" to "${newText}"`) : `add "${newText}"`;
+      await api('request', {item: card.key, note: `Planning wiki: in ${card.name} › ${heading || 'Overview'}, ${what}. Decision: "${words}"`});
+      toast(`Change for ${card.name} proposed. Nothing changes until the AI runs the planning change routine.`);
+      renderView();
+      return;
+    }
+    const args = {item: card.key, decision: words, version: card.version, ...(fact ? {fact: fact.id} : {section: heading}),
+      ...(removing ? {remove: true} : {text: newText})};
+    const result = await api('planning-change', args);
+    wiki.review = result.report;
+    await refresh();
+    toast(result.override ? `Recorded as ${result.override}. The impact review is on the card.` : 'Changed. The impact review is on the card.');
+  }, fact ? `plan-change-${formId.split(':')[1]}-${formId.split(':')[2]}` : 'plan-add');
 }
 const VIEWS = {Timeline: timeline, Subway: subway, Relationships: relationships, Ages: agesView, Spreadsheet: spreadsheet, Narrative: narrative, Wiki: wikiView, Continuity: continuity};
 function rememberScroll() {

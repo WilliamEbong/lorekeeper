@@ -15,6 +15,7 @@ from lorekeeper.store import LoreError
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FIXTURE = os.path.join(REPO, "tests", "fixtures", "world")
+PLANNING = os.path.join(REPO, "tests", "fixtures", "planning")
 VERSIONS = ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
 VERSION_KEY = "io.modelcontextprotocol/protocolVersion"
 
@@ -164,13 +165,85 @@ class McpTests(unittest.TestCase):
     def test_saga_offers_reads_and_fact_tools(self):
         tools = {t["name"] for t in mcp.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, FIXTURE,
                                                 saga=True)["result"]["tools"]}
-        self.assertEqual(tools, {op.name for op in ops.OPS if not op.writes} | mcp.FACT_OPS)
+        self.assertEqual(tools, {op.name for op in ops.OPS if not op.writes} | mcp.FACT_OPS | {"planning-fact"})
+        self.assertNotIn("planning-change", tools)
         refused = mcp.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                               "params": {"name": "create", "arguments": {"type": "character", "name": "X"}}},
                              FIXTURE, saga=True)["result"]
         self.assertIs(refused["isError"], True)
         self.assertEqual(refused["structuredContent"]["error"]["code"], "FORBIDDEN")
         self.assertIn("fact-add", refused["structuredContent"]["error"]["message"])
+
+    def test_golden_planning_tools(self):
+        """The planning tools return the same data through MCP and the CLI (reads on the fixture, writes on copies)."""
+        world = os.path.join(PLANNING, "world")
+        env = dict(os.environ, PYTHONPATH=REPO, PYTHONDONTWRITEBYTECODE="1")
+        reads = [("planning", {}, []), ("planning", {"item": "Sava"}, ["Sava"]),
+                 ("planning-source", {"source": "World Bible"}, ["World Bible"]),
+                 ("planning-source", {"source": "World Bible", "section": "3.1"}, ["World Bible", "--section", "3.1"]),
+                 ("planning-impact", {"item": "Nightjar fighter", "written": 1},
+                  ["Nightjar fighter", "--written", "1"])]
+        for name, arguments, cli_args in reads:
+            with self.subTest(name=name, arguments=arguments):
+                cli = subprocess.run([sys.executable, "-m", "lorekeeper", "--root", world, "--json", name, *cli_args],
+                                     cwd=REPO, env=env, capture_output=True, encoding="utf-8")
+                self.assertEqual(cli.returncode, 0, cli.stderr)
+                result = self.call(name, arguments, root=world)
+                self.assertIs(result["isError"], False)
+                self.assertEqual(result["structuredContent"], json.loads(cli.stdout))
+        bases = [tempfile.mkdtemp(prefix="lk-mcp-plan-") for _ in range(2)]
+        for base in bases:
+            self.addCleanup(shutil.rmtree, base, True)
+            shutil.copytree(PLANNING, os.path.join(base, "planning"))
+        fid = self.call("planning", {"item": "Edran"}, root=world)["structuredContent"]["sections"][0]["facts"][0]["id"]
+        writes = [("planning-fact", {"item": "Edran", "section": "Identity", "text": "Edran is old.",
+                                     "source": ["World Bible §2.2"]},
+                   ["Edran", "--section", "Identity", "--text", "Edran is old.", "--source", "World Bible §2.2"]),
+                  ("planning-change", {"item": "Edran", "fact": fid, "text": "Edran is a sailor.",
+                                       "decision": "He sails.", "written": 1},
+                   ["Edran", "He sails.", "--fact", fid, "--text", "Edran is a sailor.", "--written", "1"])]
+        for name, arguments, cli_args in writes:
+            with self.subTest(name=name):
+                cli = subprocess.run([sys.executable, "-m", "lorekeeper", "--root",
+                                      os.path.join(bases[0], "planning", "world"), "--json", name, *cli_args],
+                                     cwd=REPO, env=env, capture_output=True, encoding="utf-8")
+                self.assertEqual(cli.returncode, 0, cli.stderr)
+                result = self.call(name, arguments, root=os.path.join(bases[1], "planning", "world"))
+                self.assertIs(result["isError"], False)
+                self.assertEqual(result["structuredContent"], json.loads(cli.stdout))
+        for rel in ("docs/bible.md", "docs/overrides.md", "world/Planning/Characters/Edran (plan).md"):
+            with open(os.path.join(bases[0], "planning", rel), "rb") as a, \
+                    open(os.path.join(bases[1], "planning", rel), "rb") as b:
+                self.assertEqual(a.read(), b.read(), rel)
+
+    def test_saga_never_writes_authorities(self):
+        """lore mcp --saga: planning-change is refused; planning-fact needs a planning folder."""
+        base = tempfile.mkdtemp(prefix="lk-mcp-saga-")
+        self.addCleanup(shutil.rmtree, base, True)
+        shutil.copytree(PLANNING, os.path.join(base, "planning"))
+        world = os.path.join(base, "planning", "world")
+        before = {}
+        for n in ("bible.md", "overrides.md"):
+            with open(os.path.join(base, "planning", "docs", n), "rb") as fh:
+                before[n] = fh.read()
+        fid = self.call("planning", {"item": "Edran"}, root=world)["structuredContent"]["sections"][0]["facts"][0]["id"]
+        refused = mcp.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+            "name": "planning-change", "arguments": {"item": "Edran", "fact": fid, "remove": True, "decision": "x"}}},
+            world, saga=True)["result"]
+        self.assertIs(refused["isError"], True)
+        self.assertEqual(refused["structuredContent"]["error"]["code"], "FORBIDDEN")
+        self.assertIn("planning_wiki_change", refused["structuredContent"]["error"]["message"])
+        for n, data in before.items():
+            with open(os.path.join(base, "planning", "docs", n), "rb") as fh:
+                self.assertEqual(fh.read(), data)
+        ok = mcp.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+            "name": "planning-fact", "arguments": {"item": "Edran", "section": "Identity", "text": "Old.",
+                                                   "source": ["World Bible §2.2"]}}}, world, saga=True)["result"]
+        self.assertIs(ok["isError"], False)
+        no_plan = mcp.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+            "name": "planning-fact", "arguments": {"item": "Mara Quell", "section": "A", "text": "x"}}},
+            FIXTURE, saga=True)["result"]
+        self.assertEqual(no_plan["structuredContent"]["error"]["code"], "FORBIDDEN")
 
     def test_tool_and_method_errors(self):
         result = self.call("show", {"item": "Nobody"})

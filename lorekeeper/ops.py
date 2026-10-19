@@ -5,7 +5,7 @@ import secrets
 import time
 from collections import namedtuple
 
-from . import checks, dates, store, wiki
+from . import checks, dates, planning, store, wiki
 from .timeinfo import calendar_of, item_dates, parse_at, show_when
 from .store import LoreError, Project
 
@@ -283,10 +283,12 @@ def op_request(p, item, note, field=None, unset=None, version=None, expect=None)
         if entry is None or entry.item is None:
             raise LoreError("NOT_FOUND", f"no wiki entry with key {item!r} has a page to attach a request to")
         item = f"path:{entry.item.path}"
-    it = p.find(item)
+    plan = planning.plan(p).get(item) if str(item).startswith("plan:") else None   # the Planning view, saga mode
+    it = plan.page if plan else p.find(item)
+    name = plan.name if plan else it.name
     stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
-    rid = f"{stamp}-{store.slug(it.name)[:40].lower()}-{secrets.token_hex(3)}"
-    body = {"id": rid, "item": it.name, "path": it.path, "version": it.version, "note": note,
+    rid = f"{stamp}-{store.slug(name)[:40].lower()}-{secrets.token_hex(3)}"
+    body = {"id": rid, "item": name, **({"layer": "planning"} if plan else {}), "path": it.path, "version": it.version, "note": note,
             "set": store.clean_fields(field or {}), "unset": list(unset or []),
             "current": {k: it.fields.get(k) for k in list(field or {}) + list(unset or [])},
             "created_utc": stamp, "status": "open"}
@@ -344,6 +346,37 @@ def op_fact_end(p, item, section, fact, after=None, reopen=None, version=None):
 
 def op_fact_remove(p, item, section, fact, version=None):
     return wiki.fact_remove(p, item, section, fact, version)
+
+
+def op_planning(p, item=None):
+    pl = planning.plan(p)
+    return pl.index() if item is None else pl.card(item)
+
+
+def op_planning_source(p, source, section=None):
+    pl = planning.plan(p)
+    s = pl.source(source)
+    if s.role == "prose":
+        raise LoreError("INVALID", f"{s.name} is a pattern of chapter files ({p.rel(s.path)}); read a chapter's file "
+                                   "directly")
+    if section is None:
+        return {"source": s.name, "role": s.role, "rank": s.rank, "file": p.rel(s.path), "sections": s.outline()}
+    sec = s.find(section)
+    return {"source": s.name, "role": s.role, "rank": s.rank, "file": p.rel(s.path), "section": sec["ref"],
+            "title": sec["title"], "line": sec["line"] + 1, "end": sec["end"], "text": s.text(sec)}
+
+
+def op_planning_fact(p, item, section=None, text=None, source=None, fact=None, remove=None, type=None, version=None):
+    return planning.fact(p, item, section, text, source, fact, bool(remove), type, version)
+
+
+def op_planning_impact(p, item=None, terms=None, written=None, limit=None):
+    return planning.impact(p, item, terms, written, 40 if limit is None else limit)
+
+
+def op_planning_change(p, item, decision, fact=None, text=None, remove=None, section=None, terms=None, written=None,
+                       version=None):
+    return planning.change(p, item, decision, fact, text, bool(remove), section, terms, written, version)
 
 
 def op_check(p):
@@ -466,6 +499,76 @@ OPS = [
        "Use it only to take back a fact that was added by mistake; when something stops being true, use fact-end, "
        "because the reader still knew it until then. Returns item, path, version and the removed text. "
        "Example: {\"item\": \"Darius\", \"section\": \"Wants\", \"fact\": \"To go home\"}."),
+    Op("planning", "Read the planning wiki: the author's intended end state, as an index or one entry's card.",
+       [Param("item", S, False, "entry name, alias, Wiki page name or key (plan:...); leave out for the index")],
+       False, op_planning,
+       "Use it before planning or drafting anything about an entry: it holds everything the author has designed, "
+       "including what no reader knows yet, so never copy it into reader-facing text or the story wiki. Without "
+       "item it returns groups by type (each entry with name, key, page, facts and ideas counts), the sources in "
+       "authority order and problems (uncited facts, unknown sources, missing sections). With item it returns the "
+       "card: sections of decided facts (each with id, text and sources: source, section, title, rank, found), "
+       "ideas (undecided: facts from the page's Ideas section and idea-document sections that name it; never canon), "
+       "and links computed by Lorekeeper: members, dialogues, appears_in (chapters). Read a cited section with "
+       "planning-source. Example: {\"item\": \"Sava\"}."),
+    Op("planning-source", "Read one planning document's outline, or one section of it, by its citation.",
+       [Param("source", S, True, "source name from the settings, e.g. World Bible"),
+        Param("section", S, False, "section number (23.4, A.252, HO-031) or heading title; leave out for the "
+                                   "outline")],
+       False, op_planning_source,
+       "Use it to read a large planning document one section at a time instead of opening the whole file: "
+       "first the outline (each section's ref, title, level, line and size in bytes), then the sections you need. "
+       "A fact's citation [src: World Bible §23.4] means source \"World Bible\", section \"23.4\". Returns source, "
+       "file, and sections, or section, title, line, end and text. Example: {\"source\": \"World Bible\", "
+       "\"section\": \"23.4\"}."),
+    Op("planning-fact", "Add, replace or remove one fact on a planning page, with its source citation.",
+       [Param("item", S, True, "planning entry name (or a new name, with type)"),
+        Param("section", S, False, "section heading for a new fact, e.g. Identity, Abilities, History; Ideas for "
+                                   "undecided material"),
+        Param("text", S, False, "the fact as one line, without a [src: …] citation"),
+        Param("source", L, False, "citations, each a source name and section, e.g. World Bible §23.4"),
+        Param("fact", S, False, "the id of the fact to replace or remove (fact:... from the card)"),
+        Param("remove", B, False, "remove the fact given by fact"),
+        Param("type", S, False, "only for a new entry: its type, e.g. character; creates its planning page"),
+        Param("version", S, False, "the card's version you read; CONFLICT if the page changed since")],
+       True, op_planning_fact,
+       "Use it to keep the planning wiki in step with its source documents: when building pages from the sources, "
+       "or when a source changed. It writes only the planning page, never a source document, so it is not how an "
+       "author's change is recorded (use planning-change for that). Every decided fact needs source; put "
+       "undecided material in section Ideas. Returns item, path, version, created, section, text, sources and the "
+       "fact's id. Example: {\"item\": \"Sava\", \"section\": \"Identity\", \"text\": \"Born in 1782.\", "
+       "\"source\": [\"World Bible §31.2\"]}."),
+    Op("planning-impact", "Find everything that mentions an entry or phrase: planning facts, source sections, "
+       "chapters and pages.",
+       [Param("item", S, False, "planning entry whose names and aliases to search for"),
+        Param("terms", L, False, "extra phrases, e.g. an old value such as Mach 20"),
+        Param("written", I, False, "last written (frozen) chapter; default: the story wiki's last chapter"),
+        Param("limit", I, False, "most hits per group (default 40); the rest are counted in more")],
+       False, op_planning_impact,
+       "Use it before and after a planning change to see what it touches, instead of reading whole documents. "
+       "Whole-word, case-insensitive. Returns planning (decided facts), sources (per document, highest authority "
+       "first: section, title and matching lines), chapters (cards and written prose, each with status frozen = "
+       "written, flag only; current = the chapter in progress; planned = not yet written), pages (Wiki pages and "
+       "story facts with their chapters) and more. Ideas are never searched. Example: {\"item\": \"Nightjar "
+       "fighter\", \"terms\": [\"Mach 20\"], \"written\": 3}."),
+    Op("planning-change", "Record an author's change to a planning fact: override, write-back and impact review.",
+       [Param("item", S, True, "planning entry name"),
+        Param("decision", S, True, "the author's own words for the change, quoted in the override"),
+        Param("fact", S, False, "the id of the fact to change or remove (fact:... from the card)"),
+        Param("text", S, False, "the new fact text (one line), or a new fact with section"),
+        Param("remove", B, False, "the fact is no longer true"),
+        Param("section", S, False, "for a new fact: its section"),
+        Param("terms", L, False, "extra phrases for the impact review, e.g. the old value"),
+        Param("written", I, False, "last written (frozen) chapter; default: the story wiki's last chapter"),
+        Param("version", S, False, "the card's version you read")],
+       True, op_planning_change,
+       "Use it only on the author's word. It appends a HUMAN OVERRIDE to the override register, adds a dated "
+       "'Amended by HO-NNN' line at the end of the highest-ranked source section the fact cites (the write-back), "
+       "updates the planning fact (citing the override first) and returns the impact review. Then update what the "
+       "review lists as current or planned, reconcile the source passages it lists, and flag frozen chapters to the "
+       "author without editing approved prose. Not offered by lore mcp --saga: in a saga run it through the CLI "
+       "under the saga's planning-change skill. Returns override, write_back, the new fact, impact and report "
+       "(Markdown). Example: {\"item\": \"Nightjar fighter\", \"fact\": \"fact:1a2b3c4d5e6f\", \"text\": \"Top "
+       "speed Mach 30.\", \"decision\": \"Make the jet faster: Mach 30.\", \"terms\": [\"Mach 20\"]}."),
 ]
 BY_NAME = {op.name: op for op in OPS}
 

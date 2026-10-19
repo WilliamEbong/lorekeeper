@@ -1,0 +1,17 @@
+{
+  "lorekeeper": 1,
+  "name": "Planning fixture",
+  "story_wiki": "Story",
+  "planning_wiki": {
+    "folder": "Planning",
+    "sources": [
+      {"name": "World Bible", "file": "../docs/bible.md"},
+      {"name": "Conversations", "file": "../docs/conversations.md", "dialogues": true},
+      {"name": "Outline", "file": "../docs/outline.md", "chapters": true, "skip": ["Meanwhile:"]},
+      {"name": "Prose", "file": "../docs/prose/CH{n:03d}.md", "prose": true},
+      {"name": "Plot ideas", "file": "../docs/ideas.md", "ideas": true},
+      {"name": "Overrides", "file": "../docs/overrides.md", "overrides": true}
+    ],
+    "exclude_names": ["Will"]
+  }
+}
