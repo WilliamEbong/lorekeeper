@@ -1,128 +1,147 @@
 # HANDOFF — Lorekeeper
 
-Transferred from: Lorekeeper run 3 (editor UX overhaul and whole-app audit), 2026-10-18.
-This document is authoritative, including over memory and older summaries. The previous handoff's history is in SESSION-LOG.md and BUILD-NOTES.md.
+Transferred from: the feature 010 specification session, 2026-10-19. Next: run 4, which builds feature 010 (the progressive story wiki) and applies it to the three sagas.
+This document is authoritative, including over memory and older summaries. History is in SESSION-LOG.md, BUILD-NOTES.md and BUILD-PLAN.md.
 
 ## 1. Snapshot
 
 Lorekeeper (command `lore`) is a self-sufficient, standalone story-world engine, inspired by Aeon Timeline but in no way dependent on it.
 - **Storage:** a world is plain Markdown files, one per character, place or event, with flat frontmatter and Obsidian wikilinks.
 - **What it does:** reads dates at whatever precision they are written, computes ages and timelines, and checks continuity (FAIL means a definite error, WARN a possible one).
-- **Interfaces:** a CLI, an MCP server for AI agents, and a local browser editor (`lore serve`).
+- **Interfaces:** one operations table (`lorekeeper/ops.py`) drives three interfaces:
+  - a CLI (`--json` everywhere);
+  - a built-in MCP server for AI agents (`lore mcp`, stdio; each op's name is its MCP tool name);
+  - a local browser editor (`lore serve`).
 - **Interop:** imports and exports Aeon `.aeon`, CSV and Markdown.
 
 Audiences: writers who draft with AI agents, novelists who don't use AI, and worldbuilders/GMs. First clients: the owner's three sagas (Realm, Space, Zombies), in warn mode.
 
 ## 2. Current state
 
-**Run 3 and its follow-ups (3b) are done.**
-- Run 3 (feature 008) was merged into `main` and pushed to the private repo (`3faade4`).
-- The owner's follow-ups (feature 009) are merged into `main` and pushed to the private repo (`55fa436`), with the owner's approval.
-- 247 tests pass (1 POSIX-only skip).
-- The three sagas now vendor engine `2de4351`. Live HEADs: Realm `6ee4816`, Space `87db843`, Zombies `89095c4`. They were landed fast-forward only, after the probes matched the before-baseline.
+- **Lorekeeper:**
+  - `main` = `origin/main` = `d0b564a` (private repo). It holds feature 008 (editor UX and audit fixes) and 009 (drag handles, a real Relationships view, BC dates, centuries, Aeon nesting).
+  - 247 tests pass (1 POSIX-only skip).
+- **Feature 010 is specified, not built:**
+  - Spec: [specs/010-progressive-wiki/spec.md](../../specs/010-progressive-wiki/spec.md).
+  - Branch: `feat/010-progressive-wiki`, from `main`.
+  - The spec, this handoff, the new KICKOFF-PROMPT, a BUILD-PLAN status line and a SESSION-LOG entry may still be uncommitted. If so, commit them first (`docs: specify the progressive story wiki`).
+- **Sagas, checked 2026-10-19:**
 
-What the branch adds:
-- **Editor (feature 008, specs/008-editor-ux):** rebuilt for novelists.
-  - Shell: a top bar with live save status, a find box (`/`), and a New item form.
-  - Inspector: plain labels, dates read back in words, one-per-line lists, a type picker, grouped connections, and Undo after every save. Conflicts offer "Load their version" or "Keep my text".
-  - Timeline: round axis dates that stay in view, packed rows, a colour per type, approximate dates drawn dashed, type filters, and safe dragging (a 6 px threshold, a live date, the whole span moves, Undo).
-  - Other views: Subway lines run from birth to death. Ages (renamed from Relationships) keeps its names in view and tints children and impossible ages. Spreadsheet sorts, filters and pages its rows.
-  - New Continuity tab: shows `lore check` results in plain words, with a count badge.
-  - Works in light and dark, at phone width, and at 3,000 items.
-- **Audit fixes (about 50 findings from three read-only audits, fixed in four parallel worktrees, then two fresh-context reviews):**
-  - Aeon import no longer invents deaths; dependencies are no longer reversed; SS/FF import as `starts_after_start`/`ends_after_end`.
-  - Obsidian block-style lists are read and edited safely.
-  - A mistyped `--root` errors instead of giving a false all-clear.
-  - "May 5, 1990" no longer reads as the year 5.
-  - New checks: `END_BEFORE_START` and `AMBIGUOUS_NAME` (WARN).
-  - TWO_PLACES: back-to-back scenes no longer clash, and the check went from 21 s to 0.3 s on coarse worlds.
-  - Parameter types are checked once for all three interfaces.
-  - The CLI prints plain sentences for timeline, age, when, where and knows.
-  - Live-reload polling went from 0.7 s to 0.05 s at 3,000 files.
-- **Wuthering Heights sample (re-imported):** 2 FAIL and 2 WARN, all genuine. It reported 23 FAIL and 7 WARN before.
+  | Saga | Live HEAD | Vendored engine | Complete | In progress |
+  |---|---|---|---|---|
+  | Realm | `6ee4816` | `2de4351` | CH001–003 | CH004 at READY_FOR_HUMAN |
+  | Space | `87db843` | `2de4351` | CH001–004 | CH005 at READY_FOR_HUMAN |
+  | Zombies | `89095c4` | `2de4351` | CH001–003 | CH004 at READY_FOR_HUMAN |
 
-Follow-ups in 009:
-- On the timeline, dragging either end of a bar changes just that date, and dragging the middle moves the whole item.
-- The Relationships tab is a real relationships view (people and groups), separate from the Ages grid.
-- BC dates finer than a year read `0044-03-15 BC` ("15 March 44 BC" in the editor).
-- `1800s` means a century.
-- Aeon import keeps nesting (`part_of`, `located_in`), keeps dated types' own names, and exports multitext cleanly.
+  The owner may advance chapters during the run, so re-check this at the start and before landing.
+- **In flight:** nothing.
 
-**In flight:** nothing.
+## 3. Feature 010 in one paragraph
 
-## 3. Decision log (this run; earlier decisions are in SESSION-LOG and BUILD-NOTES)
+A chapter stamp (`[ch 7]`, or `[ch 2-5]` for a range) on each fact says from which chapter the reader knows it.
+- **Progressive mode** shows the wiki as of chapter N: an index per type of what the reader has met, under the names the reader knows, and a card per entry with its own chapter toggle.
+- **Complete mode** shows everything, ended facts with their ranges, and one card holding all of a character's identities.
+- **Where facts live:**
+  - Hand-written worlds keep stamped facts in their own pages.
+  - Sagas keep them in a separate `Story Wiki/` folder of companion pages, so the saga's Wiki, templates, profile packets, stages, gates and commands are untouched.
+- **How AI writes them:** through new `fact-add`/`fact-end` operations (CLI, MCP, editor). A new shared saga skill runs the update after `freeze N`, from approved sources only.
+- **MCP:** each saga gets a project `.mcp.json` running the vendored `lore mcp`.
+
+The spec's FRs and SCs are the definition of done.
+
+## 4. Decision log (earlier decisions are in SESSION-LOG and BUILD-NOTES)
 
 | # | Decision | Rationale | Status |
 |---|----------|-----------|--------|
-| 14 | Refine the editor's look; don't redesign it | The paper-and-ink identity works; the problems were usability | settled |
-| 15 | The Relationships tab is labelled **Ages** | It is an age grid; element ids are unchanged | owner may revert |
-| 16 | In local mode, link fields are edited only through Connections, not as raw `[[Name]]` text | Raw link syntax is error-prone for novelists; saga mode keeps the text | owner may revert |
-| 17 | A timeline drag moves the whole written span | Moving only the start could put it after its end | settled |
-| 18 | Continuity re-runs `check` after every reload (0.5 s debounce) | Keeps the badge honest; `check` takes about 1 s at 3,000 items | settled |
-| 19 | An event dated exactly like a birth or death is not a DEAD/UNBORN finding | Birth and death events were flagged against the same person | settled |
-| 20 | `create()` keeps the index current; callers no longer re-index | Imports were quadratic | settled |
-| 21 | Aeon SS/FF import as unchecked roles | Lorekeeper's `same_start`/`same_end` mean "equal", which is wrong for Aeon | settled; checking them is on the Later list |
-| 22 | Relationships tab = actual relationships; Ages tab = the age grid | Owner: relationships should not be mixed with ages | settled (supersedes 15) |
-| 23 | Bar ends are drag handles (10 px, bars of 24 px or more with a written exact end); the middle moves the whole item | Owner request | settled (supersedes 17's single mode) |
-| 24 | "N00s" is a century; BC finer than a year is written `0044-03-15 BC` | How writers use it (the Realm notes say "the late 200s"); a wider interval never invents a FAIL | settled |
+| 14 | Refine the editor's look; don't redesign it | The paper-and-ink identity works | settled |
+| 16 | In local mode, link fields are edited only through Connections | Raw link syntax is error-prone for novelists | owner may revert |
+| 18 | Continuity re-runs `check` after every reload (0.5 s debounce) | Keeps the badge honest | settled |
+| 19 | An event dated exactly like a birth or death is not a DEAD/UNBORN finding | It is that birth or death | settled |
+| 20 | `create()` keeps the index current | Imports were quadratic | settled |
+| 21 | Aeon SS/FF import as unchecked roles | Lorekeeper's `same_start`/`same_end` mean "equal" | settled; checking them is Later |
+| 22 | Relationships tab = actual relationships; Ages tab = the age grid | Owner request | settled |
+| 23 | Bar ends are drag handles; the middle moves the whole item | Owner request | settled |
+| 24 | "N00s" is a century; BC finer than a year is written `0044-03-15 BC` | How writers use it | settled |
 | 25 | The sagas stay in warn mode; Space's chronology findings stay with the author | Fail mode would block the pipeline on canon decisions | settled |
+| 26 | Cut-off is reading order (chapter numbers), not in-world dates | Flashbacks; the timeline already covers in-world time | owner-approved |
+| 27 | Stamps go on each fact (list item or paragraph); untagged facts inherit the page's `first_appearance` | Plain text, typeable by hand, Obsidian-friendly | owner-approved |
+| 28 | Someone seen before being named is listed under the reader's description (`## Names` with stamps) | Owner's choice | owner decision |
+| 29 | A secret identity is its own card until the reveal (`revealed_as` role with a stamp); complete mode holds all identities on one card | Owner's choice | owner decision |
+| 30 | Only important things get cards, plus pages for kinds of things (`kind` role) | Owner's choice | owner decision |
+| 31 | Sagas: stamped facts live in `Story Wiki/` companion pages, never in Wiki pages | Profile packets embed whole Wiki pages (60 KB cap); the owner wants the saga system unchanged | settled |
+| 32 | The chapter picker filters only the Wiki tab; progressive cards hide frontmatter fields | Dates give deaths away; per-field stamps are Later | settled |
+| 33 | AI writes facts only through `fact-add`/`fact-end`; sagas register `lore mcp` in `.mcp.json`; scripted steps use the CLI with `--json` | Validated writes; easy AI use | settled |
+| 34 | The saga update runs after `freeze N` (a new skill plus one pointer), outside the stage machine | No existing stage, gate or instruction changes | settled |
 
-## 4. Open questions (owner's call)
+## 5. Open questions (owner's call; none blocks run 4)
 
-- Merge `feat/008-editor-ux` into `main` and push to the private repo? (Not done: pushing needs the owner's go-ahead.)
-- Should the sagas switch from warn to fail mode? (Carried over.)
-- Keep the tab name "Ages", or go back to "Relationships"?
+- Should the sagas switch from warn to fail mode? (Carried over; decision 25 says no for now.)
 
-## 5. Next actions
+## 6. Next actions
 
-## 5. Next actions
+1. **Run 4: build feature 010 with build-continuously.** Use the prompt in [KICKOFF-PROMPT.md](KICKOFF-PROMPT.md). **← NEXT**
+2. Space chronology report: cards 051/052 (RAIL_REGRESSION) and four impossible SRD days (the author's call, carried over).
+3. Apply the deferred saga keys in each saga's `chronology_deferred.md` as chapters freeze (carried over).
 
-0. **Owner feature request (2026-10-18), not started:** a chapter-scoped story wiki that shows only what is known by a chosen chapter. It is AI-optional, and it builds on the saga's chapter wrap-up rather than replacing it. The full brief and its grounding are in BUILD-PLAN.md under "Feature requests from the owner". Start it with speckit-specify.
-1. Start the owner's chapter-scoped story wiki (item 0), with speckit-specify. **← NEXT**
-3. Space chronology report: cards 051/052 (RAIL_REGRESSION) and four impossible SRD days (carried over).
-4. Apply the deferred saga keys in `chronology_deferred.md` as chapters freeze (carried over).
-
-## 6. Constraints & preferences
+## 7. Constraints & preferences
 
 - The owner directs in plain language and does not read code, JSON or git. Persisted docs and commits use normal prose.
 - Ponytail (the simplest correct design) and stdlib only. Spec Kit for features. Playwright for any UI check.
+- Every `open()` passes `encoding="utf-8"`. Tests use `unittest`.
 - Line endings: most `.py` files and `editor.js` are CRLF; `editor.css`, `editor.html` and the docs are LF. Preserve them, and check with `git diff --stat` before committing.
+- Lorekeeper git: work on `feat/010-progressive-wiki`, with local commits only. Never push, and never merge into `main`; both wait for the owner. The private repo is the only remote. Nothing public.
 - **Sagas:**
+  - All work happens in clones under `C:\Users\Owner\lk-scratch\sagas`, with fresh full copies as probes (as in run 3b: `lk-scratch/probe5`).
+  - Land by fast-forward only with `lk-scratch\snap\land.sh`. If a live repo moved, re-clone and redo; never force.
   - Never stage in-progress chapters, `_system/state`, provenance or `saga.log`.
-  - Engine commits are prefixed `system:`.
-  - Run status and validate only on copies.
-- Nothing public. The only remote is the private repo.
+  - Commit prefixes: engine and config `system:`, Story Wiki content `wiki:`.
+  - Run `status` and `validate` only on copies.
+  - The owner authorized applying feature 010 to the three sagas (2026-10-19), on the condition that their systems keep working exactly as before.
 
-## 7. Artifact manifest
+## 8. Gotchas for run 4
+
+- **Profile packets** (`_system/scripts/profiles.py`):
+  - `assemble` puts each participant's whole Wiki page text into `RT/context/profiles.md`, and fails above 60 KB.
+  - Roster Wiki pages and `PROJECT_MANIFEST.json` are fingerprinted, so editing them stales an in-progress chapter's packet.
+  - `_system/lorekeeper.json` is not fingerprinted; put the `story_wiki` key there.
+- **Saga parity:**
+  - `_system/tests/test_engine_parity.py` has a `SHARED_FILES` list and `SHARED_GLOBS` (`_system/roles/*.md`, `_system/skills/*.md`, `Wiki/_TEMPLATES/*.md`). A new skill must be identical in all three sagas.
+  - `test_docs.py` requires `_system/skills/README.md` to list every skill, and forbids saga-specific terms (`HO-\d+`, saga names, word-cap literals) in shared files.
+- **Saga Wiki layouts differ:** Realm uses subfolders (Characters, Events, Locations, Organizations, Chapters). Space and Zombies are flat. Space already has kind pages ("Human Assault battlesuit", "Imperial Warform").
+- **Saga page facts:** character pages carry `first_appearance`, `last_updated_after_chapter`, an `## Important events` list with `**CHnnn**` markers, and `## Appearances`. Use these with each chapter's `Chapters/CHnnn/CURRENT_WORLD_BIBLE_OUT.md` ("Current World Bible — after CHnnn") for the backfill.
+- **`freeze`** refuses staged paths outside its scope, so the Story Wiki gets its own commit after the freeze.
+- **Lorekeeper code:**
+  - `store.RESERVED` already includes `aliases`, and alias resolution is in `store.py` around line 294.
+  - Link values already take a suffix (`LINK` regex: `"[[X]] +2h"`).
+  - `op.name` is both the CLI subcommand and the MCP tool name, hence `fact-add`.
+- **Editor:** nothing renders page bodies today. The Wiki tab is the first body renderer. Render a small Markdown subset (headings, lists, paragraphs, bold and italic, wikilinks) as DOM text nodes, never `innerHTML`, to keep the CSP and stay safe from XSS.
+- **Realm's editor title** reads "Wiki" because the saga config has no `name` (cosmetic, Later).
+
+## 9. Artifact manifest
 
 | Artifact | Purpose | Status | Location |
 |----------|---------|--------|----------|
-| Lorekeeper source + tests | The app | final on branch | repo, `feat/008-editor-ux` |
-| specs/008-editor-ux | Spec, plan, tasks for the editor | final | repo |
-| README.md, docs/user-guide.md, docs/agent-skill.md | Guides (updated this run) | final | repo |
-| docs/research/AEON-SPEC.md | Clean-room `.aeon` notes (dependency direction and zero-length ends added) | final | repo |
-| docs/build/BUILD-PLAN.md, SESSION-LOG.md | Plan with run-3 section; full history | final | repo |
-| tests/test_editor_dates.py | Runs the editor's own date and tick code in Node against the engine (skips without Node) | final | repo |
-| Scratch test worlds (Wuthering Heights import, fixture copy, empty world, 3,000-item world) | Verification only | disposable | session scratchpad (not in the repo) |
+| Lorekeeper source + tests | The app | final for 008/009 | repo, `main` |
+| specs/010-progressive-wiki/spec.md | The feature 010 spec (plan and tasks come in run 4) | ready | repo, `feat/010-progressive-wiki` |
+| docs/build/KICKOFF-PROMPT.md | Run 4 kickoff and resume prompts | ready | repo |
+| README.md, docs/user-guide.md, docs/agent-skill.md | Guides; run 4 extends them (FR-26) | current for 009 | repo |
+| docs/build/BUILD-PLAN.md, SESSION-LOG.md, BUILD-NOTES.md | Plan and full history; run 4 adds its own section | current | repo |
+| Saga clones and probes | Saga work area | recreate fresh for run 4 | `C:\Users\Owner\lk-scratch` |
 
-## 8. Glossary
+## 10. Glossary
 
-- **Card:** an architecture chapter card (in-memory item of type `card`, path `<architecture>#CHnnn`).
+- **Card (saga architecture):** an architecture chapter card (in-memory item of type `card`, path `<architecture>#CHnnn`). Not the same as a wiki card.
+- **Wiki card:** the progressive or complete view of one entry in the Wiki tab.
+- **Stamp:** `[ch N]` or `[ch N-M]` at the end of a fact.
+- **Story page:** where an item's stamped facts live. That is the item's own page, or a companion page in the world's `story_wiki` folder (`Story Wiki/` in the sagas).
+- **Progressive / complete:** the wiki as of chapter N, or with no cut-off.
 - **Rail:** a Space story strand. **SRD:** Space's 365-day production calendar.
 - **Warn mode:** chronology findings are printed but never block a stage.
 - **FAIL / WARN:** a definite or possible continuity error.
-- **Approximate (editor):** circa, provisional, ranges, `date_min`/`date_max`, or month or year precision without a written end. Drawn pale and dashed.
 
-## 9. How to verify
+## 11. How to verify (today)
 
-- `python -m unittest discover -s tests` from the repo root: 240 tests, OK (1 skipped).
-- `lore serve --root <a world>` and open the printed address:
-  1. Press `/`, find a character, edit Born, and check that it reads back.
-  2. Press Ctrl+S, then Undo.
-  3. Open the Continuity tab.
-  4. Drag an event and watch the date shown live.
+- `python -m unittest discover -s tests` from the repo root: 247 tests, OK (1 skipped).
+- `lore serve --root <a world>` and open the printed address.
 - `"C:/Users/Owner/.claude/skills/impeccable/scripts/impeccable" detect --json lorekeeper/editor.html` should print `[]`.
-
-## 10. Appendix
-
-None.
+- In each saga: `python -m unittest discover -s _system/tests`.

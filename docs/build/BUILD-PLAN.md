@@ -336,7 +336,7 @@ Paths are relative to each saga root and identical in all three repos.
 
 # Feature requests from the owner
 
-## Chapter-scoped story wiki (requested 2026-10-18; not started)
+## Chapter-scoped story wiki (requested 2026-10-18; specified 2026-10-19 as [specs/010-progressive-wiki](../../specs/010-progressive-wiki/spec.md), which settles the questions below; to be built in run 4)
 **The request, in the owner's terms:** a story wiki tied to where the story is. Selecting chapter 3 shows only what is known by chapter 3; selecting chapter 10 shows the story state as of chapter 10, and so on.
 - **AI optional.** Everything must be possible by hand, with AI making it much faster.
 - **An upgrade to the saga system, not a replacement.** Each chapter drafting session in the owner's saga system already produces a current-state snapshot. This feature should be a more mature layer on top of that. Once the built-in chapter wrap-up has run, the AI uses its output to update that story's Lorekeeper profile.

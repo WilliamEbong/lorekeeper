@@ -254,3 +254,18 @@ Append-only. Newest entries at the bottom. Each entry gives: date/time (UTC if k
 - LANDED by fast-forward with `land.sh` (working trees untouched): Realm 6ee4816, Space 87db843, Zombies 89095c4.
 - Lorekeeper `main` is at 2de4351 locally, 6 commits ahead of the private repo (3faade4). Pushing the follow-ups waits for the owner's go-ahead.
 - Owner approved: pushed `main` (55fa436) to the private repo (visibility PRIVATE confirmed with gh).
+
+### Feature 010 specified: progressive story wiki (2026-10-18 to 2026-10-19)
+- Owner shaped the request in conversation:
+  - It is a progressive wiki with an index per type that lists only what the reader has met by chapter X.
+  - Clicking an entry opens a progressive card with its own chapter toggle. Character cards show the critical things (beliefs, what they know, where they are, relationships).
+  - Factions, locations, important items and vehicles get the same cards, and so do kinds of things ("standard alien battle tank").
+  - Someone seen before being named is listed under the reader's description until named.
+  - A secret identity is a separate card until the reveal chapter.
+  - A complete mode shows everything, with one card holding all of a character's identities.
+- Owner: the build also applies the feature to the three sagas. The saga systems must keep working exactly as they do, with the progressive wiki added on top.
+- Decision: in the sagas, stamped facts live in a separate `Story Wiki/` folder of companion pages, never in the Wiki pages. Reason: `profiles.assemble` puts each participant's whole Wiki page into the drafting packet (60 KB cap, fails above it), so facts that are no longer true would mislead drafting and could overflow the packet. Hand-written worlds keep stamps in their own pages. Undo: point `story_wiki` at nothing and stamp the pages instead.
+- Decision: the chapter picker filters only the Wiki tab, and progressive cards hide frontmatter fields, because dates give deaths away. Per-field stamps are on the Later list. This revises the first answer given to the owner ("one picker filters every view").
+- Decision: AI writes facts only through the new `fact-add`/`fact-end` operations (CLI, MCP, editor), never by hand-editing stamps. Each saga gets a project `.mcp.json` running the vendored `lore mcp`. Scripted steps use the CLI with `--json`.
+- Decision: the saga update runs after `freeze N`, as a new shared skill plus one pointer. No stage, gate or existing instruction changes. If it is skipped, the Story Wiki is behind and nothing breaks.
+- Spec written: specs/010-progressive-wiki/spec.md, on branch `feat/010-progressive-wiki` from `main` d0b564a. HANDOFF and KICKOFF-PROMPT rewritten for run 4. Nothing built yet.
