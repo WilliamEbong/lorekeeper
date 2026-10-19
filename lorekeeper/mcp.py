@@ -1,5 +1,6 @@
 """Small, stateless MCP adapter over the operations table (JSON lines on stdio)."""
 import json
+import os
 import sys
 
 from . import __version__, ops
@@ -16,6 +17,16 @@ INSTRUCTIONS = (
     "Run check after edits."
 )
 FACT_OPS = {"fact-add", "fact-end", "fact-remove"}
+
+
+def story_folder(root, config):
+    if config is None:
+        try:
+            with open(os.path.join(root, "lore.json"), encoding="utf-8") as fh:
+                config = json.load(fh)
+        except (OSError, ValueError):
+            config = {}
+    return isinstance(config, dict) and config.get("story_wiki")
 
 
 def offered(op, saga):
@@ -101,6 +112,9 @@ def handle(message: dict, root: str, config: dict | None = None, saga: bool = Fa
             if not offered(ops.BY_NAME[name], saga):
                 raise LoreError("FORBIDDEN", f"{name} is not offered in a saga: Wiki pages change only through the "
                                              "saga pipeline. Record story facts with fact-add and fact-end.")
+            if saga and name in FACT_OPS and not story_folder(root, config):
+                raise LoreError("FORBIDDEN", "the fact tools need a story wiki folder in a saga, or they would write "
+                                             "Wiki pages: add \"story_wiki\": \"../Story Wiki\" to the settings file")
             value = ops.run(name, arguments, root=root, config=config)
         except LoreError as exc:
             value, is_error = exc.as_dict(), True

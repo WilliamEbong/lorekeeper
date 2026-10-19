@@ -22,6 +22,7 @@ const TITLES = {
   ORDER_REGRESSION: 'Goes back in time against its order', MAX_DURATION: 'Lasts longer than allowed', GAP: 'Wrong gap between linked items',
   STORY_ORDER: 'Story order moves back in time', END_BEFORE_START: 'Ends before it starts', AMBIGUOUS_NAME: 'One name points to two items',
   STAMP_UNREADABLE: 'A chapter stamp can’t be read', STAMP_RANGE: 'A chapter range ends before it starts',
+  STORY_PAGE_UNREADABLE: 'A story page can’t be used',
 };
 const ICONS = {plus: 'M12 5v14M5 12h14', minus: 'M5 12h14', fit: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
   close: 'M6 6l12 12M18 6 6 18', left: 'M15 6l-6 6 6 6', right: 'M9 6l6 6-6 6'};
@@ -1406,9 +1407,9 @@ async function wikiLoad() {
       try { card = await api('wiki', {item: wiki.open, ...(wiki.cardAsOf == null ? {} : {as_of: wiki.cardAsOf})}); }
       catch (error) { if (error.code !== 'NOT_FOUND') throw error; cardError = error; }
     }
+    if (wiki.loading !== want) return;   // a newer request is on its way: never show this older answer
     Object.assign(wiki, {index, card, cardError, error: null});
-  } catch (error) { wiki.error = error; }
-  if (wiki.loading !== want) return;   // a newer request is on its way
+  } catch (error) { if (wiki.loading !== want) return; wiki.error = error; }
   wiki.loading = null; wiki.loaded = want;
   if (tab === 'Wiki') renderView();
 }
@@ -1491,7 +1492,8 @@ function wikiCard() {
   head.append(title, toggle);
   box.append(head);
   if (wiki.cardError) {
-    box.append(el('p', `The reader has not met ${wiki.openName} yet by chapter ${wiki.cardAsOf}. Choose a later chapter or Complete.`, {class: 'hint'}));
+    box.append(el('p', wiki.cardAsOf == null ? `There is no entry named ${wiki.openName} any more.`
+      : `The reader does not know ${wiki.openName} by that name at chapter ${wiki.cardAsOf}. Choose a later chapter or Complete.`, {class: 'hint'}));
     return box;
   }
   if (!card) { box.append(el('p', 'Opening…', {class: 'hint'})); return box; }
@@ -1516,11 +1518,11 @@ function wikiCard() {
   const sections = card.sections.filter(s => s.facts.length);
   if (!sections.length) box.append(el('p', wiki.cardAsOf == null ? 'No story facts are recorded yet.' : `Nothing known yet about ${card.name} at this chapter.`, {class: 'hint'}));
   sections.forEach((section, index) => box.append(wikiSection(card, section, index)));
-  if (!saga || card.page) {
+  if (!saga || !card.standalone) {
     const other = add(box, el('section', null, {class: 'wiki-section'}));
     if (wiki.form === 'other') other.append(addForm(card, null, 'other'));
     else other.append(button([icon('plus'), sections.length ? 'Add a fact to another section' : 'Add the first fact'],
-      () => { wiki.form = 'other'; renderView(); requestAnimationFrame(() => $('wiki-form-section')?.focus()); }, {class: 'quiet small'}));
+      () => { wiki.form = 'other'; renderView(); requestAnimationFrame(() => $('wiki-form-section')?.focus()); }, {class: 'quiet small', id: 'wiki-add-other'}));
   }
   if (card.fields) {
     const fields = Object.entries(card.fields).filter(([k]) => !['id', 'type', 'canonical_name', 'name', 'page'].includes(k));
@@ -1546,33 +1548,37 @@ function wikiSection(card, section, index) {
       if (complete && fact.to != null) marks.append(el('span', 'no longer current', {class: 'tag'}));
       if (fact.as) marks.append(el('span', `as ${fact.as}`, {class: 'tag'}));
       if (fact.worked_out) marks.append(el('span', 'worked out', {class: 'tag', title: 'Filled in from links between items; nothing is written here yet.'}));
-      if (!fact.worked_out && fact.to == null && section.heading) {
+      if (!fact.worked_out && fact.to == null) {
         const formId = `${index}:${n}:end`;
         if (wiki.form === formId) li.append(endForm(card, section, fact, formId));
-        else marks.append(button(saga ? 'Propose an end' : 'No longer true after…', () => { wiki.form = formId; renderView(); requestAnimationFrame(() => $('wiki-form-input')?.focus()); }, {class: 'quiet small'}));
+        else marks.append(button(saga ? 'Propose an end' : 'No longer true after…', () => { wiki.form = formId; renderView(); requestAnimationFrame(() => $('wiki-form-input')?.focus()); },
+          {class: 'quiet small', id: `wiki-end-${index}-${n}`}));
       }
     });
   } else box.append(el('p', wiki.cardAsOf == null ? 'Nothing recorded yet.' : 'Nothing known yet at this chapter.', {class: 'hint'}));
   const formId = `${index}:add`;
-  if (saga && !card.page) box.append(el('p', 'Add facts for this entry with fact-add.', {class: 'hint'}));
+  if (saga && card.standalone) box.append(el('p', 'Add facts for this entry with fact-add.', {class: 'hint'}));
+  else if (!section.heading) { /* the untitled opening: new facts go under a heading ("another section") */ }
   else if (wiki.form === formId) box.append(addForm(card, section, formId));
   else box.append(button([icon('plus'), saga ? 'Propose a fact' : 'Add a fact'], () => { wiki.form = formId; renderView(); requestAnimationFrame(() => $('wiki-form-input')?.focus()); },
-    {class: 'quiet small', 'aria-describedby': id}));
+    {class: 'quiet small', 'aria-describedby': id, id: `wiki-add-${index}`}));
   return box;
 }
-function wikiForm(fields, submitText, onSubmit) {
+function wikiForm(fields, submitText, onSubmit, returnId) {
+  // After saving or cancelling, focus goes back to the control that opened the form (or the card title).
+  const done = () => { wiki.form = null; renderView(); requestAnimationFrame(() => ($(returnId) || $('wiki-title'))?.focus({preventScroll: true})); };
   const form = el('form', null, {class: 'wiki-form'});
   form.append(...fields, el('div', null, {class: 'row'}));
   const row = form.lastChild;
-  row.append(el('button', submitText, {type: 'submit', class: 'primary'}), button('Cancel', () => { wiki.form = null; renderView(); }, {class: 'quiet'}));
+  row.append(el('button', submitText, {type: 'submit', class: 'primary'}), button('Cancel', done, {class: 'quiet'}));
   form.addEventListener('submit', async event => {
     event.preventDefault();
     const submit = form.querySelector('button[type="submit"]');
     submit.disabled = true;
-    try { await onSubmit(); wiki.form = null; renderView(); } catch (error) { report(error, error.code === 'CONFLICT' ? [['Reload the card', () => refresh()]] : []); }
+    try { await onSubmit(); done(); } catch (error) { report(error, error.code === 'CONFLICT' ? [['Reload the card', () => refresh()]] : []); }
     finally { submit.disabled = false; }
   });
-  form.addEventListener('keydown', event => { if (event.key === 'Escape') { event.stopPropagation(); wiki.form = null; renderView(); } });
+  form.addEventListener('keydown', event => { if (event.key === 'Escape') { event.stopPropagation(); done(); } });
   return form;
 }
 function numberField(id, text, value) {
@@ -1599,7 +1605,7 @@ function addForm(card, section, formId) {
     if (!heading) { sectionInput.focus(); throw new ApiError('INVALID', 'Name the section first, for example Wants.'); }
     if (!fact) { text.focus(); throw new ApiError('INVALID', 'Write the fact first.'); }
     if (saga) {
-      await api('request', {item: `path:${card.page}`, note: `Story Wiki: add to ${card.name} › ${heading}: "${fact}" [ch ${start}]`});
+      await api('request', {item: card.key, note: `Story Wiki: add to ${card.name} › ${heading}: "${fact}" [ch ${start}]`});
       toast(`Fact for ${card.name} proposed. The story files stay as they are until the pipeline applies it.`);
       renderView();
       return;
@@ -1607,32 +1613,33 @@ function addForm(card, section, formId) {
     const result = await api('fact-add', {item: card.key, section: heading, text: fact, from: start, ...(card.version ? {version: card.version} : {})});
     await refresh();
     toast(`Added to ${card.name} › ${heading}.`, {actions: [['Undo', async () => {
-      await api('fact-remove', {item: card.key, section: heading, fact, version: result.version});
+      await api('fact-remove', {item: card.key, section: heading, fact: result.id, version: result.version});
       await refresh();
       toast('Undone.');
     }]]});
-  });
+  }, section ? `wiki-add-${formId.split(':')[0]}` : 'wiki-add-other');
 }
 function endForm(card, section, fact, formId) {
   const [after, afterInput] = numberField('wiki-form-input', 'No longer true after chapter ', Math.max(fact.from ?? 0, wiki.cardAsOf ?? lastChapter()));
-  const key = fact.key || card.key, heading = section.heading || 'Overview';
-  const words = fact.text.split('[[')[0].trim().length >= 6 ? fact.text.split('[[')[0].trim() : fact.text.replace(/\[\[([^\]|]+)(?:\|([^\]]*))?\]\]/g, (m, a, b) => b || a);
+  // The fact's id names exactly this fact (folded facts live on the folded page: fact.key).
+  const key = fact.key || card.key, heading = section.heading || '(untitled)';
+  const words = fact.text.replace(/\[\[([^\]|]+)(?:\|([^\]]*))?\]\]/g, (m, a, b) => b || a);
   return wikiForm([after], saga ? 'Propose' : 'Save', async () => {
     const end = Number(afterInput.value);
     if (saga) {
-      await api('request', {item: `path:${card.page}`, note: `Story Wiki: in ${card.name} › ${heading}, "${words}" is no longer true after chapter ${end}`});
+      await api('request', {item: card.key, note: `Story Wiki: in ${card.name} › ${heading}, "${words}" is no longer true after chapter ${end}`});
       toast(`End proposed for ${card.name}. The story files stay as they are until the pipeline applies it.`);
       renderView();
       return;
     }
-    const result = await api('fact-end', {item: key, section: heading, fact: words, after: end});
+    const result = await api('fact-end', {item: key, section: heading, fact: fact.id, after: end, ...(!fact.key && card.version ? {version: card.version} : {})});
     await refresh();
     toast(`Marked as no longer true after chapter ${end}.`, {actions: [['Undo', async () => {
-      await api('fact-end', {item: key, section: heading, fact: words, reopen: true, version: result.version});
+      await api('fact-end', {item: key, section: heading, fact: result.id, reopen: true, version: result.version});
       await refresh();
       toast('Undone.');
     }]]});
-  });
+  }, 'wiki-title');
 }
 const VIEWS = {Timeline: timeline, Subway: subway, Relationships: relationships, Ages: agesView, Spreadsheet: spreadsheet, Narrative: narrative, Wiki: wikiView, Continuity: continuity};
 function rememberScroll() {

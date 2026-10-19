@@ -9,7 +9,8 @@ from .timeinfo import item_dates
 STAMP = re.compile(r"[ \t]*\[\s*ch\s*(\d+)\s*(?:[-–]\s*(\d+)\s*)?\]\s*\Z", re.I)
 MARK = re.compile(r"\[\s*ch(?![a-z])[^\]\n]*\]", re.I)        # anything shaped like a stamp
 CHAPTER = re.compile(r"\s*(?:ch\s*)?(\d+)\s*\Z", re.I)
-HEADING = re.compile(r"(#{1,6})[ \t]+(.*?)[ \t#]*\Z")
+HEADING = re.compile(r"(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*\Z")   # "## Title ##" closes; "## Uses C#" keeps its #
+MAX_CHAPTER = 9999   # a stamp beyond this is a typo, not a chapter
 ITEM = re.compile(r"(?:[-*+]|\d+[.)])(?:[ \t]+|\Z)")          # a top-level list item
 LINK = re.compile(r"\[\[([^\[\]|\r\n]+)(?:\|([^\[\]\r\n]*))?\]\]")
 SUFFIX = " (story)"
@@ -35,7 +36,9 @@ def stamp_problems(text):
     out, final = [], STAMP.search(text)
     for mark in MARK.finditer(text):
         if final and mark.end() == len(text.rstrip()):
-            if final[2] and int(final[2]) < int(final[1]):
+            if max(int(final[1]), int(final[2] or 0)) > MAX_CHAPTER:
+                out.append(("STAMP_UNREADABLE", f"{mark[0]}: chapter numbers stop at {MAX_CHAPTER}", mark.start()))
+            elif final[2] and int(final[2]) < int(final[1]):
                 out.append(("STAMP_RANGE", f"{mark[0]} ends before it starts; write [ch {final[1]}-{final[1]}] "
                                            f"or swap the numbers", mark.start()))
         elif STAMP.fullmatch(mark[0]):
@@ -144,7 +147,22 @@ class Entry:
             first = next((f for s in self.parsed if s["heading"].lower() in REVEAL for f in s["facts"][:1]), None)
             said = first and LINK.search(first["text"])
             self.reveal = (said[1].strip(), first["from"]) if said else None
-        self.key = f"path:{item.path if item else page.path}"
+        self.path = item.path if item else page.path
+        # An opaque key: a page path would give a hidden real name away in progressive answers.
+        self.key = "id:" + store.sha256(self.path.encode("utf-8"))[:12]
+        number(self.parsed)
+
+
+def number(parsed):
+    """Give each fact an id from its heading, its text and how many identical facts come before it.
+    Stamps are left out, so ending or reopening a fact keeps its id."""
+    seen = {}
+    for s in parsed:
+        for f in s["facts"]:
+            base = f"{s['heading'].lower()}\0{norm(f['text'])}"
+            seen[base] = seen.get(base, -1) + 1
+            f["id"] = "fact:" + store.sha256(f"{base}\0{seen[base]}".encode("utf-8"))[:12]
+    return parsed
 
 
 def companion_name(page):
@@ -187,6 +205,7 @@ class Story:
             for path in (e.item and e.item.path, e.page and e.page.path):
                 if path:
                     self.by_path.setdefault(path, e)
+            self.by_path.setdefault(e.key, e)
             for name in ([] if e.item else [e.name]) + [n for n, _, _ in e.names]:
                 self.extra.setdefault(name.lower(), e)
                 if e.item:   # names resolve links after names, stems and aliases
@@ -194,6 +213,7 @@ class Story:
         p._linked = None
 
     def _companions(self):
+        self.problems = []
         if not self.folder or not os.path.isdir(self.folder):
             return []
         out = []
@@ -208,8 +228,12 @@ class Story:
                         front = fm.parse(data.decode("utf-8"))
                     except (UnicodeDecodeError, fm.FrontmatterError):
                         front = None
-                    if front is not None and front.fields.get("type"):
+                    if front is not None and (front.fields.get("type") or front.fields.get("page")):
                         out.append(store.Item(self.p.rel(path), data.decode("utf-8"), store.sha256(data), front))
+                    else:
+                        self.problems.append(store.finding(
+                            "WARN", "STORY_PAGE_UNREADABLE", "not used: a story page needs UTF-8 text and frontmatter "
+                            "with type: (and page: \"[[Name]]\" when it describes a page)", self.p.rel(path)))
         return out
 
     # ---- lookups and rules ----
@@ -217,6 +241,8 @@ class Story:
         ref = str(ref).strip()
         if ref.startswith("path:"):
             return self.by_path.get(ref[5:])
+        if ref.startswith("id:"):
+            return self.by_path.get(ref)
         target = fm.link_target(ref) or ref
         item = self.p.by_id.get(target.lower()) or self.p.resolve(target)
         if item is not None and id(item) in self.by_item:
@@ -261,22 +287,25 @@ class Story:
                 return m[0]
             if not self.visible(e, n):
                 return label or name
-            shown = self.shown(self.root(e, n), n)
-            return m[0] if label or shown.lower() == name.lower() else f"[[{name}|{shown}]]"
+            r = self.root(e, n)
+            shown = self.shown(r, n)
+            # a target the reader would not recognise (a later name, a planning-only full name) goes by key
+            return m[0] if shown.lower() == name.lower() else f"[[{r.key}|{label or shown}]]"
         return LINK.sub(repl, text)
 
     def label(self, type_):
         spec = self.p.schema["types"].get(type_, {})
         return spec.get("plural") or spec.get("label") or type_ or "Other"
 
-    def chapters(self):
+    def chapters(self, n=None):
+        """Chapter numbers in use, labelled from narrative items; later titles stay hidden at chapter n."""
         used = {e.appears for e in self.entries}
         for e in self.entries:
             used.update(x for s in e.parsed for f in s["facts"] for x in (f["from"], f["to"]))
             used.update(x for _, a, b in e.names for x in (a, b))
             used.add(e.reveal[1] if e.reveal else None)
         used.update(chapter(i.fields.get("first_appearance")) for i in self.p.items)
-        used.discard(None)
+        used = {u for u in used if u is not None and u <= MAX_CHAPTER}
         if not used:
             return []
         labels = {}
@@ -284,7 +313,8 @@ class Story:
             number = narrative_number(it)
             if number is not None:
                 labels.setdefault(number, str(it.fields.get("title") or it.name))
-        return [{"n": k, "name": labels.get(k)} for k in range(0 if 0 in used else 1, max(used) + 1)]
+        return [{"n": k, "name": labels.get(k) if n is None or k <= n else None}
+                for k in range(0 if 0 in used else 1, max(used) + 1)]
 
     # ---- the two views ----
     def index(self, n):
@@ -292,19 +322,26 @@ class Story:
         for e in self.entries:
             if self.visible(e, n) and self.root(e, n) is e:
                 also = [self.shown(f, n) for f in self.folded(e, n)]
-                groups.setdefault(e.type, []).append(
-                    {"name": self.shown(e, n), "type": e.type, "key": e.key, "page": e.item.path if e.item else None,
-                     "appears": e.appears, "also": also})
+                row = {"name": self.shown(e, n), "type": e.type, "key": e.key, "appears": e.appears, "also": also}
+                if n is None:   # paths carry real names: complete mode only
+                    row["page"] = e.item.path if e.item else None
+                groups.setdefault(e.type, []).append(row)
         out = [{"type": t, "label": self.label(t), "count": len(rows),
                 "entries": sorted(rows, key=lambda r: r["name"].casefold())}
                for t, rows in groups.items()]
         out.sort(key=lambda g: g["label"].casefold())
         return {"mode": mode(n), "as_of": n, "groups": out, "count": sum(g["count"] for g in out),
-                "chapters": self.chapters()}
+                "chapters": self.chapters(n)}
+
+    def known_as(self, e, ref, n):
+        """In progressive mode a name opens a card only if the reader knows the entry by it at n."""
+        ref = (fm.link_target(str(ref).strip()) or str(ref)).strip().lower()
+        return n is None or ref.startswith(("id:", "path:")) or ref in (
+            {self.shown(e, n).lower()} | {name.lower() for name, a, b in e.names if covers(a, b, n)})
 
     def card(self, ref, n):
         e = self.find(ref)
-        if e is None or not self.visible(e, n):
+        if e is None or not self.visible(e, n) or not self.known_as(e, ref, n):
             at = "" if n is None else f" as of chapter {n}"
             raise LoreError("NOT_FOUND", f"no wiki entry named {ref!r}{at}; list entries with: lore wiki"
                             + ("" if n is None else f" --as-of {n}"))
@@ -331,20 +368,20 @@ class Story:
         names = [{"name": name, "from": a, "to": b} for name, a, b in r.names
                  if n is None or (covers(a, b, n) and name != self.shown(r, n))]
         card = {"mode": mode(n), "as_of": n, "key": r.key, "name": self.shown(r, n), "type": r.type,
-                "page": r.item.path if r.item else None, "story_page": r.page.path if r.page else None,
-                "version": r.page.version if r.page else None, "appears": r.appears, "names": names,
-                "also": [self.shown(f, n) for f in folded], "sections": out}
+                "standalone": r.item is None, "version": r.page.version if r.page else None, "appears": r.appears,
+                "names": names, "also": [self.shown(f, n) for f in folded], "sections": out}
         if e is not r:
             card["opened"] = self.shown(e, n)
-        if n is None:
+        if n is None:   # paths, fields and the working page carry real names and later facts
+            card["page"], card["story_page"] = r.item.path if r.item else None, r.page.path if r.page else None
             card["fields"] = (r.item or r.page).fields
             if self.folder and r.item:
                 card["body"] = r.item.body
-        card["chapters"] = self.chapters()
+        card["chapters"] = self.chapters(n)
         return card
 
     def _fact(self, f, n, tag, key):
-        out = {"text": self.guard(f["text"], n), "from": f["from"], "to": f["to"]}
+        out = {"text": self.guard(f["text"], n), "from": f["from"], "to": f["to"], "id": f["id"]}
         if tag:
             out["as"], out["key"] = tag, key   # the folded page that holds it
         return out
@@ -396,7 +433,7 @@ class Story:
                               for t in dict.fromkeys(made[heading])]
 
     def findings(self):
-        out = []
+        out = list(self.problems)
         for e in self.entries:
             if e.page is None:
                 continue
@@ -487,31 +524,50 @@ def _open(p, s, ref, version, need):
     return e, path, data.decode("utf-8"), sha
 
 
+
+
 def _split(text):
+    """(frontmatter text, body lines, '\\r' or ''). Every line ends with the file's line ending, so an
+    edit never leaves a bare CR or a missing newline at the end."""
     front = fm.parse(text)
     body = front.body if front else text
-    return text[:len(text) - len(body)], body.split("\n"), "\r" if "\r\n" in text else ""
+    cr = "\r" if "\r\n" in text else ""
+    lines = body.split("\n")
+    if lines[-1]:   # no newline at the end of the file: give the last line one
+        lines[-1] += cr
+        lines.append("")
+    return text[:len(text) - len(body)], lines, cr
 
 
-def _find_section(lines, section, inherit=None):
-    return next((s for s in sections("\n".join(lines), inherit) if s["heading"].lower() == section.lower()), None)
+def _parsed(lines, e):
+    return number(sections("\n".join(lines), e.appears if e else None))
 
 
-def _section(lines, section, e):
-    found = _find_section(lines, section, e.appears)
-    if found is None:
-        heads = [s["heading"] for s in sections("\n".join(lines)) if s["heading"]]
-        raise LoreError("NOT_FOUND", f"{e.name} has no section {section!r}; sections: {', '.join(heads) or 'none'}")
-    return found
-
-
-def _match(found, fact, e, section):
+def _match(lines, section, fact, e):
+    """The one fact meant: its id from a card (fact:...), else its text in the named section(s),
+    an exact match first, then the facts that start with it."""
+    parsed = _parsed(lines, e)
+    if fact.strip().startswith("fact:"):
+        hits = [f for s in parsed for f in s["facts"] if f["id"] == fact.strip()]
+        if not hits:
+            raise LoreError("NOT_FOUND", f"no fact {fact.strip()} in {e.name}; it changed since the card was read, "
+                                         "so read the card again")
+        return hits[0]
+    section = _check_section(section)
+    candidates = [f for s in parsed if s["heading"].lower() == section.lower() for f in s["facts"]]
+    if not any(s["heading"].lower() == section.lower() for s in parsed):
+        heads = ", ".join(dict.fromkeys(s["heading"] for s in parsed if s["heading"])) or "none"
+        raise LoreError("NOT_FOUND", f"{e.name} has no section {section!r}; sections: {heads}")
     want = norm(fact)
-    hit = next((f for f in found["facts"] if want and norm(f["text"]).startswith(want)), None)
-    if hit is None:
-        starts = "; ".join(plain(f["text"])[:40] for f in found["facts"][:6]) or "none"
+    hits = [f for f in candidates if want and norm(f["text"]) == want] or \
+           [f for f in candidates if want and norm(f["text"]).startswith(want)]
+    if not hits:
+        starts = "; ".join(plain(f["text"])[:40] for f in candidates[:6]) or "none"
         raise LoreError("NOT_FOUND", f"no fact in {e.name} › {section} starts with {fact!r}; facts: {starts}")
-    return hit
+    if len(hits) > 1:
+        raise LoreError("INVALID", f"several facts in {e.name} › {section} match {fact!r}; give more of the text, "
+                                   "or the fact's id from the card (fact:...)")
+    return hits[0]
 
 
 def _write(p, path, text, sha):
@@ -545,22 +601,27 @@ def fact_add(p, item, section, text, start, end=None, version=None, type_=None):
     created = sha is None
     if created and version is not None:
         raise LoreError("CONFLICT", f"{name} has no story page yet; send no version to create it", {"version": None})
+    if created and os.path.exists(path):
+        raise LoreError("CONFLICT", f"{p.rel(path)} exists but is not {name}'s story page; give it "
+                                    f"'type: {e.type if e else type_}' and 'page: \"[[{name}]]\"' in its frontmatter")
     head, lines, cr = _split(page)
     line = f"- {text} {stamp_text(start, end)}{cr}"
-    found = _find_section(lines, section)
-    if found is None:
-        while lines and not lines[-1].strip():
-            lines.pop()
-        lines += [cr, f"## {section}{cr}", cr, line, ""]
+    found = [sec for sec in sections("\n".join(lines)) if sec["heading"].lower() == section.lower()]
+    if not found:
+        while len(lines) > 1 and not lines[-2].strip():   # keep the final "" (the closing newline)
+            lines.pop(-2)
+        lines[-1:] = [cr, f"## {section}{cr}", cr, line, ""]
     else:
-        last = found["facts"][-1]["last"] if found["facts"] else None
+        last = next((sec["facts"][-1]["last"] for sec in reversed(found) if sec["facts"]), None)
         if last is None:
-            lines[found["line"] + 1:found["line"] + 1] = [cr, line]
+            lines[found[-1]["line"] + 1:found[-1]["line"] + 1] = [cr, line]
         else:
             lines[last + 1:last + 1] = [line]
     new = _write(p, path, head + "\n".join(lines), sha)
+    mine = [f for sec in _parsed(lines, e) if sec["heading"].lower() == section.lower() for f in sec["facts"]
+            if norm(f["text"]) == norm(text)]
     return {"item": name, "path": p.rel(path), "version": new, "created": created, "section": section,
-            "text": text, "from": start, "to": end}
+            "text": text, "from": start, "to": end, "id": mine[-1]["id"] if mine else None}
 
 
 def fact_end(p, item, section, fact, after=None, reopen=False, version=None):
@@ -569,27 +630,27 @@ def fact_end(p, item, section, fact, after=None, reopen=False, version=None):
                                    "current again")
     s = story(p)
     e, path, page, sha = _open(p, s, item, version, need=True)
-    section = _check_section(section)
-    head, lines, cr = _split(page)
-    hit = _match(_section(lines, section, e), fact, e, section)
+    head, lines, _ = _split(page)
+    hit = _match(lines, section, fact, e)
     start = hit["from"] if hit["from"] is not None else 1
     end = None if reopen else after
     if end is not None and end < start:
         raise LoreError("INVALID", f"after ({end}) is before the fact starts (chapter {start})")
-    last = lines[hit["last"]].rstrip("\r")
+    raw = lines[hit["last"]]
+    ending = "\r" if raw.endswith("\r") else ""
+    last = raw.rstrip("\r")
     m = STAMP.search(last)
-    lines[hit["last"]] = f"{last[:m.start()] if m else last.rstrip()} {stamp_text(start, end)}{cr}"
+    lines[hit["last"]] = f"{last[:m.start()] if m else last.rstrip()} {stamp_text(start, end)}{ending}"
     new = _write(p, path, head + "\n".join(lines), sha)
     return {"item": e.name, "path": e.page.path, "version": new, "section": section, "text": hit["text"],
-            "from": start, "to": end}
+            "from": start, "to": end, "id": hit["id"]}
 
 
 def fact_remove(p, item, section, fact, version=None):
     s = story(p)
     e, path, page, sha = _open(p, s, item, version, need=True)
-    section = _check_section(section)
     head, lines, _ = _split(page)
-    hit = _match(_section(lines, section, e), fact, e, section)
+    hit = _match(lines, section, fact, e)
     del lines[hit["first"]:hit["last"] + 1]
     new = _write(p, path, head + "\n".join(lines), sha)
     return {"item": e.name, "path": e.page.path, "version": new, "section": section, "removed": hit["text"]}

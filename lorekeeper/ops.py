@@ -278,6 +278,11 @@ def requests_dir(p):
 
 def op_request(p, item, note, field=None, unset=None, version=None, expect=None):
     """Queue a change request instead of editing (saga mode): the pipeline applies it later."""
+    if str(item).startswith("id:"):   # a wiki entry's key (the editor's Wiki tab in saga mode)
+        entry = wiki.story(p).find(item)
+        if entry is None or entry.item is None:
+            raise LoreError("NOT_FOUND", f"no wiki entry with key {item!r} has a page to attach a request to")
+        item = f"path:{entry.item.path}"
     it = p.find(item)
     stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
     rid = f"{stamp}-{store.slug(it.name)[:40].lower()}-{secrets.token_hex(3)}"
@@ -417,9 +422,10 @@ OPS = [
        "Use it before writing about the story at a given chapter, or to see what the reader already knows. "
        "Without item it returns the index: groups by type, each entry with name (the name the reader knows at "
        "as_of), type, key, page and appears (its first chapter), plus chapters (the chapter list). With item it "
-       "returns the card: name, appears, names, also (identities folded into it), sections with facts (each with "
-       "text, from, to, and as or worked_out when they apply), version (pass it to fact-add) and, in complete mode, "
-       "fields and body. Progressive mode (as_of given) shows only facts true at that chapter and hides later pages "
+       "returns the card: key, name, appears, names, also (identities folded into it), sections with facts (each "
+       "with text, from, to, id to pass as fact to fact-end, and as with the folded page's key, or worked_out), "
+       "version (pass it to fact-add) and, in complete mode, page, story_page, fields and body. Keys (id:...) "
+       "and fact ids are opaque, so progressive answers never reveal a name the reader has not learned. Progressive mode (as_of given) shows only facts true at that chapter and hides later pages "
        "(NOT_FOUND, like a page that does not exist). Example: {\"item\": \"Kresh\", \"as_of\": 5}."),
     Op("fact-add", "Add one chapter-stamped fact to an entry's story page (the only way AI should write wiki facts).",
        [Param("item", S, True, "entry name (or a name the reader knows it by)"),
@@ -437,11 +443,12 @@ OPS = [
        "folder it writes the entry's companion page there, creating it with the type's starter sections, and "
        "never touches the working page. Record a new name under section Names; record a secret identity's reveal "
        "as section 'Revealed to be' with text '[[Real Name]]' and from = the reveal chapter. Returns item, path, version, "
-       "created, section, text, from and to. Example: {\"item\": \"Darius\", \"section\": \"Beliefs\", "
+       "created, section, text, from, to and the new fact's id. Example: {\"item\": \"Darius\", \"section\": \"Beliefs\", "
        "\"text\": \"Believes the far side is unarmed.\", \"from\": 2}."),
     Op("fact-end", "Mark a fact as no longer true after a chapter (or, with reopen, as current again).",
        [Param("item", S, True, "entry name"), Param("section", S, True, "section heading"),
-        Param("fact", S, True, "the start of the fact's text (case and spacing ignored)"),
+        Param("fact", S, True, "the fact's id from the card (fact:...), or its text or the start of it "
+                                 "(case and spacing ignored; it must match one fact)"),
         Param("after", I, False, "last chapter the fact is true in"),
         Param("reopen", B, False, "clear the end instead (undo a fact-end)"),
         Param("version", S, False, "the card's version you read")],
@@ -452,7 +459,8 @@ OPS = [
        "\"section\": \"Beliefs\", \"fact\": \"Believes the far side\", \"after\": 5}."),
     Op("fact-remove", "Remove one fact from an entry's story page (to undo a mistaken fact-add).",
        [Param("item", S, True, "entry name"), Param("section", S, True, "section heading"),
-        Param("fact", S, True, "the start of the fact's text (case and spacing ignored)"),
+        Param("fact", S, True, "the fact's id from the card (fact:...), or its text or the start of it "
+                                 "(case and spacing ignored; it must match one fact)"),
         Param("version", S, False, "the card's version you read")],
        True, op_fact_remove,
        "Use it only to take back a fact that was added by mistake; when something stops being true, use fact-end, "

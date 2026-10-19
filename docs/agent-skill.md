@@ -57,6 +57,8 @@ A **chapter stamp** at the end of a fact says from which chapter the reader know
 
 On CONFLICT, read the card again and retry with its new version. Every refusal says what to change.
 
+Each written fact on a card has an `id` (`fact:…`), and `fact-add` returns the new fact's `id`. Pass an id as `fact` to `fact-end` or `fact-remove` to name exactly that fact; text works too (an exact match first, then the facts that start with it), but text that matches several facts is refused. Entry keys (`id:…`) and fact ids are opaque on purpose: a progressive answer never contains a page path, a later name or a planning-only full name, and an entry opens at chapter N only under a name the reader knows by then (or by its key).
+
 Starter sections, used for new story pages (other headings work too, shown in page order):
 - character: Names, Current state, Where, Beliefs, Knows, Wants, Relationships, Important events;
 - organization: Names, Leaders, Members, Goals, Territory, Allies and enemies, Standing, Important events;

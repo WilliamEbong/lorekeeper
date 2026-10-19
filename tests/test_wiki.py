@@ -1,6 +1,7 @@
 """Feature 010: chapter stamps, story pages and the progressive wiki."""
 import json
 import os
+import re
 import shutil
 import tempfile
 import time
@@ -172,10 +173,13 @@ class WikiWorldTests(unittest.TestCase):
         self.assertEqual(index["chapters"][:2], [{"n": 1, "name": "Chapter 1"}, {"n": 2, "name": "Chapter 2"}])
         self.assertEqual([c["n"] for c in index["chapters"]], list(range(1, 10)))
         darius = [e for g in index["groups"] for e in g["entries"] if e["name"] == "Darius"][0]
-        self.assertEqual((darius["type"], darius["appears"], darius["page"]), ("character", 1, "Characters/Darius.md"))
+        self.assertEqual((darius["type"], darius["appears"]), ("character", 1))
+        self.assertNotIn("page", darius)   # paths carry real names: complete mode only
+        full = [e for g in run(self.root, "wiki")["groups"] for e in g["entries"] if e["name"] == "Darius"][0]
+        self.assertEqual(full["page"], "Characters/Darius.md")
 
     def test_progressive_card(self):
-        card = run(self.root, "wiki", item="Kresh", as_of=5)
+        card = run(self.root, "wiki", item="the hooded rider", as_of=5)
         self.assertEqual(card["name"], "the hooded rider")
         self.assertTrue(all(f["from"] is None or f["from"] < 6 for s in card["sections"] for f in s["facts"]))
         self.assertIn("Watched the Gate from the ridge.", facts(card))
@@ -220,7 +224,8 @@ class WikiWorldTests(unittest.TestCase):
 
     def test_hidden_links_become_text(self):
         card = run(self.root, "wiki", item="Darius", as_of=4)
-        self.assertIn("Fought [[Kresh|the hooded rider]] at the Gate.", facts(card))
+        self.assertTrue(any(re.fullmatch(r"Fought \[\[id:[0-9a-f]+\|the hooded rider\]\] at the Gate\.", f)
+                            for f in facts(card)))
         self.assertIn("Saw Old Grudge in the dark.", facts(card))
         self.assertIn("Fought [[Kresh]] at the Gate.", facts(run(self.root, "wiki", item="Darius")))
         self.assertIn("Saw [[Old Grudge]] in the dark.", facts(run(self.root, "wiki", item="Darius", as_of=7)))
@@ -276,7 +281,8 @@ class StoryFolderTests(WikiWorldTests):
 
     def test_page_without_companion(self):
         card = run(self.root, "wiki", item="The Gate", as_of=2)
-        self.assertEqual((card["sections"], card["story_page"], card["version"]), ([], None, None))
+        self.assertEqual((card["sections"], card.get("story_page"), card["version"]), ([], None, None))
+        self.assertIsNone(run(self.root, "wiki", item="The Gate")["story_page"])
 
     def test_names_resolve_links(self):
         write(self.root, "Events/Ambush.md", page("event", "Ambush", 'participants: ["[[the hooded rider]]"]\n'))
@@ -338,7 +344,8 @@ class FactOpTests(unittest.TestCase):
         self.assertIn("The Stranger", names(run(self.root, "wiki", as_of=5)))
         self.assertNotIn("The Stranger", names(run(self.root, "wiki", as_of=4)))
         card = run(self.root, "wiki", item="The Stranger", as_of=5)
-        self.assertIsNone(card["page"])
+        self.assertTrue(card["standalone"])
+        self.assertIsNone(run(self.root, "wiki", item="The Stranger")["page"])
 
     def test_refusals_name_the_fix(self):
         bad = [dict(text="Two\nlines"), dict(text="Stamped [ch 4]"), dict(text="  "), dict(to=3),
@@ -430,6 +437,108 @@ class CliTests(unittest.TestCase):
         self.assertIn("cannot read --config", missing.stderr)
 
 
+class ReviewFixTests(unittest.TestCase):
+    """Findings of the run-4 code review, each pinned by the scenario that showed it."""
+
+    def setUp(self):
+        self.base, self.root = build("story")
+        self.addCleanup(shutil.rmtree, self.base, True)
+        self.path = "story/Characters/Darius (story).md"
+
+    def page(self, body, newline="\n"):
+        write(self.base, self.path, '---\ntype: character\npage: "[[Darius]]"\n---\n' + body, newline)
+
+    def test_undo_of_an_add_removes_only_the_added_fact(self):
+        self.page("\n## Current state\n- Is wounded. [ch 1-2]\n")
+        added = run(self.root, "fact-add", item="Darius", section="Current state", text="Is wounded.", **{"from": 5})
+        run(self.root, "fact-remove", item="Darius", section="Current state", fact=added["id"])
+        self.assertIn("- Is wounded. [ch 1-2]\n", read(self.base, self.path))
+        self.assertNotIn("[ch 5]", read(self.base, self.path))
+
+    def test_facts_are_targeted_exactly(self):
+        self.page("\n## Where\n- Lives in [[The Gate]] [ch 1-3]\n- Lives in [[The Gate]] again [ch 4]\n")
+        with self.assertRaises(LoreError) as caught:
+            run(self.root, "fact-end", item="Darius", section="Where", fact="Lives in", after=6)
+        self.assertEqual(caught.exception.code, "INVALID")
+        self.assertIn("several facts", caught.exception.message)
+        card = run(self.root, "wiki", item="Darius", as_of=4)
+        again = [f for s in card["sections"] for f in s["facts"] if f["text"].endswith("again")][0]
+        run(self.root, "fact-end", item=card["key"], section="Where", fact=again["id"], after=6)
+        text = read(self.base, self.path)
+        self.assertIn("[[The Gate]] [ch 1-3]\n", text)
+        self.assertIn("again [ch 4-6]\n", text)
+        out = run(self.root, "fact-end", item="Darius", section="Where", fact="Lives in [[The Gate]]", after=2)
+        self.assertEqual((out["from"], out["to"]), (1, 2))   # an exact match wins over a longer one
+
+    def test_no_real_name_in_progressive_answers(self):
+        for args in ({"as_of": 5}, {"item": "Darius", "as_of": 4}, {"item": "the hooded rider", "as_of": 5}):
+            with self.subTest(args=args):
+                self.assertNotIn("Kresh", json.dumps(run(self.root, "wiki", **args)))
+        with self.assertRaises(LoreError) as caught:   # a later name does not open the card early
+            run(self.root, "wiki", item="Kresh", as_of=5)
+        self.assertEqual(caught.exception.code, "NOT_FOUND")
+        card = run(self.root, "wiki", item="Darius", as_of=4)
+        link = [f["text"] for s in card["sections"] for f in s["facts"] if f["text"].startswith("Fought")][0]
+        key = re.match(r"Fought \[\[(id:[0-9a-f]+)\|the hooded rider\]\]", link)[1]
+        self.assertEqual(run(self.root, "wiki", item=key, as_of=4)["name"], "the hooded rider")
+
+    def test_later_chapter_titles_stay_hidden(self):
+        write(self.root, "Chapters/Chapter 6.md", page("chapter", "Chapter 6", "order: 6\ntitle: The rider unmasked\n"))
+        early = run(self.root, "wiki", as_of=2)["chapters"]
+        self.assertEqual([c["name"] for c in early if c["n"] > 2], [None] * 7)
+        self.assertEqual(run(self.root, "wiki")["chapters"][5]["name"], "The rider unmasked")
+
+    def test_saga_mcp_needs_a_story_folder(self):
+        from lorekeeper import mcp
+        call = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {"name": "fact-add", "arguments": {"item": "Darius", "section": "Wants", "text": "X",
+                                                             "from": 1}}}
+        base, root = build("pages")
+        self.addCleanup(shutil.rmtree, base, True)
+        refused = mcp.handle(call, root, saga=True)["result"]
+        self.assertEqual(refused["structuredContent"]["error"]["code"], "FORBIDDEN")
+        self.assertIn("story_wiki", refused["structuredContent"]["error"]["message"])
+        self.assertIs(mcp.handle(call, self.root, saga=True)["result"]["isError"], False)
+
+    def test_untyped_and_unreadable_story_pages(self):
+        self.page("\n## Wants\n- Peace. [ch 1]\n".replace("", ""))
+        write(self.base, self.path, '---\npage: "[[Darius]]"\n---\n\n## Wants\n- Peace. [ch 1]\n')
+        self.assertIn("Peace.", facts(run(self.root, "wiki", item="Darius", as_of=1)))
+        write(self.base, "story/Characters/Loose (story).md", "No frontmatter at all.\n")
+        found = [f["code"] for f in run(self.root, "check")["findings"]]
+        self.assertEqual(found, ["STORY_PAGE_UNREADABLE"])
+
+    def test_crlf_without_final_newline(self):
+        for step in ("same", "new", "end"):
+            with self.subTest(step=step):
+                self.page("\n## Wants\n- Home [ch 1]", "\r\n")
+                if step == "same":
+                    run(self.root, "fact-add", item="Darius", section="Wants", text="Gold", **{"from": 2})
+                elif step == "new":
+                    run(self.root, "fact-add", item="Darius", section="Fears", text="Gold", **{"from": 2})
+                else:
+                    run(self.root, "fact-end", item="Darius", section="Wants", fact="Home", after=3)
+                text = read(self.base, self.path)
+                self.assertNotIn("\n", text.replace("\r\n", ""))
+                self.assertNotIn("\r", text.replace("\r\n", ""))
+
+    def test_repeated_heading_and_hash_heading(self):
+        self.page("\n## Beliefs\n- One [ch 1]\n\n## Beliefs\n- Two [ch 1]\n")
+        out = run(self.root, "fact-end", item="Darius", section="Beliefs", fact="Two", after=2)
+        self.assertEqual(out["to"], 2)
+        for _ in range(2):
+            run(self.root, "fact-add", item="Darius", section="Uses C#", text="Compiles.", **{"from": 1})
+        self.assertEqual(read(self.base, self.path).count("## Uses C#"), 1)
+
+    def test_huge_chapter_numbers(self):
+        self.page("\n## Wants\n- Far [ch 20000000]\n")
+        start = time.perf_counter()
+        chapters = run(self.root, "wiki")["chapters"]
+        self.assertLess(time.perf_counter() - start, 2)
+        self.assertEqual(chapters[-1]["n"], 9)
+        self.assertIn("STAMP_UNREADABLE", [f["code"] for f in run(self.root, "check")["findings"]])
+
+
 class TemplateTests(unittest.TestCase):
     def test_starter_worlds_show_the_progressive_wiki(self):   # FR-25
         for template in ("novel", "series", "campaign"):
@@ -470,7 +579,7 @@ class SpeedTests(unittest.TestCase):
         start = time.perf_counter()
         index = ops.run("wiki", {"as_of": 25}, project=p)
         middle = time.perf_counter()
-        ops.run("wiki", {"item": "P10", "as_of": 25}, project=p)
+        ops.run("wiki", {"item": "Person 10", "as_of": 25}, project=p)
         end = time.perf_counter()
         self.assertGreater(index["count"], 1000)
         self.assertLess(middle - start, 1.0)

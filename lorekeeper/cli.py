@@ -169,7 +169,8 @@ def main(argv=None):
             return mcp.serve(root, config=config, saga=ns.saga)
         if ns.op == "serve":
             from . import serve
-            return serve.serve(root, port=ns.port, saga=ns.saga, config=config)
+            return serve.serve(root, port=ns.port, saga=ns.saga, config=config,
+                               config_path=os.path.abspath(ns.config) if config is not None else None)
         op = ops.BY_NAME[ns.op]
         args = {p.name: getattr(ns, p.name, None) for p in op.params}
         for p in op.params:

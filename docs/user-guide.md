@@ -142,6 +142,7 @@ The editor's Continuity tab shows the same report. To run it in a terminal, ente
 | `STORY_ORDER` | The `narrative.md` outline definitely moves backwards in time. This is a warning, since flashbacks can be intentional. |
 | `STAMP_UNREADABLE` | A chapter stamp cannot be read, such as `[ch x]`, or is not at the end of its fact. Write `[ch 7]` or `[ch 2-5]` at the end. |
 | `STAMP_RANGE` | A chapter range ends before it starts, such as `[ch 5-2]`. |
+| `STORY_PAGE_UNREADABLE` | A file in the story-wiki folder is not used: it needs UTF-8 text and frontmatter with `type:` (and `page: "[[Name]]"` when it describes a page). |
 
 Project rules may supply their own codes, such as `RAIL_REGRESSION`; that name is not a separate built-in check. The built-in controls include `checks.max_age`, `checks.min_parent_age`, `checks.two_places` (`"off"` disables it) and `checks.story_order` (a boolean). Templates enable story-order checking. Custom rules can select items for monotonic order, maximum duration or linked gaps, and can cap severity at WARN.
 

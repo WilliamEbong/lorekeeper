@@ -11,10 +11,10 @@ from . import ops, store
 from .store import LoreError
 
 
-def stamp(root, config=None):
+def stamp(root, config=None, config_path=None):
     """Hash metadata in configured roots, plus lore.json; skip excluded folders."""
     root = os.path.abspath(root)
-    config_path = os.path.join(root, store.CONFIG)
+    config_path = config_path or os.path.join(root, store.CONFIG)   # --config names another file
     if config is None:
         config = {}
         if os.path.isfile(config_path):
@@ -71,7 +71,7 @@ ASSETS = {"/": "text/html", "/editor.js": "text/javascript", "/editor.css": "tex
           "/favicon.svg": "image/svg+xml"}
 
 
-def make_server(root, port=0, saga=False, config=None, factory=None):
+def make_server(root, port=0, saga=False, config=None, factory=None, config_path=None):
     root = os.path.abspath(root)
     settings = config
     if settings is None:
@@ -121,7 +121,7 @@ def make_server(root, port=0, saga=False, config=None, factory=None):
                     result = {"ops": [{"name": op.name, "summary": op.summary, "writes": op.writes,
                                        "params": [p._asdict() for p in op.params]} for op in ops.OPS]}
                 elif path == "/api/stamp":
-                    result = {"stamp": stamp(root, config)}
+                    result = {"stamp": stamp(root, config, config_path)}
                 elif path in ASSETS:
                     name = "editor.html" if path == "/" else path[1:]
                     with open(os.path.join(assets, name), encoding="utf-8") as fh:
@@ -188,8 +188,8 @@ def make_server(root, port=0, saga=False, config=None, factory=None):
     return server, f"http://127.0.0.1:{server.server_port}/", token
 
 
-def serve(root, port=0, saga=False, config=None, factory=None):
-    server, url, _ = make_server(root, port, saga, config, factory)
+def serve(root, port=0, saga=False, config=None, factory=None, config_path=None):
+    server, url, _ = make_server(root, port, saga, config, factory, config_path)
     print(f"Lorekeeper editor: {url}", flush=True)
     try:
         server.serve_forever()
