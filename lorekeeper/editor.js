@@ -14,12 +14,12 @@ const TIMING = new Set(['after', 'same_start', 'same_end', 'sf', 'starts_after_s
 const DRAG_THRESHOLD = 6;   // screen pixels; a click with a small wobble never re-dates an item
 const TITLES = {
   BAD_ENCODING: 'File is not saved as UTF-8 text', BAD_FRONTMATTER: 'The fields at the top of a file can’t be read',
-  UNSUPPORTED_FRONTMATTER: 'A field line was kept but not understood', DUPLICATE_ID: 'Two items share an ID',
-  DUPLICATE_NAME: 'Two items share a name', UNKNOWN_TYPE: 'Unknown kind of item', BROKEN_LINK: 'Link to something that doesn’t exist',
-  ROLE_TYPE: 'Link to the wrong kind of item', DATE_UNPARSED: 'A date Lorekeeper can’t read', DEPENDENCY_UNDATED: 'Timing link without a date',
-  DEPENDENCY: 'Out of order with a linked item', DEAD_PARTICIPANT: 'Takes part after their death', UNBORN_PARTICIPANT: 'Takes part before their birth',
+  UNSUPPORTED_FRONTMATTER: 'A field line was kept but not understood', DUPLICATE_ID: 'Two files claim the same item',
+  DUPLICATE_NAME: 'Two items share a name', UNKNOWN_TYPE: 'Unknown type of item', BROKEN_LINK: 'Connection to something that doesn’t exist',
+  ROLE_TYPE: 'Connection to the wrong type of item', DATE_UNPARSED: 'A date Lorekeeper can’t read', DEPENDENCY_UNDATED: 'Timing connection without a date',
+  DEPENDENCY: 'Out of order with a connected item', DEAD_PARTICIPANT: 'Takes part after their death', UNBORN_PARTICIPANT: 'Takes part before their birth',
   AGE_LIMIT: 'Older than anyone could be', PARENT_AGE: 'Parent too young at the birth', TWO_PLACES: 'In two places at once',
-  ORDER_REGRESSION: 'Goes back in time against its order', MAX_DURATION: 'Lasts longer than allowed', GAP: 'Wrong gap between linked items',
+  ORDER_REGRESSION: 'Goes back in time against its order', MAX_DURATION: 'Lasts longer than allowed', GAP: 'Wrong gap between connected items',
   STORY_ORDER: 'Story order moves back in time', END_BEFORE_START: 'Ends before it starts', AMBIGUOUS_NAME: 'One name points to two items',
   STAMP_UNREADABLE: 'A chapter stamp can’t be read', STAMP_RANGE: 'A chapter range ends before it starts',
   STORY_PAGE_UNREADABLE: 'A story page can’t be used', PROBABLY_DEAD: 'Too old to be alive, but no death recorded',
@@ -58,7 +58,7 @@ function icon(name) {
 function button(content, action, attributes = {}) {
   const node = el('button', null, {type: 'button', ...attributes});
   node.append(...[content].flat());
-  node.addEventListener('click', () => Promise.resolve().then(action).catch(error => report(error)));
+  node.addEventListener('click', () => Promise.resolve().then(action).catch(error => report(error, [], 'Something went wrong')));
   return node;
 }
 const words = (key) => { const text = String(key).replace(/_/g, ' ').trim(); return text.charAt(0).toUpperCase() + text.slice(1); };
@@ -88,7 +88,8 @@ const events = () => dated().filter(i => !isPerson(i));
 const takesPart = (person, event) => partOf.get(person.path)?.has(event.path) || false;
 // The engine gives every dated event an end (its start, if none is written); only a written one counts here.
 const hasEnd = (item) => Boolean(item.fields[endKey(item)] || item.fields.duration);
-const whenText = (item) => item.start ? item.start.text + (hasEnd(item) && item.end ? ` to ${item.end.text}` : '') : 'Undated';
+// Dates as written, with year-month-day forms read out in words ("2 April 1988").
+const whenText = (item) => item.start ? dateWords(item.start.text) + (hasEnd(item) && item.end ? ` to ${dateWords(item.end.text)}` : '') : 'Undated';
 const narrow = () => matchMedia('(max-width: 900px)').matches;
 const typing = (node) => Boolean(node?.closest?.('input, textarea, select, [contenteditable="true"]'));
 // ponytail: label width from the character count; measure text if long names collide in practice.
@@ -122,15 +123,58 @@ function toast(message, {kind = 'info', actions = [], timeout} = {}) {
   arm();
   return box;
 }
+// The engine's messages are written for the command line and AI tools; the editor says the same in a writer's words.
+const PLAIN = {
+  OFFLINE: 'Lorekeeper has stopped or lost contact. If you closed it, open Lorekeeper again, then reload this page.',
+  INTERNAL: 'Something went wrong inside Lorekeeper, and this was not saved. Try again; if it keeps happening, reload the page.',
+  IO_ERROR: 'Lorekeeper couldn’t read or save a file in this world. It may be busy syncing (OneDrive does this). Wait a moment and try again.',
+  NOT_FOUND: 'That is no longer there. It may have been renamed or deleted outside the editor. Reload the page.',
+  CONFLICT: 'This changed somewhere else while you were working. Reload, then try again.',
+};
+const unlink = (text) => String(text).replace(/\[\[([^\]|]+)(?:\|([^\]]*))?\]\]/g, (m, a, b) => `“${b || a}”`);
+function plainText(message) {
+  const text = unlink(message).replace(/'path:([^']+)'|\bpath:(\S+)/g, (m, a, b) => a || b)
+    .replace(/\s*\((?:[^()]*\s)?lore [a-z-]+[^()]*\)/g, '').replace(/[;,]? *(?:read it again|list its sections)[^.;]*lore [^.;]*/g, '');
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
 function explain(error) {
   const message = error.message || String(error);
   if (error.code === 'CONFLICT' && error.data?.current) {
     const now = Object.entries(error.data.current).map(([key, value]) =>
-      `${label(key)} is now ${value == null || value === '' ? 'empty' : `“${display(value).replace(/\n/g, ', ')}”`}`).join('; ');
+      `${label(key)} is now ${value == null || value === '' ? 'empty' : `“${unlink(display(value)).replace(/[“”]/g, '').replace(/\n/g, ', ')}”`}`).join('; ');
     return `This item was changed elsewhere while you were editing it (${now}). Your text is still here.`;
   }
-  if (error.code === 'FORBIDDEN') return `Not allowed here: ${message}`;
-  return message.charAt(0).toUpperCase() + message.slice(1);
+  if (error.code === 'FORBIDDEN') return /token/i.test(message) ? 'This page is from an earlier run of Lorekeeper. Reload the page to keep working.'
+    : saga ? 'This world takes proposals only. Use Propose change.' : 'Lorekeeper didn’t allow that. Reload the page and try again.';
+  return PLAIN[error.code] || plainText(message);
+}
+// A gap on a timing connection ("+2d") in words: "2 days later".
+const UNIT_WORDS = {y: 'year', yr: 'year', mo: 'month', w: 'week', wk: 'week', d: 'day', h: 'hour', hr: 'hour', m: 'minute', min: 'minute'};
+function lagWords(lag) {
+  const text = String(lag).trim();
+  const parts = [...text.matchAll(/(\d+)\s*([a-z]+)/gi)].map(([, n, unit]) => {
+    const u = unit.toLowerCase().replace(/s$/, ''), one = UNIT_WORDS[u] || (Object.values(UNIT_WORDS).includes(u) ? u : null);
+    return one && plural(Number(n), one);
+  });
+  return parts.length && parts.every(Boolean) ? `${parts.join(' ')} ${text.startsWith('-') ? 'earlier' : 'later'}` : text;
+}
+// A continuity finding's detail, with connection and field labels, names instead of link syntax and dates in words.
+function findingText(f) {
+  let m;
+  if (f.code === 'BROKEN_LINK' && (m = /^(\w+) -> \[\[(.+?)\]\] matches no item$/.exec(f.detail)))
+    return `${label(m[1])}: no item is called “${m[2]}”. Create it, or fix the spelling.`;
+  if (f.code === 'ROLE_TYPE' && (m = /^(\w+) -> \[\[(.+?)\]\] is a (\w+), expected (.+)$/.exec(f.detail)))
+    return `${label(m[1])} points to “${m[2]}”, a ${typeLabel(m[3]).toLowerCase()}, but should point to a ${m[4].split('/').map(t => typeLabel(t).toLowerCase()).join(' or ')}.`;
+  if (f.code === 'DATE_UNPARSED' && (m = /^(\w+): (.*)$/.exec(f.detail)))
+    return `${label(m[1])} “${m[2]}” can’t be read as a date. Try 1764, July 1764, 12 July 1764 or about 1764.`;
+  if ((m = /^(.+) \(([^()]*)\): (.+); (.+) \(([^()]*)\)$/.exec(f.detail))) {
+    const when = (d) => d === 'undated' ? 'no date' : dateWords(d);
+    const [key, ...rest] = m[3].split(' ');
+    const timing = graph.roles[key] && (!rest.length || /^[+-]?\s*\d/.test(rest.join(' ')));   // "after 2d", not "parent too young"
+    const what = timing ? [label(key).toLowerCase(), ...(rest.length ? [lagWords(rest.join(' '))] : [])].join(', ') : m[3];
+    return `${m[1]} (${when(m[2])}): ${what}; ${m[4]} (${when(m[5])})`;
+  }
+  return plainText(f.detail);
 }
 function report(error, actions = [], heading = 'Not saved') {
   status(heading, 'error');
@@ -142,7 +186,7 @@ async function api(name, args = {}) {
     response = await fetch(`/api/${name}`, {method: 'POST', body: JSON.stringify(args),
       headers: {'Content-Type': 'application/json', 'X-Lore-Token': token}});
   } catch {
-    throw new ApiError('OFFLINE', 'The editor has lost contact with Lorekeeper. Check that “lore serve” is still running in its terminal, then reload this page.');
+    throw new ApiError('OFFLINE', 'The editor has lost contact with Lorekeeper.');
   }
   const result = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -246,7 +290,7 @@ async function updateReadback(node, text) {
     if (node.dataset.text === value) node.textContent = `Reads as ${readBack(result)}`;
   } catch (error) {
     if (node.dataset.text !== value || error.code !== 'INVALID') return;
-    node.textContent = 'Lorekeeper can’t read this as a date. Try 1764, 1764-07, 12 July 1764 or ~1764.';
+    node.textContent = 'Lorekeeper can’t read this as a date. Try 1764, July 1764, 12 July 1764 or about 1764.';
     node.classList.add('warn');
   }
 }
@@ -410,7 +454,6 @@ function renderInspector() {
   head.append(el('h2', item.name, {id: 'inspector-title', tabindex: '-1'}));
   const info = el('div', null, {class: 'meta'});
   info.append(el('span', typeLabel(item.type), {class: `kind cat-${category(item)}`}));
-  if (item.fields.id) info.append(el('span', item.fields.id, {class: 'path', title: 'ID'}));
   info.append(el('span', item.path, {class: 'path', title: 'File'}));
   head.append(info);
   panel.append(head);
@@ -428,7 +471,7 @@ function renderInspector() {
     note.value = draft.note;
     note.addEventListener('input', () => { draft.note = note.value; sync(); });
     wrap.append(el('label', 'Change note', {for: 'change-note'}), note,
-      el('p', 'Say what should change and why. The pipeline applies it later; the story files stay as they are.', {class: 'hint', id: 'change-note-hint'}));
+      el('p', 'Say what should change and why. Your story files stay as they are until the proposal is applied in the saga’s next update.', {class: 'hint', id: 'change-note-hint'}));
     form.append(wrap);
   }
   const actions = el('div', null, {class: 'actions'});
@@ -448,7 +491,7 @@ function fieldRow(draft, key, sync) {
   if (key === 'type') {
     input = el('select', null, {id, name: key});
     for (const type of Object.keys(graph.types).sort(typeOrder)) input.append(el('option', typeLabel(type), {value: type}));
-    if (!graph.types[original]) input.append(el('option', `${original} (not in this project’s types)`, {value: original}));
+    if (!graph.types[original]) input.append(el('option', `${original} (not a type in this world)`, {value: original}));
   } else if (isList(key, original)) {
     input = el('textarea', null, {id, name: key, rows: String(Math.min(8, Math.max(2, current.split('\n').length + 1)))});
   } else {
@@ -528,7 +571,7 @@ async function saveInspector(draft) {
     if (saga) {
       await api('request', {item: ref(item), field, unset, note: draft.note, version: item.version, expect: before});
       drafts.delete(item.path);
-      toast(`Change to ${item.name} proposed. The story files stay as they are until the pipeline applies it.`);
+      toast(`Change to ${item.name} proposed. Your story files stay as they are until it is applied in the saga’s next update.`);
     } else {
       const result = await api('set', {item: ref(item), field, unset, version: item.version, expect: before});
       drafts.delete(item.path);
@@ -601,7 +644,7 @@ function renderLinks(panel, item) {
       const target = byPath.get(link.to_path), name = target?.name || link.to, row = el('li'), left = el('span');
       left.append(target ? button(name, () => selectItem(target.path, {reveal: true}), {class: 'link'}) : el('span', name));
       if (!link.resolved) left.append(' ', el('span', 'not found', {class: 'missing'}));
-      if (link.lag) left.append(' ', el('span', String(link.lag), {class: 'hint'}));
+      if (link.lag) left.append(' ', el('span', lagWords(link.lag), {class: 'hint'}));
       row.append(left);
       if (!saga) row.append(button([icon('close')], () => linkChange('unlink', item, role, target ? ref(target) : link.to,
         `Removed ${name} from ${label(role)}.`), {class: 'quiet icon-only', title: 'Remove this connection',
@@ -611,7 +654,7 @@ function renderLinks(panel, item) {
     section.append(list);
   }
   panel.append(section);
-  if (saga) panel.append(el('p', 'To propose a connection, edit its field above (for example [[Name]]) or describe it in the change note.', {class: 'hint'}));
+  if (saga) panel.append(el('p', 'To propose a connection, type the name in double square brackets in its field above, for example [[Anna]], or describe it in the change note.', {class: 'hint'}));
   else panel.append(addLinkForm(item));
 
   const incoming = graph.links.filter(l => l.to_path === item.path && l.resolved);
@@ -918,7 +961,7 @@ function timeline(view) {
     y += BAND;
     for (const p of placed) {
       const top = y + p.row * ROW, item = p.item, mid = top + 24;
-      const when = whenText(item) + (item.reborn ? `, reborn ${item.reborn.text}` : p.living ? ', alive (no death recorded)' : '');
+      const when = whenText(item) + (item.reborn ? `, reborn ${dateWords(item.reborn.text)}` : p.living ? ', alive (no death recorded)' : '');
       const g = svgEl('g', {class: `item cat-${category(item)}${fuzzy(item) ? ' fuzzy' : ''}`, role: 'button', tabindex: '-1',
         'data-path': item.path, 'aria-label': `${item.name}, ${typeLabel(item.type)}, ${when}`,
         id: `timeline-${encodeURIComponent(item.path)}`});
@@ -1018,7 +1061,7 @@ function enableRedate(g, item, c, at) {
       cleanup();
       if (!moved || Math.abs(ev.clientX - startX) < DRAG_THRESHOLD) return;
       try {
-        if (!await check) { toast('This date can’t be dragged. Edit it in the inspector instead.'); return; }
+        if (!await check) { toast('Only exact dates in the everyday calendar can be dragged. Change this one in the inspector instead.'); return; }
         if (dirty(drafts.get(item.path))) { toast('Save or discard your changes in the inspector before dragging this item.', {kind: 'error'}); return; }
         const field = change(ev), before = snapshot(item, Object.keys(field));
         if (Object.entries(field).every(([k, v]) => item.fields[k] === v)) return;
@@ -1128,7 +1171,7 @@ function agesView(view) {
           cell.textContent = '…';
           jobs.push(async () => {
             try { ages.set(key, await api('age', {item: ref(p), at: ref(e)})); paintAge(cell, ages.get(key)); }
-            catch (error) { cell.textContent = 'Unknown'; cell.title = error.message; }
+            catch { cell.textContent = 'Unknown'; cell.title = 'This age can’t be worked out from the dates given.'; }
           });
         }
       }
@@ -1216,11 +1259,11 @@ function spreadsheet(view) {
   const rows = graph.items.filter(i => (!ui.sheetType || i.type === ui.sheetType) && (!q || i.name.toLowerCase().includes(q)));
   rows.sort((a, b) => { const x = sortValue(a, sortKey), y = sortValue(b, sortKey); return (x < y ? -1 : x > y ? 1 : byName(a, b)) * dir; });
   bar.append(filter, kind, el('span', `${plural(rows.length, 'item')}${rows.length < graph.items.length ? ` of ${graph.items.length}` : ''}`, {class: 'hint', 'aria-live': 'polite'}),
-    el('span', null, {class: 'spacer'}), el('span', saga ? 'Select a row to propose changes in the inspector.' : 'Enter or leaving a cell saves it. Esc undoes your typing.', {class: 'hint'}));
+    el('span', null, {class: 'spacer'}), el('span', saga ? 'Select a row to propose changes in the inspector.' : 'Press Enter or click away to save a cell. Esc undoes your typing.', {class: 'hint'}));
   view.append(bar);
   const box = scrollBox('table'), table = el('table', null, {class: 'sheet'}), head = el('tr'), body = el('tbody');
   table.append(el('caption', 'All items', {class: 'sr-only'}));
-  for (const [key, text] of [['name', 'Name'], ['type', 'Type'], ['start', 'Date or born'], ['end', 'End or died'], ['location', 'Location']]) {
+  for (const [key, text] of [['name', 'Name'], ['type', 'Type'], ['start', 'Date / Born'], ['end', 'End / Died'], ['location', 'Location']]) {
     const th = el('th', null, {scope: 'col', 'aria-sort': sortKey === key ? (dir > 0 ? 'ascending' : 'descending') : 'none'});
     th.append(button(text, () => { ui.sort = [key, sortKey === key ? -dir : 1]; renderView(); }, {id: `sort-${key}`}));
     head.append(th);
@@ -1431,9 +1474,9 @@ function continuity(view) {
       const row = el('li', null, f.path && byPath.has(f.path) ? {'data-path': f.path} : {});
       const item = byPath.get(f.path), where = el('div', null, {class: 'where'});
       if (item) where.append(button(`Open ${item.name}`, () => selectItem(item.path, {reveal: true, focus: 'title'}), {class: 'link'}));
-      where.append(el('span', `${f.path}${f.line ? `:${f.line}` : ''}`, {class: 'path'}));
+      where.append(el('span', `in ${f.path}${f.line ? `, line ${f.line}` : ''}`, {class: 'path'}));
       row.append(el('span', severity === 'FAIL' ? 'Definite' : 'Possible', {class: `flag ${severity === 'FAIL' ? 'fail' : 'warn'}`}),
-        el('strong', TITLES[f.code] || words(f.code.toLowerCase())), el('span', f.detail, {class: 'detail'}), where);
+        el('strong', TITLES[f.code] || words(f.code.toLowerCase())), el('span', findingText(f), {class: 'detail'}), where);
       list.append(row);
     }
     box.append(list);
@@ -1616,7 +1659,7 @@ function wikiCard() {
   }
   if (card.body?.trim()) {
     const page = add(box, el('details', null, {class: 'working', open: ''}));
-    page.append(el('summary', 'From the page (written for the present)'), markdown(card.body));
+    page.append(el('summary', 'Notes from the item’s page'), markdown(card.body));
   }
   // Empty sections (a new story page's starter headings) stay out of sight; "another section" offers them.
   const sections = card.sections.filter(s => s.facts.length);
@@ -1632,7 +1675,7 @@ function wikiCard() {
     const fields = Object.entries(card.fields).filter(([k]) => !['id', 'type', 'canonical_name', 'name', 'page'].includes(k));
     if (fields.length) {
       const facts = add(box, el('section', null, {class: 'wiki-section'})), dl = el('dl', null, {class: 'wiki-fields'});
-      facts.append(el('h3', 'Fields'), dl);
+      facts.append(el('h3', 'Details'), dl);
       for (const [key, value] of fields) { dl.append(el('dt', label(key))); inline(add(dl, el('dd')), display(value).replace(/\n/g, ', ')); }
     }
   }
@@ -1661,7 +1704,7 @@ function wikiSection(card, section, index) {
     });
   } else box.append(el('p', wiki.cardAsOf == null ? 'Nothing recorded yet.' : 'Nothing known yet at this chapter.', {class: 'hint'}));
   const formId = `${index}:add`;
-  if (saga && card.standalone) box.append(el('p', 'Add facts for this entry with fact-add.', {class: 'hint'}));
+  if (saga && card.standalone) box.append(el('p', 'Facts for this card are added by the saga’s AI assistant.', {class: 'hint'}));
   else if (!section.heading) { /* the untitled opening: new facts go under a heading ("another section") */ }
   else if (wiki.form === formId) box.append(addForm(card, section, formId));
   else box.append(button([icon('plus'), saga ? 'Propose a fact' : 'Add a fact'], () => { wiki.form = formId; renderView(); requestAnimationFrame(() => $('wiki-form-input')?.focus()); },
@@ -1710,7 +1753,7 @@ function addForm(card, section, formId) {
     if (!fact) { text.focus(); throw new ApiError('INVALID', 'Write the fact first.'); }
     if (saga) {
       await api('request', {item: card.key, note: `Story Wiki: add to ${card.name} › ${heading}: "${fact}" [ch ${start}]`});
-      toast(`Fact for ${card.name} proposed. The story files stay as they are until the pipeline applies it.`);
+      toast(`Fact for ${card.name} proposed. Your story files stay as they are until it is applied in the saga’s next update.`);
       renderView();
       return;
     }
@@ -1732,7 +1775,7 @@ function endForm(card, section, fact, formId) {
     const end = Number(afterInput.value);
     if (saga) {
       await api('request', {item: card.key, note: `Story Wiki: in ${card.name} › ${heading}, "${words}" is no longer true after chapter ${end}`});
-      toast(`End proposed for ${card.name}. The story files stay as they are until the pipeline applies it.`);
+      toast(`End proposed for ${card.name}. Your story files stay as they are until it is applied in the saga’s next update.`);
       renderView();
       return;
     }
@@ -1754,7 +1797,7 @@ function planIndex() {
     const box = add(list, el('details', null, {class: 'plan-problems'}));
     box.append(el('summary', `${index.problems.length} ${index.problems.length === 1 ? 'problem' : 'problems'} in the planning pages`));
     const ul = add(box, el('ul'));
-    for (const f of index.problems) ul.append(el('li', `${f.detail} (${f.path}:${f.line})`));
+    for (const f of index.problems) ul.append(el('li', `${plainText(f.detail)} (in ${f.path}, line ${f.line})`));
   }
   let shown = 0;
   for (const group of index.groups) {
@@ -1770,7 +1813,7 @@ function planIndex() {
       li.append(el('span', `${e.facts} ${e.facts === 1 ? 'fact' : 'facts'}${e.ideas ? `, ${e.ideas} ${e.ideas === 1 ? 'idea' : 'ideas'}` : ''}`, {class: 'hint'}));
     }
   }
-  if (!shown) list.append(el('p', q ? `No entry matches “${wiki.filter}”.` : 'No planning pages yet. An AI agent builds them from the planning documents with planning-fact.', {class: 'hint'}));
+  if (!shown) list.append(el('p', q ? `No entry matches “${wiki.filter}”.` : 'No planning pages yet. Your AI assistant builds them from your planning documents.', {class: 'hint'}));
   return list;
 }
 async function openCite(id, source, section) {
@@ -1819,7 +1862,7 @@ function planCard() {
   if (wiki.review) {
     const review = add(box, el('section', null, {class: 'review', 'aria-labelledby': 'review-title'}));
     const top = add(review, el('div', null, {class: 'row'}));
-    top.append(el('h3', 'Impact review', {id: 'review-title'}), button('Dismiss', () => { wiki.review = null; renderView(); }, {class: 'quiet small', id: 'review-dismiss'}));
+    top.append(el('h3', 'What this change affects', {id: 'review-title'}), button('Dismiss', () => { wiki.review = null; renderView(); }, {class: 'quiet small', id: 'review-dismiss'}));
     review.append(markdown(wiki.review));
   }
   const sections = card.sections.filter(s => s.facts.length);
@@ -1829,7 +1872,7 @@ function planCard() {
   if (ideas.facts.length || ideas.sections.length) {
     const sec = add(box, el('section', null, {class: 'wiki-section ideas', 'aria-labelledby': 'ideas-title'}));
     sec.append(el('h3', 'Ideas, not decided', {id: 'ideas-title'}),
-      el('p', 'Plot ideas and proposals. Never canon: not used for chapter cards, impact reviews or link lists.', {class: 'hint'}));
+      el('p', 'Plot ideas and proposals, not decided yet. They never count as part of the story: not in chapter cards, reviews or link lists.', {class: 'hint'}));
     const ul = add(sec, el('ul', null, {class: 'facts', 'aria-labelledby': 'ideas-title'}));
     for (const f of ideas.facts) {
       const li = add(ul, el('li', null, {class: 'fact'}));
@@ -1924,17 +1967,17 @@ function planForm(card, section, fact, formId) {
   }
   const why = el('label', null, {for: 'plan-decision', class: 'chapter-field'}), decision = el('input', null, {id: 'plan-decision', required: '', autocomplete: 'off', placeholder: 'e.g. Make the jet faster.'});
   why.append('Your decision, in your words ', decision);
-  fields.push(why, el('p', saga ? 'Queued as a change request. The AI records it as a human override, writes it back into the source, and reviews what it touches.'
-    : 'Recorded as a human override and written back into the cited source; the impact review appears on this card.', {class: 'hint'}));
+  fields.push(why, el('p', saga ? 'Sent as a proposal. Your AI assistant records the decision, updates the planning document it came from, and reviews what it affects.'
+    : 'Your decision is kept with the change and added to the planning document the fact came from. What it affects appears on this card.', {class: 'hint'}));
   return wikiForm(fields, saga ? 'Propose' : 'Record the change', async () => {
     const words = decision.value.trim(), newText = text.value.trim(), heading = fact ? section.heading : sectionInput.value.trim(), removing = remove?.checked;
     if (!fact && !heading) { sectionInput.focus(); throw new ApiError('INVALID', 'Name the section first, for example Identity.'); }
     if (!removing && !newText) { text.focus(); throw new ApiError('INVALID', 'Write the fact first.'); }
-    if (!words) { decision.focus(); throw new ApiError('INVALID', 'Say what you decided; it is quoted in the override.'); }
+    if (!words) { decision.focus(); throw new ApiError('INVALID', 'Say what you decided; it is kept with the change.'); }
     if (saga) {
       const what = fact ? (removing ? `remove "${fact.text}"` : `change "${fact.text}" to "${newText}"`) : `add "${newText}"`;
       await api('request', {item: card.key, note: `Planning wiki: in ${card.name} › ${heading || 'Overview'}, ${what}. Decision: "${words}"`});
-      toast(`Change for ${card.name} proposed. Nothing changes until the AI runs the planning change routine.`);
+      toast(`Change for ${card.name} proposed. Nothing changes until it is applied in the saga’s next update.`);
       renderView();
       return;
     }
@@ -1943,7 +1986,7 @@ function planForm(card, section, fact, formId) {
     const result = await api('planning-change', args);
     wiki.review = result.report;
     await refresh();
-    toast(result.override ? `Recorded as ${result.override}. The impact review is on the card.` : 'Changed. The impact review is on the card.');
+    toast(result.override ? `Change recorded (${result.override}). What it affects is on the card.` : 'Changed. What it affects is on the card.');
   }, fact ? `plan-change-${formId.split(':')[1]}-${formId.split(':')[2]}` : 'plan-add');
 }
 const VIEWS = {Timeline: timeline, Subway: subway, Relationships: relationships, Ages: agesView, Spreadsheet: spreadsheet, Narrative: narrative, Wiki: wikiView, Continuity: continuity};
@@ -1990,7 +2033,7 @@ async function loadGraph() {
   try {
     // Stamp before graph: a concurrent file edit during graph loading is caught on the next poll.
     const stampResponse = await fetch('/api/stamp');
-    if (!stampResponse.ok) throw new ApiError('IO_ERROR', 'Could not read the project stamp.');
+    if (!stampResponse.ok) throw new ApiError('OFFLINE', 'Could not check the world for changes.');
     const stamp = (await stampResponse.json()).stamp;
     graph = await api('graph');
     lastStamp = stamp;

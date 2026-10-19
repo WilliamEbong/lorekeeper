@@ -405,11 +405,11 @@ Paths are relative to each saga root and identical in all three repos.
 
 **Steps.**
 - [x] Set up: cron, keep-awake, worktree, spec 012
-- [ ] 012 plan and tasks
-- [ ] 012 engine: world list, folder kinds, AI guide files, app server and API (TDD)
-- [ ] 012 start screen page, editor "All worlds" link, icon
-- [ ] 012 setup batch file, shortcuts, launch and second launch
-- [ ] 012 docs (README, user guide, agent skill move), Playwright, detector, suite
+- [x] 012 plan and tasks
+- [x] 012 engine: world list, folder kinds, AI guide files, app server and API (TDD)
+- [x] 012 start screen page, editor "All worlds" link, icon
+- [x] 012 setup batch file, shortcuts, launch and second launch
+- [x] 012 docs (README, user guide, agent skill move), Playwright, detector, suite
 - [ ] 013 specify, plan, tasks, implement, verify
 - [ ] Reviewer and fixes; finish (handoff, cron deleted, notification)
 

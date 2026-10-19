@@ -42,7 +42,7 @@ DEFAULT_SCHEMA = {
         "parent": {"label": "Parent", "inverse": "Children", "to": ["character"]},
         "spouse": {"label": "Spouse", "inverse": "Spouse of", "to": ["character"]},
         "located_in": {"label": "Located in", "inverse": "Contains", "to": ["location"], "single": True},
-        "after": {"label": "After (finish-to-start)", "inverse": "Followed by", "to": []},
+        "after": {"label": "Happens after", "inverse": "Followed by", "to": []},
         "same_start": {"label": "Starts with", "inverse": "Starts with", "to": []},
         "same_end": {"label": "Ends with", "inverse": "Ends with", "to": []},
         "sf": {"label": "Starts before end of", "inverse": "Ends after start of", "to": []},
