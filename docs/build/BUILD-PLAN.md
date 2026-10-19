@@ -352,11 +352,11 @@ Paths are relative to each saga root and identical in all three repos.
 **Steps.**
 - [x] Set up: cron, keep-awake, branch, live state re-checked
 - [x] Clarify (5 answers in the spec)
-- [ ] Plan, tasks, analyze
-- [ ] Engine: stamps, story pages, names, folding, visibility, worked-out facts, chapter list (TDD)
-- [ ] Ops: `wiki`, `fact-add`, `fact-end`, `fact-remove`; `--config`; `mcp --saga`; check codes; schema defaults; MCP golden
-- [ ] Editor: Wiki tab, picker, card toggle, Add a fact with Undo, saga requests; Playwright; detector
-- [ ] Templates, user guide, agent skill, README
+- [x] Plan, tasks, analyze
+- [x] Engine: stamps, story pages, names, folding, visibility, worked-out facts, chapter list (TDD)
+- [x] Ops: `wiki`, `fact-add`, `fact-end`, `fact-remove`; `--config`; `mcp --saga`; check codes; schema defaults; MCP golden
+- [x] Editor: Wiki tab, picker, card toggle, Add a fact with Undo, saga requests; Playwright; detector
+- [x] Templates, user guide, agent skill, README
 - [ ] Sagas: baseline, clones, vendor and config, skill and pointer, `.mcp.json`, handshake test
 - [ ] Sagas: backfill (three parallel agents), probe replay, after-freeze proof, reviewer
 - [ ] Land the three sagas (fast-forward only)
