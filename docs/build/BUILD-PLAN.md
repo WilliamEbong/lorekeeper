@@ -411,7 +411,7 @@ Paths are relative to each saga root and identical in all three repos.
 - [x] 012 setup batch file, shortcuts, launch and second launch
 - [x] 012 docs (README, user guide, agent skill move), Playwright, detector, suite
 - [x] 013 specify, plan, tasks, implement, verify
-- [ ] Reviewer and fixes; finish (handoff, cron deleted, notification)
+- [x] Reviewer and fixes; finish (handoff, cron deleted, notification)
 
 **Later.** An installer that brings its own Python; macOS and Linux shortcuts; stopping automatically when the browser closes; check the `sf` connection label ("Starts before end of" on an item whose end must come after the other's start); an editor that skips the planning request in worlds without a planning wiki (a handled 404 in the console).
 
