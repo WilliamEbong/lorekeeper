@@ -97,7 +97,7 @@ Use `planning-impact` (`item` and/or `terms`, `written`) on its own to see what 
 
 ### Sagas: planning changes
 
-In the owner's sagas the planning wiki is `Planning Wiki/`, built from the planning documents in AUTHORITY.md order. A planning change follows `_system/skills/planning_wiki_change.md`, which runs the saga's own human-change route: `impact_analyze_human_change`, the override register, `planning-change` through the vendored CLI (`python _system/vendor/lorekeeper --root Wiki --config _system/lorekeeper.json planning-change ...`; `lore mcp --saga` refuses it), then `python _system/scripts/saga.py refresh-sources N` for the in-progress chapter, because editing an authority stales its recorded source hashes. In the editor (`saga.py timeline`), a planning change becomes a change request (`layer: planning`) for that routine.
+In the owner's sagas the planning wiki is `Planning Wiki/`, built from the planning documents in AUTHORITY.md order. A planning change follows `_system/skills/planning_wiki_change.md`, which runs the saga's own human-change route: `impact_analyze_human_change`, the override register, `planning-change` through the vendored CLI (`python _system/vendor/lorekeeper --root Wiki --config _system/lorekeeper.json planning-change ...`; `lore mcp --saga` refuses it), then `python _system/scripts/saga.py refresh-sources N` and `python _system/scripts/saga.py assemble-profiles N` for the in-progress chapter, because editing an authority and the register stales its recorded source hashes and its profile packet; `saga.py validate N` must then pass. In the editor (`saga.py timeline`), a planning change becomes a change request (`layer: planning`) for that routine.
 
 ## Operation reference
 
