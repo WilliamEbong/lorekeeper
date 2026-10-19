@@ -110,7 +110,13 @@ Keep sources with the date: `2025-04-02 (letter)` or `2025-04-02, outline note`.
 
 `date_min` and `date_max` can narrow the possibilities of a stated date. Without a stated date, they date an item only when both are given; a lone bound leaves it undated. Contradictory bounds are reported. An unparseable date stays in the file and produces a warning; Lorekeeper does not quietly replace it.
 
-Gregorian dates work without configuration. Custom calendars need definitions in `lore.json`; arbitrary invented month names are not understood automatically. `lore convert "2025-04-02"` displays a date in the project's configured calendars. The `age` command returns possible year bounds alongside an age description. The Ages view shows the description, so check the underlying date precision before treating it as exact. For an immortal or other ageless character, add `max_age: none` to that person's frontmatter; birth and death consistency checks still apply.
+Gregorian dates work without configuration. Custom calendars need definitions in `lore.json`; arbitrary invented month names are not understood automatically. `lore convert "2025-04-02"` displays a date in the project's configured calendars. The `age` command returns possible year bounds alongside an age description. The Ages view shows the description, so check the underlying date precision before treating it as exact. For an immortal or other ageless character, add `max_age: none` to that person's frontmatter (or `"checks": {"max_age": "none"}` in `lore.json` for a whole world); birth and death consistency checks still apply.
+
+**Second lives.** In a world where people come back, record the end of a person's first life in `died` and the start of the second in `reborn`. The timeline draws the first life as a bar and the second as a line running on to the latest date in the story, and appearances after the rebirth are not reported as after death (only those between the two dates are).
+
+**Flashbacks.** A chapter or event told out of order on purpose is not a mistake: give it `flashback: yes`, or say so in its date's note, such as `SRD Y-2 D168 (flashback)` or "(presented out of chronological order)". Order checks skip it, and the items right after it that continue the flashback, while still catching a real step back in time.
+
+**Running day counts.** A day-count calendar can set `"overflow": true`, so a day past the end of the year carries into the next one: in a 365-day year, `Y0 D367` is read as `Y1 D002`.
 
 ## Read a continuity report
 
@@ -131,13 +137,13 @@ The editor's Continuity tab shows the same report. To run it in a terminal, ente
 | `END_BEFORE_START` | A written end (`end` or `died`) comes before the start. FAIL when even the latest possible end is before the earliest possible start; WARN when the end may begin earlier, such as an end of `2020-05` for a start of `2020-05-10`. Ends worked out from a `duration` are not checked. |
 | `DEPENDENCY_UNDATED` | A timing relationship lacks a date needed for comparison. |
 | `DEPENDENCY` | A timing relationship is violated or uncertain, or its lag cannot be read. |
-| `DEAD_PARTICIPANT` | A person is involved after their death. |
+| `DEAD_PARTICIPANT` | A person is involved after their death (and before their rebirth, when `reborn` is recorded). |
 | `UNBORN_PARTICIPANT` | A person's involvement ends before their birth. |
 | `AGE_LIMIT` | A participant exceeds the allowed age: 130 years by default, adjustable per project or person. |
 | `PROBABLY_DEAD` | A person has no recorded death but would be older than the age limit by the latest date in the story. Record `died`, or set `max_age` (`none` for the ageless). Always a warning. |
 | `PARENT_AGE` | A parent is younger than the minimum at the child's birth: 12 years by default. |
 | `TWO_PLACES` | A person has overlapping appearances in different places; the message names both places. A place nested inside another via `located_in` is compatible with it. Back-to-back scenes (one ends as the next begins) do not clash. Broad dates alone do not always establish a collision. |
-| `ORDER_REGRESSION` | Dates move backwards through a configured numeric order. Series uses this for books. |
+| `ORDER_REGRESSION` | Dates move backwards through a configured numeric order. Series uses this for books. Items marked as flashbacks are skipped. |
 | `MAX_DURATION` | An item may exceed a configured maximum duration. Lasting exactly the maximum is allowed. |
 | `GAP` | The time between linked items does not meet a configured exact, minimum or maximum gap. |
 | `STORY_ORDER` | The `narrative.md` outline definitely moves backwards in time. This is a warning, since flashbacks can be intentional. |

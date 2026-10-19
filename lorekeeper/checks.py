@@ -7,7 +7,7 @@ from itertools import groupby
 
 from . import dates
 from .store import finding, link_parts
-from .timeinfo import END_KEYS, START_KEYS, calendar_of, item_dates, shift, show_when
+from .timeinfo import END_KEYS, START_KEYS, calendar_of, item_dates, reborn, shift, show_when
 
 AGELESS = ("none", "unlimited", "ageless")    # max_age values meaning no limit (a JSON null reads "none")
 
@@ -75,6 +75,15 @@ def _date_key(item):
     return next((k for k in (*START_KEYS, "date_min", "date_max") if item.fields.get(k)), "date")
 
 
+FLASHBACK = re.compile(r"flash-?back|out of (?:chronological )?order", re.I)
+
+
+def flashback(item, start):
+    """Told out of order on purpose: a `flashback: yes` field, or a date note that says so."""
+    return (str(item.fields.get("flashback", "")).strip().lower() in ("yes", "true", "1")
+            or bool(start and start.note and FLASHBACK.search(start.note)))
+
+
 def _selected(item, select):
     tags = item.fields.get("tags", [])
     tags = tags if isinstance(tags, list) else [tags]
@@ -133,9 +142,12 @@ def run(project):
             # Birth/death minutes are inclusive; strictly outside is a violation. An event dated exactly
             # like the birth or death (same interval) is that birth or death, not a possible clash.
             same = lambda x, y: (x.lo, x.hi) == (y.lo, y.hi)
-            if start and death and not same(start, death):
-                emit(compare_ge(death, start), "DEAD_PARTICIPANT", item, "participants", person,
-                     start, death, "after death")
+            again = reborn(p, person)   # a second life: appearing after the rebirth is no clash
+            if start and death and not same(start, death) and not (again and start.lo >= again.lo):
+                severity = compare_ge(death, start)
+                emit("WARN" if severity == "FAIL" and again and start.hi > again.lo else severity,
+                     "DEAD_PARTICIPANT", item, "participants", person, start, death,
+                     "after death" + (" and before rebirth" if again else ""))
             if end and birth and not same(end, birth):
                 emit(compare_ge(end, birth), "UNBORN_PARTICIPANT", item, "participants", person,
                      end, birth, "before birth")
@@ -239,9 +251,21 @@ def run(project):
         # order_check depends only on the earlier start's lo, so the latest prior lo is the worst
         # case; the latest committed one is kept too, so a provisional item cannot cap a FAIL.
         prior = committed = None
+        chain, skipped = None, set()   # the flashback being told, and items that belong to one
         for batch in items:
             for item in batch:
                 start = times[item][0]
+                # A flashback (marked, or continuing the one just told) steps back on purpose: skip it.
+                back = any(c and order_check(start, times[c][0]) for c in (committed, prior))
+                main = max((times[c][0].lo for c in (committed, prior) if c), default=None)
+                # ponytail: "continues the flashback" = not before it and nearer to it than to the main
+                # line; a field or note on each card is the exact way to say so
+                near = chain and main is not None and start.lo - times[chain][0].lo < main - start.lo
+                if flashback(item, start) or (back and near and not order_check(start, times[chain][0])):
+                    chain = item
+                    skipped.add(item)
+                    continue
+                chain = None
                 severity, other = None, None
                 # Prefer committed evidence for FAIL before applying severity caps.
                 for candidate in (committed, prior):
@@ -254,6 +278,8 @@ def run(project):
                     emit("WARN" if definite_only else severity, code, item, _date_key(item),
                          other, start, times[other][0], "chronology runs backwards", rule)
             for item in batch:
+                if item in skipped:
+                    continue
                 lo = times[item][0].lo
                 if prior is None or lo > times[prior][0].lo:
                     prior = item
