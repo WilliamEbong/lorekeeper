@@ -154,6 +154,9 @@ Constraints are unchanged:
   - Every frozen chapter is written into the Story Wiki from the same approved sources, using the Wiki as committed at each chapter's freeze.
   - Any value the AI has to decide, such as the reader's description of an unnamed character, is recorded in the saga's `agent_decisions.md`, as with other agent decisions.
   - No live Wiki page is edited, so in-progress chapters are not touched.
+  - It never reads the chapter architecture (the planned chapter cards) or any plan for an unwritten chapter. Those are the author's plans, not what the reader knows, and reading them would waste tokens.
+  - It reads each frozen chapter's snapshot and approved deltas, and the Wiki's changes between freeze commits (`git diff`, not every page at every version). It searches chapter text only to settle specific questions, such as how the reader first saw someone or where a name is first given.
+  - The after-freeze skill (FR-21) follows the same limits for one chapter.
 - **FR-23 MCP in the sagas.**
   - Each saga gets a project `.mcp.json` that runs the vendored engine's MCP server (`lore mcp`) on that saga. Any Claude Code session opened in the saga then has Lorekeeper's tools, the new `wiki` and fact tools included. Claude Code asks once to approve it.
   - The README shows the same setup for any world.

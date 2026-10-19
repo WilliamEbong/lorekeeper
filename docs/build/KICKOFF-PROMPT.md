@@ -46,7 +46,8 @@ How to work:
   - make the changes in the clones;
   - replay them on the probes;
   - require green suites with parity, byte-identical status and validate output for every chapter, an untouched Wiki/, and in-progress profile packets that still verify;
-  - backfill every frozen chapter's Story Wiki from approved sources only, and record any value you have to decide in that saga's agent_decisions.md.
+  - backfill every frozen chapter's Story Wiki from approved sources only, and record any value you have to decide in that saga's agent_decisions.md;
+  - read only what the backfill needs: each frozen chapter's CURRENT_WORLD_BIBLE_OUT.md and approved deltas, plus the Wiki's git diffs between freeze commits. Search chapter text for specific questions instead of reading it whole. Never read the chapter architecture (the planned cards) or plans for unwritten chapters.
 - Landing in the sagas: you are authorized to land into the three live saga repos by fast-forward only with land.sh, once every saga check passes. If a live repo moved, re-clone and redo. Never force. Never stage in-progress chapters, _system/state, provenance or saga.log. Use "system:" for engine and config commits and "wiki:" for Story Wiki content.
 - Use subagents for broad searches and for independent pieces with no overlapping files. Finish with a fresh-context review of the Lorekeeper diff and one of the saga diffs, and fix what they confirm.
 
