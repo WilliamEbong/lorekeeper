@@ -5,12 +5,12 @@ import secrets
 import time
 from collections import namedtuple
 
-from . import checks, dates, store
+from . import checks, dates, store, wiki
 from .timeinfo import calendar_of, item_dates, parse_at, show_when
 from .store import LoreError, Project
 
 Param = namedtuple("Param", "name kind required help")   # kind: str | int | bool | list | dict
-Op = namedtuple("Op", "name summary params writes handler")
+Op = namedtuple("Op", "name summary params writes handler guide", defaults=("",))   # guide: for AI readers
 
 
 def to_json(result):
@@ -322,8 +322,28 @@ def op_export(p, format, out):
     return {"written": os.path.abspath(out), "format": format, "count": len(p.items)}
 
 
+def op_wiki(p, item=None, as_of=None):
+    if as_of is not None and as_of < 0:
+        raise LoreError("INVALID", "as_of must be a chapter number, 0 or more; leave it out for the complete wiki")
+    s = wiki.story(p)
+    return s.index(as_of) if item is None else s.card(item, as_of)
+
+
+def op_fact_add(p, item, section, text, to=None, version=None, type=None, **span):
+    return wiki.fact_add(p, item, section, text, span["from"], to, version, type)
+
+
+def op_fact_end(p, item, section, fact, after=None, reopen=None, version=None):
+    return wiki.fact_end(p, item, section, fact, after, bool(reopen), version)
+
+
+def op_fact_remove(p, item, section, fact, version=None):
+    return wiki.fact_remove(p, item, section, fact, version)
+
+
 def op_check(p):
-    found = p.findings()
+    story = wiki.story(p)   # first: story names resolve links
+    found = p.findings() + story.findings()
     for it in p.items:
         for key, value in item_dates(p, it)[2]:
             found.append(store.finding("WARN", "DATE_UNPARSED", f"{key}: {value}", it.path, it.line(key)))
@@ -389,6 +409,54 @@ OPS = [
        [Param("format", S, True, "aeon | csv | md"), Param("out", S, True, "output file path")], True, op_export),
     Op("check", "Check the project; FAIL lines are definite problems, WARN lines possible ones.",
        [], False, op_check),
+    Op("wiki", "Read the story wiki: the index of entries, or one entry's card, as the reader knows it by a chapter.",
+       [Param("item", S, False, "entry name, alias, a name the reader knows it by, or key (path:...); "
+                                "leave out for the index"),
+        Param("as_of", I, False, "chapter number the reader has finished; leave out for the complete wiki")],
+       False, op_wiki,
+       "Use it before writing about the story at a given chapter, or to see what the reader already knows. "
+       "Without item it returns the index: groups by type, each entry with name (the name the reader knows at "
+       "as_of), type, key, page and appears (its first chapter), plus chapters (the chapter list). With item it "
+       "returns the card: name, appears, names, also (identities folded into it), sections with facts (each with "
+       "text, from, to, and as or worked_out when they apply), version (pass it to fact-add) and, in complete mode, "
+       "fields and body. Progressive mode (as_of given) shows only facts true at that chapter and hides later pages "
+       "(NOT_FOUND, like a page that does not exist). Example: {\"item\": \"Kresh\", \"as_of\": 5}."),
+    Op("fact-add", "Add one chapter-stamped fact to an entry's story page (the only way AI should write wiki facts).",
+       [Param("item", S, True, "entry name (or a name the reader knows it by)"),
+        Param("section", S, True, "section heading, e.g. Beliefs, Where, Knows, Wants, Relationships, "
+                                  "Important events, Names; created if missing"),
+        Param("text", S, True, "the fact as one line, without a [ch …] stamp"),
+        Param("from", I, True, "chapter from which the reader knows it"),
+        Param("to", I, False, "last chapter it is still true in, for states that change (beliefs, places)"),
+        Param("version", S, False, "the card's version you read; CONFLICT if the page changed since"),
+        Param("type", S, False, "only when no entry has this name: create a standalone story page of this "
+                                "type (story-wiki worlds)")],
+       True, op_fact_add,
+       "Use it after a chapter is written (in a saga, after it is frozen) to record what the reader learns. "
+       "It appends '- text [ch from]' (or [ch from-to]) to the end of the section; in a world with a story_wiki "
+       "folder it writes the entry's companion page there, creating it with the type's starter sections, and "
+       "never touches the working page. Record a new name under section Names. Returns item, path, version, "
+       "created, section, text, from and to. Example: {\"item\": \"Darius\", \"section\": \"Beliefs\", "
+       "\"text\": \"Believes the far side is unarmed.\", \"from\": 2}."),
+    Op("fact-end", "Mark a fact as no longer true after a chapter (or, with reopen, as current again).",
+       [Param("item", S, True, "entry name"), Param("section", S, True, "section heading"),
+        Param("fact", S, True, "the start of the fact's text (case and spacing ignored)"),
+        Param("after", I, False, "last chapter the fact is true in"),
+        Param("reopen", B, False, "clear the end instead (undo a fact-end)"),
+        Param("version", S, False, "the card's version you read")],
+       True, op_fact_end,
+       "Use it when a belief, place, state or relationship changes: end the old fact, then fact-add the new one. "
+       "It rewrites only that fact's stamp, so [ch 2] becomes [ch 2-5]; an unstamped fact starts at the page's "
+       "first appearance. Returns item, path, version, text, from and to. Example: {\"item\": \"Darius\", "
+       "\"section\": \"Beliefs\", \"fact\": \"Believes the far side\", \"after\": 5}."),
+    Op("fact-remove", "Remove one fact from an entry's story page (to undo a mistaken fact-add).",
+       [Param("item", S, True, "entry name"), Param("section", S, True, "section heading"),
+        Param("fact", S, True, "the start of the fact's text (case and spacing ignored)"),
+        Param("version", S, False, "the card's version you read")],
+       True, op_fact_remove,
+       "Use it only to take back a fact that was added by mistake; when something stops being true, use fact-end, "
+       "because the reader still knew it until then. Returns item, path, version and the removed text. "
+       "Example: {\"item\": \"Darius\", \"section\": \"Wants\", \"fact\": \"To go home\"}."),
 ]
 BY_NAME = {op.name: op for op in OPS}
 

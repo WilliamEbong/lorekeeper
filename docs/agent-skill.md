@@ -35,6 +35,45 @@ The implementation supports legacy `initialize` negotiation for `2025-11-25`, `2
 
 References accept IDs, canonical names, filename stems and aliases. `path:Characters/Mira Vale.md` selects an exact project-relative path, useful when names are ambiguous. `at`, `since` and `until` accept a date or a reference to a dated item. An item reference covers its whole dated span, not just one instant. `where` reports the last recorded located participation at or before the query, with an uncertainty flag; it is not continuous location tracking. `knows` follows `learns` links on events the person participated in and separates definite knowledge from `may_know`; it does not infer secrets from prose.
 
+## The story wiki: what the reader knows by a chapter
+
+A **chapter stamp** at the end of a fact says from which chapter the reader knows it: `[ch 7]`, or `[ch 2-5]` for something true from chapter 2 until chapter 5 (a belief, a place, a state, a relationship). A fact is one list item or one paragraph inside a section (a `##` heading). An unstamped fact is known from its page's `first_appearance` (`CH003`, `ch 3` or `3`); a page without one is always known. Chapter numbers follow reading order, not in-world dates.
+
+- **Story page.** Where an entry's stamped facts live. Normally that is the item's own page. When the settings name a `story_wiki` folder, it is a companion page in that folder instead (`<folder>/<Type plural>/<Name> (story).md`, with `type`, `page: "[[Name]]"` and optional `first_appearance`). Companions are never items, so they never appear in `query`, `graph` or other views. In such a world never put stamps in the working pages: they are written for the present and would leak.
+- **Names.** A `## Names` section lists the names the reader knows the entry by, each stamped: `- the hooded rider [ch 2-5]`, `- Kresh [ch 6]`. The index shows the latest name that covers the chapter. These names also resolve references.
+- **Secret identities.** `revealed_as: "[[Kresh]] [ch 9]"` in a story page's frontmatter keeps Lord Vane a separate card until chapter 9; from then on, and always in complete mode, Lord Vane is folded into Kresh's card, each folded fact marked with `as`.
+- **Kinds of things.** `kind: "[[Standard alien battle tank]]"` links a thing to the page for its kind; a kind page is an ordinary entry with its own card.
+- **Worked-out facts.** When a card's Where, Knows or Relationships section has no written fact at that chapter, `wiki` fills it from the links (located events, `learns` links, role links) and marks each one `worked_out`. Do not copy them back as written facts.
+
+**When to read it.** Before drafting or reviewing chapter N+1, call `wiki` with `as_of` N for the index of what the reader has met, then `wiki` with `item` for each entry on the page. Call it without `as_of` for the author's complete view, with frontmatter fields and every ended fact. A progressive answer never contains anything later than N: an entry the reader has not met yet returns NOT_FOUND, exactly like a name that does not exist.
+
+**How to record facts.** Only with the fact tools. Never type or edit `[ch …]` stamps by hand.
+1. Read the card (`wiki`, `item`, `as_of`) and keep its `version`.
+2. `fact-add` each new fact: `section`, one-line `text` without a stamp, and `from` = the chapter that reveals it. Add a new name to section `Names`.
+3. When a belief, place, state or relationship changes, `fact-end` the old fact with `after` = the last chapter it was true in, then `fact-add` the new one.
+4. Someone the reader has met who has no page yet (story-wiki worlds only): `fact-add` with `type`, which starts a standalone story page.
+5. To take back your own mistake, `fact-remove` (undo an add) or `fact-end` with `reopen` (undo an end).
+6. Run `check` and fix any `STAMP_UNREADABLE` or `STAMP_RANGE` finding.
+
+On CONFLICT, read the card again and retry with its new version. Every refusal says what to change.
+
+Starter sections, used for new story pages (other headings work too, shown in page order):
+- character: Names, Current state, Where, Beliefs, Knows, Wants, Relationships, Important events;
+- organization: Names, Leaders, Members, Goals, Territory, Allies and enemies, Standing, Important events;
+- location: Names, Controlled by, Who is here, Condition, Important events;
+- item and technology: Names, Kind, Held by, Where, Condition, What it does, Important events.
+
+### Sagas: the after-freeze routine
+
+In the owner's sagas (a `_system/lorekeeper.json` with `"story_wiki": "../Story Wiki"`), the saga pipeline is unchanged and the Story Wiki is a layer on top, updated after each `python _system/scripts/saga.py freeze N`. Follow `_system/skills/story_wiki_update.md` in the saga. In short:
+1. Read only approved sources for chapter N: the frozen chapter, `Chapters/CHnnn/CURRENT_WORLD_BIBLE_OUT.md`, the chapter's approved deltas, and the Wiki's changes in the freeze commit (`git diff <previous freeze>..<this freeze> -- Wiki`). Never read the chapter architecture (planned chapter cards) or plans for unwritten chapters. Search the chapter text only to settle a specific question, such as how the reader first saw someone.
+2. Write chapter N's facts with `fact-add` and `fact-end`: through the MCP tools, or `python _system/vendor/lorekeeper --root Wiki --config _system/lorekeeper.json fact-add ...` from the saga root.
+3. Run `check` the same way.
+4. Commit only `Story Wiki/` paths, in their own commit: `wiki: story wiki after CHnnn`.
+5. Record any value you had to decide (such as the reader's description of an unnamed character) in `_system/knowledge/agent_decisions.md`.
+
+Each saga's `.mcp.json` runs the vendored server as `lore mcp --saga`, which offers the reading tools and the three fact tools only, so an MCP session can never write Wiki pages.
+
 ## Operation reference
 
 These are CLI examples. For MCP use the operation name as the tool name and an arguments object with the listed parameter names. Required string parameters are positional on the CLI. Optional parameters use flags; underscores become hyphens, for example `links_to` becomes `--links-to`. `field` and `expect` are objects in MCP and repeatable `--field key=value` / `--expect key=value` flags on the CLI. `unset` is an array in MCP and repeatable `--unset key` flags on the CLI. Values in MCP field objects should be strings or arrays of strings.
@@ -63,8 +102,12 @@ All examples below assume an initialized novel template unless stated otherwise.
 | `import` | `file` | `into` | `lore import notes.csv --into Imported` |
 | `export` | `format`, `out` | none | `lore export md reading-copy.md` |
 | `check` | none | none | `lore check --json` |
+| `wiki` | none | `item`, `as_of` | `lore wiki "Mira Vale" --as-of 1 --json` (leave out the name for the index, `--as-of` for the complete wiki) |
+| `fact-add` | `item`, `section`, `text`, `from` | `to`, `version`, `type` | `lore fact-add "Mira Vale" Beliefs "Believes her sister is alive." --from 1 --version "<version>" --json` |
+| `fact-end` | `item`, `section`, `fact` | `after`, `reopen`, `version` | `lore fact-end "Mira Vale" Beliefs "Believes her sister" --after 2 --json` |
+| `fact-remove` | `item`, `section`, `fact` | `version` | `lore fact-remove "Mira Vale" Wants "To go home" --json` |
 
-Global CLI options are `--root <project>`, `--json`, `--version` and help. `--root` may name the project folder or any folder inside it; with no `lore.json` there or above, the command stops with NOT_FOUND (exit 2), and `mcp` and `serve` refuse to start. Every face checks parameter types the same way: a wrong type is INVALID, MCP `arguments` that are not an object get JSON-RPC -32602, and an unexpected server failure returns HTTP 500 INTERNAL. Without `--json`, `timeline`, `age`, `when`, `where` and `knows` print plain sentences; use `--json` for data. `serve` and `mcp` are CLI adapters, not operations or MCP tools. Start the editor with `lore serve --root <project>`, optionally `--port 8765` or `--saga`; start MCP with `lore mcp --root <project>`. The editor prints its loopback URL; it does not automatically open a browser. CLI check exits 1 on any FAIL, 0 otherwise; operational errors exit 2. A `--json` operational error is printed as JSON on stdout and also described on stderr.
+Global CLI options are `--root <project>`, `--config <file>`, `--json`, `--version` and help. `--config` names a settings file to use instead of `lore.json` (a saga keeps its settings in `_system/lorekeeper.json`); `--root` is then the project folder exactly as given. A vendored copy runs without installing: `python <vendor>/lorekeeper --root <project> wiki`. `--root` may name the project folder or any folder inside it; with no `lore.json` there or above, the command stops with NOT_FOUND (exit 2), and `mcp` and `serve` refuse to start. Every face checks parameter types the same way: a wrong type is INVALID, MCP `arguments` that are not an object get JSON-RPC -32602, and an unexpected server failure returns HTTP 500 INTERNAL. Without `--json`, `timeline`, `age`, `when`, `where` and `knows` print plain sentences; use `--json` for data. `serve` and `mcp` are CLI adapters, not operations or MCP tools. Start the editor with `lore serve --root <project>`, optionally `--port 8765` or `--saga`; start MCP with `lore mcp --root <project>`. The editor prints its loopback URL; it does not automatically open a browser. CLI check exits 1 on any FAIL, 0 otherwise; operational errors exit 2. A `--json` operational error is printed as JSON on stdout and also described on stderr.
 
 ## Safe mutation details
 
@@ -90,7 +133,7 @@ To remove a field, use `unset` and include its old value in `expect`. Replacing 
 
 `create` supplies `id`, `type` and `canonical_name`; do not override them through `field`. Names cannot contain brackets, pipe, hash, caret, slash, backslash or control characters. `init` is create-only, with `novel`, `series` and `campaign` as the optional templates. It does not apply templates to existing projects. Import skips existing names instead of replacing them; inspect the returned warnings. Export accepts `aeon`, `csv` or `md` and replaces its output file. There is no delete or automatic request-application operation.
 
-In saga workflows use `request`, not direct writes, unless the host explicitly authorizes canon changes. Requests store proposed fields, removals, notes, current values and a base version/expectation snapshot. A stale baseline is marked `stale` rather than rejected; request creation does not establish that the change is safe to apply. `requests` lists the queued JSON records. The default directory is `.lore/requests`; the host can configure `requests_dir`. The host must reread canon, check impacts and apply approved changes through its own pipeline. Saga mode blocks direct HTTP writes other than requests, but does not restrict CLI/MCP operations.
+In saga workflows use `request`, not direct writes, unless the host explicitly authorizes canon changes. Requests store proposed fields, removals, notes, current values and a base version/expectation snapshot. A stale baseline is marked `stale` rather than rejected; request creation does not establish that the change is safe to apply. `requests` lists the queued JSON records. The default directory is `.lore/requests`; the host can configure `requests_dir`. The host must reread canon, check impacts and apply approved changes through its own pipeline. Saga mode blocks direct HTTP writes other than requests, but does not restrict the CLI. `lore mcp --saga` offers only the reading tools and `fact-add`, `fact-end` and `fact-remove`.
 
 ## Storage and chronology conventions
 

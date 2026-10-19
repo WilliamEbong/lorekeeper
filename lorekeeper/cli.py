@@ -1,5 +1,7 @@
 """`lore` command line, generated from the operations table."""
 import argparse
+import json
+import os
 import sys
 
 from . import __version__, fm, ops, store
@@ -23,13 +25,18 @@ def build_parser():
     for parser, default in ((ap, None), (common, argparse.SUPPRESS)):
         parser.add_argument("--root", default=default, help="project folder (default: nearest folder with lore.json)")
         parser.add_argument("--json", action="store_true", default=default or False, help="print JSON")
+        parser.add_argument("--config", default=default, metavar="FILE",
+                            help="settings file to use instead of lore.json (then --root is the project folder)")
     sub = ap.add_subparsers(dest="op", required=True, metavar="command")
     for op in ops.OPS:
-        sp = sub.add_parser(op.name, parents=[common], help=op.summary, description=op.summary)
+        sp = sub.add_parser(op.name, parents=[common], help=op.summary,
+                            description=f"{op.summary} {op.guide}".strip())
         for p in op.params:
             flag = "--" + p.name.replace("_", "-")
             if p.kind == "str" and p.required:
                 sp.add_argument(p.name, help=p.help)
+            elif p.kind == "str" and p.name == "item":   # lore wiki [NAME]
+                sp.add_argument(p.name, nargs="?", help=p.help)
             elif p.kind == "bool":
                 sp.add_argument(flag, dest=p.name, action="store_true", default=None, help=p.help)
             elif p.kind == "list":
@@ -43,6 +50,9 @@ def build_parser():
         if name == "serve":
             sp.add_argument("--port", type=int, default=0, help="local port (default: choose a free port)")
             sp.add_argument("--saga", action="store_true", help="queue change requests instead of editing canon")
+        else:
+            sp.add_argument("--saga", action="store_true",
+                            help="offer only reading and the story-wiki fact tools (Wiki pages stay with the pipeline)")
     return ap
 
 
@@ -57,9 +67,44 @@ def interval(when):
     return when["text"] + (f" ({when['from']} to {when['to']})" if when["from"] != when["to"] else "")
 
 
+def chapters(start, end):
+    return "" if start is None else f"[ch {start}]" if end is None else f"[ch {start}-{end}]"
+
+
+def wiki_text(result):
+    when = "complete" if result["as_of"] is None else f"as of chapter {result['as_of']}"
+    if "groups" in result:
+        lines = [f"Story wiki, {when}: {result['count']} entries"]
+        for group in result["groups"]:
+            lines.append(f"{group['label']} ({group['count']})")
+            lines += [f"  {e['name']}" + (f"  (also {', '.join(e['also'])})" if e["also"] else "")
+                      + ("" if e["appears"] is None else f"  ch {e['appears']}") for e in group["entries"]]
+        return "\n".join(lines)
+    lines = [f"{result['name']} ({result['type']}), {when}"]
+    if result["appears"] is not None:
+        lines.append(f"Appears in chapter {result['appears']}")
+    if result["also"]:
+        lines.append(f"Also: {', '.join(result['also'])}")
+    if result["names"]:
+        lines.append("Names: " + ", ".join(f"{n['name']} {chapters(n['from'], n['to'])}".strip() for n in result["names"]))
+    for section in result["sections"]:
+        lines += ["", f"## {section['heading'] or '(untitled)'}"]
+        for f in section["facts"]:
+            tags = [chapters(f["from"], f["to"])] + ([f"as {f['as']}"] if f.get("as") else []) \
+                + (["worked out"] if f.get("worked_out") else [])
+            lines.append(f"- {f['text']}  " + " ".join(t for t in tags if t))
+        if not section["facts"]:
+            lines.append("  (nothing yet)")
+    if not result["sections"]:
+        lines.append("No story facts recorded yet.")
+    return "\n".join(lines)
+
+
 def human(op, args, result):
     """Plain text for people; --json prints the data unchanged."""
     at = args.get("at")
+    if op == "wiki":
+        return wiki_text(result)
     if op == "timeline":
         rows = [(span(i["start"], i["end"]), i) for i in result["items"]]
         width = max((len(d) for d, _ in rows), default=0)
@@ -95,20 +140,35 @@ def main(argv=None):
         stream.reconfigure(encoding="utf-8")
     ns = build_parser().parse_args(argv)
     try:
-        # --root names the project or a folder inside it; a mistyped one must not read as an empty world
-        root = (ns.root or ".") if ns.op == "init" else store.find_root(ns.root or ".")
+        config = None
+        if ns.config and ns.op != "init":   # settings kept elsewhere (a saga's _system/lorekeeper.json)
+            root = os.path.abspath(ns.root or ".")
+            if not os.path.isdir(root):
+                raise LoreError("NOT_FOUND", f"--root {root} is not a folder")
+            try:
+                with open(ns.config, encoding="utf-8") as fh:
+                    config = json.load(fh)
+            except OSError as exc:
+                raise LoreError("NOT_FOUND", f"cannot read --config {ns.config}: {exc.strerror}") from exc
+            except ValueError as exc:
+                raise LoreError("INVALID", f"--config {ns.config} is not valid JSON: {exc}") from exc
+            if not isinstance(config, dict):
+                raise LoreError("INVALID", f"--config {ns.config} must hold a JSON object")
+        else:
+            # --root names the project or a folder inside it; a mistyped one must not read as an empty world
+            root = (ns.root or ".") if ns.op == "init" else store.find_root(ns.root or ".")
         if ns.op == "mcp":
             from . import mcp
-            return mcp.serve(root)
+            return mcp.serve(root, config=config, saga=ns.saga)
         if ns.op == "serve":
             from . import serve
-            return serve.serve(root, port=ns.port, saga=ns.saga)
+            return serve.serve(root, port=ns.port, saga=ns.saga, config=config)
         op = ops.BY_NAME[ns.op]
         args = {p.name: getattr(ns, p.name, None) for p in op.params}
         for p in op.params:
             if p.kind == "dict" and args[p.name] is not None:
                 args[p.name] = dict(args[p.name])
-        result = ops.run(ns.op, args, root=root)
+        result = ops.run(ns.op, args, root=root, config=config)
     except LoreError as exc:
         if ns.json:
             print(ops.to_json(exc.as_dict()))

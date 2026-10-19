@@ -35,9 +35,12 @@ def stamp(root, config=None):
         rel = path[len(root) + 1:] if path.startswith(root + os.sep) else os.path.relpath(path, root)
         rows.append((rel.replace(os.sep, "/"), info.st_mtime_ns, info.st_size))
 
+    story = config.get("story_wiki")
+    story = os.path.normpath(os.path.join(root, story)) if story else None   # may sit beside the project
+
     def scan(folder):
         key = os.path.normcase(os.path.realpath(folder))
-        if key in visited or os.path.islink(folder) or not store.inside(root, folder):
+        if key in visited or os.path.islink(folder) or not (store.inside(root, folder) or story and store.inside(story, folder)):
             return
         visited.add(key)
         if not os.path.isdir(folder):
@@ -58,6 +61,8 @@ def stamp(root, config=None):
         if not store.inside(root, top):
             raise LoreError("INVALID", f"{store.CONFIG} path {base!r} is outside the project folder")
         scan(top)
+    if story:
+        scan(story)
     record(config_path)
     return hashlib.sha256(ops.to_json(sorted(rows)).encode("utf-8")).hexdigest()
 

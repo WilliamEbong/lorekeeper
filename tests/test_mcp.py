@@ -85,7 +85,7 @@ class McpTests(unittest.TestCase):
         tools = self.request("tools/list")["result"]["tools"]
         self.assertEqual([t["name"] for t in tools], [op.name for op in ops.OPS])
         for tool, op in zip(tools, ops.OPS):
-            self.assertEqual(tool["description"], op.summary)
+            self.assertEqual(tool["description"], f"{op.summary}\n\n{op.guide}" if op.guide else op.summary)
             self.assertEqual(tool["annotations"], {"readOnlyHint": not op.writes})
             self.assertFalse(tool["inputSchema"]["additionalProperties"])
         by_name = {t["name"]: t for t in tools}
@@ -113,7 +113,9 @@ class McpTests(unittest.TestCase):
     def test_golden_cli_parity(self):
         cases = [("query", {}, []), ("query", {"type": "character"}, ["--type", "character"]),
                  ("show", {"item": "Mara Quell"}, ["Mara Quell"]), ("check", {}, []), ("schema", {}, []),
-                 ("timeline", {}, []), ("age", {"item": "Mara Quell", "at": "2021"}, ["Mara Quell", "2021"])]
+                 ("timeline", {}, []), ("age", {"item": "Mara Quell", "at": "2021"}, ["Mara Quell", "2021"]),
+                 ("wiki", {}, []), ("wiki", {"as_of": 1}, ["--as-of", "1"]),
+                 ("wiki", {"item": "Mara Quell"}, ["Mara Quell"])]
         env = dict(os.environ, PYTHONPATH=REPO, PYTHONDONTWRITEBYTECODE="1")
         for name, arguments, cli_args in cases:
             with self.subTest(name=name, arguments=arguments):
@@ -126,6 +128,39 @@ class McpTests(unittest.TestCase):
                 self.assertEqual(result["content"], [{"type": "text", "text": cli.stdout[:-1]}])
                 self.assertEqual(result["structuredContent"], json.loads(cli.stdout))
                 self.assertIs(result["isError"], False)
+
+    def test_golden_fact_tools(self):
+        """The fact tools write the same bytes and return the same data through MCP and the CLI."""
+        env = dict(os.environ, PYTHONPATH=REPO, PYTHONDONTWRITEBYTECODE="1")
+        copies = [tempfile.mkdtemp(prefix="lk-mcp-") for _ in range(2)]
+        for copy_ in copies:
+            self.addCleanup(shutil.rmtree, copy_, True)
+            shutil.copytree(FIXTURE, copy_, dirs_exist_ok=True)
+        steps = [("fact-add", {"item": "Mara Quell", "section": "Beliefs", "text": "Trusts the map.", "from": 2},
+                  ["Mara Quell", "Beliefs", "Trusts the map.", "--from", "2"]),
+                 ("fact-end", {"item": "Mara Quell", "section": "Beliefs", "fact": "Trusts", "after": 4},
+                  ["Mara Quell", "Beliefs", "Trusts", "--after", "4"]),
+                 ("fact-remove", {"item": "Mara Quell", "section": "Beliefs", "fact": "Trusts"},
+                  ["Mara Quell", "Beliefs", "Trusts"])]
+        for name, arguments, cli_args in steps:
+            with self.subTest(name=name):
+                cli = subprocess.run([sys.executable, "-m", "lorekeeper", "--root", copies[0], "--json", name,
+                                      *cli_args], cwd=REPO, env=env, capture_output=True, encoding="utf-8")
+                self.assertEqual(cli.returncode, 0, cli.stderr)
+                result = self.call(name, arguments, root=copies[1])
+                self.assertIs(result["isError"], False)
+                self.assertEqual(result["structuredContent"], json.loads(cli.stdout))
+
+    def test_saga_offers_reads_and_fact_tools(self):
+        tools = {t["name"] for t in mcp.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, FIXTURE,
+                                                saga=True)["result"]["tools"]}
+        self.assertEqual(tools, {op.name for op in ops.OPS if not op.writes} | mcp.FACT_OPS)
+        refused = mcp.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                              "params": {"name": "create", "arguments": {"type": "character", "name": "X"}}},
+                             FIXTURE, saga=True)["result"]
+        self.assertIs(refused["isError"], True)
+        self.assertEqual(refused["structuredContent"]["error"]["code"], "FORBIDDEN")
+        self.assertIn("fact-add", refused["structuredContent"]["error"]["message"])
 
     def test_tool_and_method_errors(self):
         result = self.call("show", {"item": "Nobody"})

@@ -11,8 +11,16 @@ INSTRUCTIONS = (
     "Lorekeeper stores a story world as Markdown files, one per item. "
     "Use query/show to read and create/set/link to write. "
     "set merges or returns CONFLICT; pass the version and expect values you read. "
+    "The story wiki shows what the reader knows by a chapter: read it with wiki (as_of = chapter), "
+    "and record what a written chapter reveals with fact-add and fact-end, never by editing [ch N] stamps by hand. "
     "Run check after edits."
 )
+FACT_OPS = {"fact-add", "fact-end", "fact-remove"}
+
+
+def offered(op, saga):
+    """In a saga, Wiki pages change only through the saga pipeline: offer reads and the story-wiki fact tools."""
+    return not saga or not op.writes or op.name in FACT_OPS
 
 
 def _error(id_, code, message, data=None):
@@ -37,11 +45,12 @@ def _tool(op):
     required = [p.name for p in op.params if p.required]
     if required:
         schema["required"] = required
-    return {"name": op.name, "description": op.summary, "inputSchema": schema,
+    description = f"{op.summary}\n\n{op.guide}" if op.guide else op.summary
+    return {"name": op.name, "description": description, "inputSchema": schema,
             "annotations": {"readOnlyHint": not op.writes}}
 
 
-def handle(message: dict, root: str) -> dict | None:
+def handle(message: dict, root: str, config: dict | None = None, saga: bool = False) -> dict | None:
     """Return a response without transport I/O; tools delegate their effects to ops."""
     # Only individual JSON-RPC objects are supported; batches are invalid requests.
     if not isinstance(message, dict):
@@ -79,7 +88,7 @@ def handle(message: dict, root: str) -> dict | None:
     elif method == "ping":
         result = {}
     elif method == "tools/list":
-        result = {"tools": [_tool(op) for op in ops.OPS]}
+        result = {"tools": [_tool(op) for op in ops.OPS if offered(op, saga)]}
     elif method == "tools/call":
         name = params.get("name")
         if not isinstance(name, str) or name not in ops.BY_NAME:
@@ -89,7 +98,10 @@ def handle(message: dict, root: str) -> dict | None:
             return _error(id_, -32602, "Invalid params: arguments must be an object")
         is_error = False
         try:   # bad argument values come back from ops.run as INVALID tool errors
-            value = ops.run(name, arguments, root=root)
+            if not offered(ops.BY_NAME[name], saga):
+                raise LoreError("FORBIDDEN", f"{name} is not offered in a saga: Wiki pages change only through the "
+                                             "saga pipeline. Record story facts with fact-add and fact-end.")
+            value = ops.run(name, arguments, root=root, config=config)
         except LoreError as exc:
             value, is_error = exc.as_dict(), True
         except Exception as exc:
@@ -104,7 +116,7 @@ def handle(message: dict, root: str) -> dict | None:
     return {"jsonrpc": "2.0", "id": id_, "result": result}
 
 
-def serve(root, inp=None, out=None) -> int:
+def serve(root, inp=None, out=None, config=None, saga=False) -> int:
     """Serve UTF-8 JSON lines on binary streams until EOF."""
     inp = sys.stdin.buffer if inp is None else inp
     out = sys.stdout.buffer if out is None else out
@@ -116,7 +128,7 @@ def serve(root, inp=None, out=None) -> int:
         except (ValueError, UnicodeDecodeError):
             response = _error(None, -32700, "Parse error")
         else:
-            response = handle(message, root)
+            response = handle(message, root, config, saga)
         if response is not None:
             # ASCII escapes keep lone surrogates and any other odd text valid on the wire
             out.write((json.dumps(response, separators=(",", ":")) + "\n").encode("ascii"))

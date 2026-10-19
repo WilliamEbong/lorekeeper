@@ -29,7 +29,8 @@ class Rules(unittest.TestCase):
                 else:
                     continue
                 bad += [f"{os.path.basename(path)}: {m}" for m in mods
-                        if m.split(".")[0] not in sys.stdlib_module_names]
+                        if m.split(".")[0] not in sys.stdlib_module_names
+                        and not (m == "lorekeeper.cli" and path.endswith("__main__.py"))]   # run as a folder
         self.assertEqual(bad, [])
 
     def test_every_text_open_has_encoding(self):

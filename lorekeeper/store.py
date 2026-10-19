@@ -22,12 +22,17 @@ DEVICE = re.compile(r"\A(con|prn|aux|nul|com[1-9\xb9\xb2\xb3]|lpt[1-9\xb9\xb2\xb
 
 DEFAULT_SCHEMA = {
     "types": {
-        "character": {"label": "Character", "plural": "Characters", "id_prefix": "CHAR", "category": "person"},
-        "location": {"label": "Location", "plural": "Locations", "id_prefix": "LOC", "category": "place"},
+        "character": {"label": "Character", "plural": "Characters", "id_prefix": "CHAR", "category": "person",
+                      "sections": ["Names", "Current state", "Where", "Beliefs", "Knows", "Wants", "Relationships", "Important events"]},
+        "location": {"label": "Location", "plural": "Locations", "id_prefix": "LOC", "category": "place",
+                      "sections": ["Names", "Controlled by", "Who is here", "Condition", "Important events"]},
         "event": {"label": "Event", "plural": "Events", "id_prefix": "EVENT", "category": "event"},
-        "organization": {"label": "Organization", "plural": "Organizations", "id_prefix": "ORG", "category": "group"},
-        "technology": {"label": "Technology", "plural": "Technology", "id_prefix": "TECH", "category": "thing"},
-        "item": {"label": "Item", "plural": "Items", "id_prefix": "ITEM", "category": "thing"},
+        "organization": {"label": "Organization", "plural": "Organizations", "id_prefix": "ORG", "category": "group",
+                      "sections": ["Names", "Leaders", "Members", "Goals", "Territory", "Allies and enemies", "Standing", "Important events"]},
+        "technology": {"label": "Technology", "plural": "Technology", "id_prefix": "TECH", "category": "thing",
+                      "sections": ["Names", "Kind", "Held by", "Where", "Condition", "What it does", "Important events"]},
+        "item": {"label": "Item", "plural": "Items", "id_prefix": "ITEM", "category": "thing",
+                      "sections": ["Names", "Kind", "Held by", "Where", "Condition", "What it does", "Important events"]},
         "chapter": {"label": "Chapter", "plural": "Chapters", "id_prefix": "CH", "category": "narrative"},
     },
     "roles": {
@@ -42,6 +47,8 @@ DEFAULT_SCHEMA = {
         "same_end": {"label": "Ends with", "inverse": "Ends with", "to": []},
         "sf": {"label": "Starts before end of", "inverse": "Ends after start of", "to": []},
         "learns": {"label": "Reveals", "inverse": "Learned in", "to": []},
+        "revealed_as": {"label": "Revealed to be", "inverse": "Also known as", "to": [], "single": True},
+        "kind": {"label": "Kind", "inverse": "Examples", "to": [], "single": True},
     },
     "properties": {
         "born": {"label": "Born", "format": "date"},
@@ -244,12 +251,14 @@ class Project:
 
     def files(self):
         skip = SKIP_DIRS | set(self.config.get("exclude", []))
+        story = self.config.get("story_wiki")
+        story = os.path.normcase(os.path.normpath(os.path.join(self.root, story))) if story else None
         for base in self.config.get("paths", ["."]):
             top = os.path.normpath(os.path.join(self.root, base))
             if not inside(self.root, top):
                 raise LoreError("INVALID", f"{CONFIG} path {base!r} is outside the project folder")
             for dirpath, dirnames, filenames in os.walk(top):
-                if not inside(self.root, dirpath):   # a junction or link pointing elsewhere
+                if not inside(self.root, dirpath) or os.path.normcase(dirpath) == story:   # elsewhere, or companions
                     dirnames[:] = []
                     continue
                 dirnames[:] = sorted(d for d in dirnames if d not in skip and not d.startswith("."))
@@ -431,7 +440,10 @@ class Project:
         while (base_id if n == 1 else f"{base_id}-{n}").lower() in self.by_id:
             n += 1
         values = {"id": base_id if n == 1 else f"{base_id}-{n}", "type": type_, "canonical_name": name, **fields}
-        text = fm.update("", set=values, body=f"\n# {name}\n" if body is None else str(body))
+        if body is None:   # a new story page starts with its type's sections (feature 010)
+            starters = [] if self.config.get("story_wiki") else self.schema["types"][type_].get("sections") or []
+            body = f"\n# {name}\n" + "".join(f"\n## {h}\n" for h in starters)
+        text = fm.update("", set=values, body=str(body))
         version = atomic_write(path, text, create=True)
         item = self.read(path)
         item.version = version
