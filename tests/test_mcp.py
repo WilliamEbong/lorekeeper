@@ -53,7 +53,7 @@ class McpTests(unittest.TestCase):
 
     def test_discover(self):
         self.assertEqual(self.request("server/discover")["result"], {
-            "resultType": "complete", "supportedVersions": VERSIONS,
+            "resultType": "complete", "ttlMs": 0, "cacheScope": "private", "supportedVersions": VERSIONS,
             "capabilities": {"tools": {}},
             "_meta": {"io.modelcontextprotocol/serverInfo": {"name": "lorekeeper", "version": __version__}},
             "instructions": mcp.INSTRUCTIONS})
@@ -79,7 +79,17 @@ class McpTests(unittest.TestCase):
             for version in VERSIONS:
                 with self.subTest(method=method, version=version):
                     modern = self.request(method, {**params, "_meta": meta(version)})["result"]
-                    self.assertEqual(modern, {**legacy, "resultType": "complete"})
+                    hints = {"ttlMs": 0, "cacheScope": "private"} if method == "tools/list" else {}
+                    self.assertEqual(modern, {**legacy, "resultType": "complete", **hints})
+
+    def test_tools_list_cache_hints(self):
+        """2026-07-28 clients reject a tools/list result without ttlMs and cacheScope (0 tools loaded)."""
+        modern = self.request("tools/list", {"_meta": meta("2026-07-28")})["result"]
+        self.assertEqual((modern["ttlMs"], modern["cacheScope"], modern["resultType"]), (0, "private", "complete"))
+        self.assertTrue(modern["tools"])
+        legacy = self.request("tools/list")["result"]
+        for key in ("ttlMs", "cacheScope", "resultType"):
+            self.assertNotIn(key, legacy)
 
     def test_tools_list(self):
         tools = self.request("tools/list")["result"]["tools"]

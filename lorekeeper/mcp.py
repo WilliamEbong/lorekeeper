@@ -17,6 +17,7 @@ INSTRUCTIONS = (
     "Run check after edits."
 )
 FACT_OPS = {"fact-add", "fact-end", "fact-remove"}
+CACHEABLE = {"tools/list"}   # with server/discover: the 2026-07-28 CacheableResult methods Lorekeeper answers
 
 
 def story_folder(root, config):
@@ -127,6 +128,8 @@ def handle(message: dict, root: str, config: dict | None = None, saga: bool = Fa
     # A supported per-request version selects modern framing, with no session state.
     if modern:
         result["resultType"] = "complete"
+    if modern and method in CACHEABLE or method == "server/discover":
+        result.update(ttlMs=0, cacheScope="private")   # 2026-07-28 list and discover results carry cache hints
     return {"jsonrpc": "2.0", "id": id_, "result": result}
 
 
