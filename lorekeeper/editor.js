@@ -1364,7 +1364,11 @@ const wiki = {asOf: null, filter: '', open: null, openName: '', cardAsOf: null, 
   cardError: null, error: null, loaded: null, loading: null, form: null};
 try { const kept = localStorage.getItem(AS_OF_KEY); if (/^\d+$/.test(kept || '')) wiki.asOf = Number(kept); } catch { /* private window */ }
 const chText = (from, to) => from == null ? '' : to == null ? `ch ${from}` : `ch ${from}–${to}`;
-const chapterName = (c) => c.name && !new RegExp(`^(chapter|ch)\\s*0*${c.n}$`, 'i').test(c.name.trim()) ? `Chapter ${c.n} — ${c.name}` : `Chapter ${c.n}`;
+// "Chapter 003 — First Boots" reads "Chapter 3 — First Boots"; a bare "Chapter 3" adds nothing.
+const chapterName = (c) => {
+  const rest = (c.name || '').trim().replace(new RegExp(`^(chapter|ch)\\s*0*${c.n}\\b\\s*[—–:.-]*\\s*`, 'i'), '');
+  return rest ? `Chapter ${c.n} — ${rest}` : `Chapter ${c.n}`;
+};
 const lastChapter = () => wiki.index?.chapters.at(-1)?.n ?? 1;
 function inline(parent, text) {
   // **bold**, *italic*, [[Link]] and [[Link|label]]; everything else stays plain text.
@@ -1508,12 +1512,14 @@ function wikiCard() {
     const page = add(box, el('details', null, {class: 'working', open: ''}));
     page.append(el('summary', 'From the page (written for the present)'), markdown(card.body));
   }
-  if (!card.sections.length) box.append(el('p', 'No story facts are recorded yet.', {class: 'hint'}));
-  card.sections.forEach((section, index) => box.append(wikiSection(card, section, index)));
+  // Empty sections (a new story page's starter headings) stay out of sight; "another section" offers them.
+  const sections = card.sections.filter(s => s.facts.length);
+  if (!sections.length) box.append(el('p', wiki.cardAsOf == null ? 'No story facts are recorded yet.' : `Nothing known yet about ${card.name} at this chapter.`, {class: 'hint'}));
+  sections.forEach((section, index) => box.append(wikiSection(card, section, index)));
   if (!saga || card.page) {
     const other = add(box, el('section', null, {class: 'wiki-section'}));
     if (wiki.form === 'other') other.append(addForm(card, null, 'other'));
-    else other.append(button([icon('plus'), card.sections.length ? 'Add a fact to another section' : 'Add the first fact'],
+    else other.append(button([icon('plus'), sections.length ? 'Add a fact to another section' : 'Add the first fact'],
       () => { wiki.form = 'other'; renderView(); requestAnimationFrame(() => $('wiki-form-section')?.focus()); }, {class: 'quiet small'}));
   }
   if (card.fields) {
@@ -1582,7 +1588,7 @@ function addForm(card, section, formId) {
   if (!section) {
     const wrap = el('label', null, {for: 'wiki-form-section', class: 'chapter-field'}), list = el('datalist', null, {id: 'wiki-sections'});
     sectionInput = el('input', null, {id: 'wiki-form-section', list: 'wiki-sections', required: '', autocomplete: 'off', placeholder: 'e.g. Wants'});
-    for (const h of typeInfo(card.type).sections || []) if (!card.sections.some(s => s.heading.toLowerCase() === h.toLowerCase())) list.append(el('option', null, {value: h}));
+    for (const h of typeInfo(card.type).sections || []) if (!card.sections.some(s => s.facts.length && s.heading.toLowerCase() === h.toLowerCase())) list.append(el('option', null, {value: h}));
     wrap.append('Section ', sectionInput, list);
     fields.push(wrap);
   }
