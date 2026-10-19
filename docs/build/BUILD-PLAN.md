@@ -382,10 +382,10 @@ Paths are relative to each saga root and identical in all three repos.
 - [x] Owner's mid-run MCP fix (68b63e5, branch fix/mcp-cache-hints)
 - [x] Specify and clarify (5 answers in the spec)
 - [x] Plan, tasks, analyze
-- [ ] Engine: settings, source reader, citations, pages, matcher, link lists, views, fact, impact, change, leak tests (TDD)
-- [ ] Faces: ops, MCP, CLI, serve, editor; Playwright; detector; timing
-- [ ] Docs: README, user guide, agent skill
-- [ ] Sagas: baseline, clones, vendor, key, skill and pointer
+- [x] Engine: settings, source reader, citations, pages, matcher, link lists, views, fact, impact, change, leak tests (TDD)
+- [x] Faces: ops, MCP, CLI, serve, editor; timing (Playwright and detector pending: browser shared with another session)
+- [x] Docs: README, user guide, agent skill
+- [x] Sagas: baseline, clones, vendor, key, skill and pointer
 - [ ] Sagas: three build agents; probe replay; change-flow proof
 - [ ] Reviewers and fixes
 - [ ] Land the three sagas (fast-forward only)
