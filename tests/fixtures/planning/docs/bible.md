@@ -11,9 +11,8 @@ Vampires are a people of the night. Their captains fly the Nightjar fighter.
 ### 1.2 Humans
 Humans live by day.
 
-```text
-## 9.9 Not a heading (inside a fence)
 ```
+A bare fence line, as the sagas use them, does not hide the headings after it.
 
 ## 2. Characters
 

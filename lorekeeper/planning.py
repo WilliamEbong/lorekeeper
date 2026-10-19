@@ -62,14 +62,11 @@ class Source:
         return self._lines
 
     def _parse(self):
-        out, fence = [], False
+        # ponytail: code fences are not tracked; planning documents use bare ``` lines as separators, unbalanced,
+        # and the sagas' own card parser reads headings the same way. Track fences if a world needs it.
+        out = []
         for i, raw in enumerate(self._lines):
             line = raw.rstrip("\r")
-            if line.lstrip().startswith(("```", "~~~")):
-                fence = not fence
-                continue
-            if fence:
-                continue
             m = wiki.HEADING.fullmatch(line) if line[:1] == "#" else None
             if m:
                 title = m[2].strip()

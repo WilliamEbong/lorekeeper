@@ -50,7 +50,7 @@ class SourceReaderTests(unittest.TestCase):
         self.assertIn(("2", 2), refs)
         self.assertIn(("B.2A", 3), refs)
         self.assertIn(("Canon inheritance rule", 2), refs)
-        self.assertNotIn("9.9", [r for r, _ in refs])   # inside a code fence
+        self.assertIn(("2.1", 3), refs)   # after an unbalanced bare fence line
 
     def test_find_by_number_section_sign_title_and_prefix(self):
         self.assertEqual(self.src.find("§2.1")["title"], "2.1 Sava")
