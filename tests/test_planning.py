@@ -122,6 +122,10 @@ class ReviewFindingTests(unittest.TestCase):
         self.assertLess(text.index("`HO-001`"), text.index("EXAMPLE"))
         mixed = self.source("**ID:** `HO-031`\n\n**ID:** `AD-050`\n\n**ID:** `HO-032`\n", "overrides")
         self.assertEqual(mixed.next_id(), "HO-033")
+        # an entry written as a heading that also carries its **ID:** line is one entry, not two
+        headed = self.source("## HO-104 — The pumps\n\n**ID:** `HO-104`\n\nText.\n", "overrides")
+        self.assertEqual(headed.find("HO-104")["title"], "HO-104 — The pumps")
+        self.assertEqual(headed.next_id(), "HO-105")
 
     def test_write_back_to_a_parent_section_goes_before_its_first_subsection(self):
         src = self.source("## 3. Machines\nIntro.\n\n### 3.1 Fighter\nFast.\n")
