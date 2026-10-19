@@ -63,7 +63,7 @@ def build(layout):
     base = tempfile.mkdtemp(prefix="lk-wiki-")
     root = os.path.join(base, "world")
     config = {"lorekeeper": 1, "name": "Fixture"}
-    if layout == "story":
+    if layout.startswith("story"):
         config["story_wiki"] = "../story"
     write(root, "lore.json", json.dumps(config))
     for folder, type_, name, fields, body, facts in WORLD:
@@ -74,6 +74,8 @@ def build(layout):
             write(root, f"{folder}/{name}.md", page(type_, name, fields, body))
             if facts or reveal:
                 appear = next(line for line in fields.splitlines() if line.startswith("first_appearance"))
+                if layout == "story-section" and reveal:   # the reveal as a section fact-add can write
+                    reveal, facts = "", facts + "\n## Revealed to be\n- [[Kresh]] [ch 9]\n"
                 write(base, f"story/{folder}/{name} (story).md",
                       f"---\ntype: {type_}\npage: \"[[{name}]]\"\n{appear}\n{reveal}---\n{facts}")
     return base, root
@@ -280,6 +282,11 @@ class StoryFolderTests(WikiWorldTests):
         write(self.root, "Events/Ambush.md", page("event", "Ambush", 'participants: ["[[the hooded rider]]"]\n'))
         found = run(self.root, "check")["findings"]
         self.assertEqual([f for f in found if f["code"] == "BROKEN_LINK"], [])
+
+
+class RevealSectionTests(WikiWorldTests):
+    """The reveal written as a '## Revealed to be' section, as fact-add writes it in a saga."""
+    layout = "story-section"
 
 
 class FactOpTests(unittest.TestCase):

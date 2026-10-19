@@ -14,6 +14,7 @@ ITEM = re.compile(r"(?:[-*+]|\d+[.)])(?:[ \t]+|\Z)")          # a top-level list
 LINK = re.compile(r"\[\[([^\[\]|\r\n]+)(?:\|([^\[\]\r\n]*))?\]\]")
 SUFFIX = " (story)"
 WORKED = {"person": ("Where", "Knows", "Relationships"), "group": ("Relationships",)}
+REVEAL = ("revealed to be", "revealed as")   # a section that says who this entry turns out to be
 
 
 # ---- stamps and chapter numbers -----------------------------------------------------------
@@ -139,8 +140,10 @@ class Entry:
         if link:
             m = STAMP.search(" " + link[1])
             self.reveal = (link[0], int(m[1]) if m else self.appears)
-        else:
-            self.reveal = None
+        else:   # or a "## Revealed to be" section, which fact-add can write: "- [[Kresh]] [ch 9]"
+            first = next((f for s in self.parsed if s["heading"].lower() in REVEAL for f in s["facts"][:1]), None)
+            said = first and LINK.search(first["text"])
+            self.reveal = (said[1].strip(), first["from"]) if said else None
         self.key = f"path:{item.path if item else page.path}"
 
 
@@ -310,7 +313,7 @@ class Story:
 
         def take(entry, tag):
             for s in entry.parsed:
-                if s["heading"].lower() == "names":
+                if s["heading"].lower() in ("names",) + REVEAL:   # shown as names and "also"
                     continue
                 shown = [self._fact(f, n, tag, entry.key) for f in s["facts"] if covers(f["from"], f["to"], n)]
                 if tag and not shown:

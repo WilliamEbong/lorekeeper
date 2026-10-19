@@ -435,7 +435,8 @@ OPS = [
        "Use it after a chapter is written (in a saga, after it is frozen) to record what the reader learns. "
        "It appends '- text [ch from]' (or [ch from-to]) to the end of the section; in a world with a story_wiki "
        "folder it writes the entry's companion page there, creating it with the type's starter sections, and "
-       "never touches the working page. Record a new name under section Names. Returns item, path, version, "
+       "never touches the working page. Record a new name under section Names; record a secret identity's reveal "
+       "as section 'Revealed to be' with text '[[Real Name]]' and from = the reveal chapter. Returns item, path, version, "
        "created, section, text, from and to. Example: {\"item\": \"Darius\", \"section\": \"Beliefs\", "
        "\"text\": \"Believes the far side is unarmed.\", \"from\": 2}."),
     Op("fact-end", "Mark a fact as no longer true after a chapter (or, with reopen, as current again).",

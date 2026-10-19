@@ -74,6 +74,7 @@ Answered by the build agent with the recommended option (run 4, owner away; each
   - These names also resolve links, as `aliases` do, in the wiki, the fact operations and `check`, but only after names, file stems and aliases, and never for DUPLICATE_NAME or AMBIGUOUS_NAME.
 - **FR-4 Secret identities.**
   - A new default role, `revealed_as` (label "Revealed to be", inverse "Also known as", single), links a story page to the one it turns out to be. Its stamp is the reveal chapter: `revealed_as: "[[Kresh]] [ch 9]"`.
+  - The same reveal can be written as a `## Revealed to be` section whose first fact is the link (`- [[Kresh]] [ch 9]`), so `fact-add` can record it without editing frontmatter (added in run 4: AI agents in a saga write only through the fact operations).
   - From the reveal chapter on, and always in complete mode, the revealed page is folded into its target:
     - The index lists only the target, with "also Lord Vane".
     - The target's card merges the folded facts under matching headings, each marked "as Lord Vane".
