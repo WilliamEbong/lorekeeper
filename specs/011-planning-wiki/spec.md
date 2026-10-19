@@ -54,7 +54,7 @@ Answered by the build agent with the recommended option (run 5, owner away; each
   Each finding names the page and line and says how to fix it.
 - **FR-5 `planning NAME` (card).** Returns name, type, key, version, aliases, fields, `sections` (decided facts only: text, sources, id) and `ideas` (the `## Ideas` facts plus the computed idea sections, each marked `idea: true`), and `links`:
   - `members`: entries whose `kind` or `member_of` links to this entry, or whose tags include one of this entry's `member_tags`;
-  - `dialogues`: entries of `dialogues` sources (each heading at the deepest heading level used for entries) whose heading text names the entry, or that have a speaker label (`**Name:**` or `**Name (note):**` at a line start) naming it;
+  - `dialogues`: entries of `dialogues` sources (the deepest numbered headings, or the deepest headings when none is numbered) whose own heading or an enclosing heading names the entry (in any capitals), or that have a speaker label (`**Name:**` or `**Name (note):**` at a line start) or a position marker (`*Name* —`) naming it;
   - `appears_in`: chapters (number and title) of `chapters` sources, whose card text names the entry; card text is the heading to the next heading, minus lines that start with a `skip` prefix; plus narrative items of the project (chapter pages) whose text names it;
   - each source in a citation is returned as `{source, section, title, rank, found}`.
   "Names the entry": a whole-word, case-sensitive match of its name, aliases or the attached item's name and aliases; names in `exclude_names` (any case) never match; a name shorter than three letters never matches.
