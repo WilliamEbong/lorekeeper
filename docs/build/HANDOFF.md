@@ -1,6 +1,6 @@
 # HANDOFF — Lorekeeper
 
-Written 2026-10-19, at the end of run 6. **Run 6 built feature 012, the Lorekeeper app (no-terminal setup, a desktop launcher, a start screen, an AI guide inside each world), and feature 013, a plain-language editor, on branch `feat/012-app` (worktree `lk-scratch/lk-app`), local commits only: not merged or pushed, awaiting the owner.** Run 5 (feature 011, the planning wiki, and the timeline controls) is on main, pushed and in the sagas. This document is authoritative, including over memory and older summaries. History is in SESSION-LOG.md and BUILD-PLAN.md ("Run 6").
+Written 2026-10-19, at the end of run 6. **Run 6 built feature 012, the Lorekeeper app (no-terminal setup, a desktop launcher, a start screen, an AI guide inside each world), and feature 013, a plain-language editor, and merged into main and pushed with the owner's approval (a7966b7). `Set up Lorekeeper.bat` has been run from the main checkout: the Lorekeeper shortcuts are on the Desktop and in the Start menu.** Run 5 (feature 011, the planning wiki, and the timeline controls) is on main, pushed and in the sagas. This document is authoritative, including over memory and older summaries. History is in SESSION-LOG.md and BUILD-PLAN.md ("Run 6").
 
 ## 1. Snapshot
 
@@ -90,7 +90,7 @@ Lorekeeper (command `lore`) is a standalone, stdlib-only story-world engine.
 
 ## 5. Next actions
 
-0. **Run 6:** the owner reviews the app and the plain-language editor, then approves merging `feat/012-app` into main (fast-forward or merge), pushing, and re-vendoring into the sagas (the sagas get the plain editor; the app itself is for standalone worlds). After the merge, double-click `Set up Lorekeeper.bat` in the main checkout once to make the Desktop and Start-menu shortcuts.
+0. **Run 6:** done and pushed. Optional: re-vendor the engine into the sagas (clones, probe, land by fast-forward) so the saga editors get the plain-language wording; the app itself is for standalone worlds and opens sagas through their own launchers.
 
 1. In a saga, try the planning wiki: run `python _system/scripts/saga.py timeline`, open the Wiki tab and pick Planning.
 3. For a planning change, tell the AI in plain words. It follows `_system/skills/planning_wiki_change.md`.
