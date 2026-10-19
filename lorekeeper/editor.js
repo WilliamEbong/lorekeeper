@@ -720,7 +720,7 @@ function zoomControls() {
 }
 function legend() {
   const box = el('div', null, {class: 'legend', 'aria-hidden': 'true'});
-  for (const [kind, text] of [['', 'Exact'], ['fuzzy', 'Approximate'], ['life', 'Alive, no death recorded']]) {
+  for (const [kind, text] of [['', 'Exact'], ['fuzzy', 'Approximate'], ['life', 'Alive (or reborn)']]) {
     const sample = svgEl('svg', {viewBox: '0 0 26 14'}), g = svgEl('g', {class: `cat-event ${kind === 'life' ? '' : kind}`});
     g.append(kind === 'life' ? svgEl('rect', {x: 1, y: 5, width: 24, height: 4, rx: 2, class: 'life'})
       : svgEl('rect', {x: 1, y: 2, width: 24, height: 10, rx: 3, class: 'mark'}));
@@ -826,7 +826,9 @@ function timeline(view) {
     if (ui.hidden.has(type)) continue;
     const items = all.filter(i => i.type === type), rows = [], placed = [];
     for (const item of items) {
-      const living = isPerson(item) && !hasEnd(item) && item.hi < storyEnd;
+      // A second life (reborn after a recorded death) also runs on to the story's latest date.
+      const second = isPerson(item) && item.rlo != null && item.rlo < storyEnd;
+      const living = isPerson(item) && (second || (!hasEnd(item) && item.hi < storyEnd));
       const x0 = c.x(item.lo), x1 = c.x(item.hi), xl = living ? c.x(storyEnd) : x1;
       if (xl < c.left - 1 || x0 > c.right + 1) continue;
       const v0 = Math.max(c.left, x0), v1 = Math.min(c.right, x1), vl = Math.min(c.right, xl), w = labelWidth(item.name);
@@ -844,13 +846,13 @@ function timeline(view) {
     y += BAND;
     for (const p of placed) {
       const top = y + p.row * ROW, item = p.item, mid = top + 24;
-      const when = whenText(item) + (p.living ? ', alive (no death recorded)' : '');
+      const when = whenText(item) + (item.reborn ? `, reborn ${item.reborn.text}` : p.living ? ', alive (no death recorded)' : '');
       const g = svgEl('g', {class: `item cat-${category(item)}${fuzzy(item) ? ' fuzzy' : ''}`, role: 'button', tabindex: '-1',
         'data-path': item.path, 'aria-label': `${item.name}, ${typeLabel(item.type)}, ${when}`,
         id: `timeline-${encodeURIComponent(item.path)}`});
       g.append(svgEl('rect', {class: 'hit', x: p.start, y: top + 1, width: p.end - p.start - 6, height: ROW - 3, rx: 5}),
         svgEl('text', {x: p.lx, y: top + 14, class: 'item-label'}, item.name));
-      const lifeFrom = Math.max(c.left, p.x1);
+      const lifeFrom = Math.max(c.left, item.rlo != null ? c.x(item.rlo) : p.x1);
       if (p.living && p.vl > lifeFrom) g.append(svgEl('rect', {x: lifeFrom, y: mid - 2, width: p.vl - lifeFrom, height: 4, rx: 2, class: 'life'}));
       g.append(
         p.x1 - p.x0 < 6 ? svgEl('circle', {cx: Math.max(c.left, Math.min(c.right, p.x0)), cy: mid, r: 5.5, class: 'mark'})

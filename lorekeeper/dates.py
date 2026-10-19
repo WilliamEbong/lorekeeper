@@ -104,7 +104,8 @@ class Calendar:
         if not 0 <= hour < 24 or not 0 <= minute < 60:
             raise ValueError("invalid time")
         if self.type == "days":
-            if month != 1 or not 1 <= day <= self.year_days:
+            # "overflow": a running day count, so day 367 of a 365-day year is day 2 of the next
+            if month != 1 or day < 1 or (day > self.year_days and not self.config.get("overflow")):
                 raise ValueError("invalid day")
             n = self.epoch_day + (year - self.epoch_year) * self.year_days + day - 1
         else:

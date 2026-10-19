@@ -66,6 +66,12 @@ def item_dates(p, item):
     return cache[id(item)]
 
 
+def reborn(p, item):
+    """When a person's second life begins (the `reborn` field), or None."""
+    value = item.fields.get("reborn")
+    return dates.parse(value, p.calendars) if isinstance(value, str) and value.strip() else None
+
+
 def show_when(p, when):
     if when is None:
         return None

@@ -6,7 +6,7 @@ import time
 from collections import namedtuple
 
 from . import checks, dates, planning, store, wiki
-from .timeinfo import calendar_of, item_dates, parse_at, show_when
+from .timeinfo import calendar_of, item_dates, parse_at, reborn, show_when
 from .store import LoreError, Project
 
 Param = namedtuple("Param", "name kind required help")   # kind: str | int | bool | list | dict
@@ -262,7 +262,8 @@ def op_graph(p):
         start, end, _ = item_dates(p, it)
         items.append({**it.summary(), "version": it.version, "fields": it.fields,
                       "start": show_when(p, start), "end": show_when(p, end),
-                      "lo": start.lo if start else None, "hi": (end or start).hi if start else None})
+                      "lo": start.lo if start else None, "hi": (end or start).hi if start else None,
+                      **({"reborn": show_when(p, again), "rlo": again.lo} if (again := reborn(p, it)) else {})})
         for role, targets in p.links(it).items():
             links += [{"from": it.id or it.name, "role": role, "to": (o.id or o.name) if o else t,
                        "from_path": it.path, "to_path": o.path if o else None,

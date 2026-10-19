@@ -53,6 +53,7 @@ DEFAULT_SCHEMA = {
     "properties": {
         "born": {"label": "Born", "format": "date"},
         "died": {"label": "Died", "format": "date"},
+        "reborn": {"label": "Reborn", "format": "date"},   # a second life begins (worlds with rebirth)
         "date": {"label": "Date", "format": "date"},
         "end": {"label": "End", "format": "date"},
         "date_min": {"label": "Earliest date", "format": "date"},
