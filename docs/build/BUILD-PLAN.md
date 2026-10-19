@@ -362,6 +362,35 @@ Paths are relative to each saga root and identical in all three repos.
 - [x] Land the three sagas (fast-forward only)
 - [x] Finish: all checks, two reviewers, docs, handoff, memory, cron deleted, notification
 
+# Run 5: planning wiki, built and applied to the sagas (2026-10-19)
+
+**Goal.** Build feature 011 into Lorekeeper (engine, CLI, MCP, editor) and add a Planning Wiki to Realm, Space and Zombies without changing how the sagas work. Spec: [specs/011-planning-wiki](../../specs/011-planning-wiki/spec.md) ([plan](../../specs/011-planning-wiki/plan.md), [tasks](../../specs/011-planning-wiki/tasks.md)). Branch `feat/011-planning-wiki`, local commits only.
+
+**Deepened brief.**
+1. A professional would add: errors that name the settings key or source to fix; a `problems` list on the planning index (uncited facts, unknown sources, missing sections, ideas used as facts) so the build can prove every citation resolves; a change that checks everything before writing and says what was written if it fails part-way; version checks on planning pages; a leak test with a unique marker; live reload for the planning folder; a timing check on Realm's real documents.
+2. Rawest material: the code; the sagas' planning documents as they are (headings, Conversations entries, cards, registers); the saga AUTHORITY.md, impact skill and override register; the 2026-07-28 MCP schema; the running editor.
+3. Methods: Spec Kit (clarify answered in the spec, plan, tasks, analyze, implement, converge); TDD for the source reader, link lists, ideas, change and write-back, impact search and leak rule; Playwright; the Impeccable detector; three parallel build agents (one per saga); the run-4 clone, probe and land method; two fresh-context reviewers.
+4. Independent proof: the unit suite; the MCP golden test; MCP handshakes against the clones; saga suites with parity; byte-identical status/validate/health; `lore planning` problems = 0 in each saga; the change-flow proof's impact report; Playwright screenshots; reviewer subagents.
+
+**Acceptance checks.**
+- Spec SC-1 to SC-9.
+- AI use: the five capabilities are ops (CLI `--json`, MCP tool, editor API); guides say what, when, returns, example; errors say how to fix; MCP golden covers them; `lore mcp --saga` never writes an authority or a Wiki page; `docs/agent-skill.md` alone is enough to use the planning wiki (when to read it, the change flow, the saga routines); README and user guide explain it for any world.
+- Sagas: re-vendored engine, `planning_wiki` key, Planning Wiki with cited facts and labelled ideas, computed link lists, shared `planning_wiki_change` skill with one pointer, Planning in `saga.py timeline` (Playwright); landed fast-forward only.
+
+**Steps.**
+- [x] Set up: cron, keep-awake, branch, live state re-checked
+- [x] Owner's mid-run MCP fix (68b63e5, branch fix/mcp-cache-hints)
+- [x] Specify and clarify (5 answers in the spec)
+- [x] Plan, tasks, analyze
+- [ ] Engine: settings, source reader, citations, pages, matcher, link lists, views, fact, impact, change, leak tests (TDD)
+- [ ] Faces: ops, MCP, CLI, serve, editor; Playwright; detector; timing
+- [ ] Docs: README, user guide, agent skill
+- [ ] Sagas: baseline, clones, vendor, key, skill and pointer
+- [ ] Sagas: three build agents; probe replay; change-flow proof
+- [ ] Reviewers and fixes
+- [ ] Land the three sagas (fast-forward only)
+- [ ] Finish: all checks, docs, handoff, memory, cron deleted, notification
+
 # Feature requests from the owner
 
 ## Chapter-scoped story wiki (requested 2026-10-18; specified 2026-10-19 as [specs/010-progressive-wiki](../../specs/010-progressive-wiki/spec.md), which settles the questions below; to be built in run 4)
