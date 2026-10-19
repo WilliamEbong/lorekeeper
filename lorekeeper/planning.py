@@ -19,6 +19,7 @@ CITE_ANY = re.compile(r"\[\s*src\s*:", re.I)
 NUMBER = re.compile(r"§?\s*(\d\w*(?:\.\w+)*|[A-Za-z]{1,4}\.\d\w*(?:\.\w+)*|[A-Za-z]{1,4}-\d+)(?=\Z|[\s.:)—–-])")
 ID_LINE = re.compile(r"\s*\*\*ID:\*\*\s*`?([A-Za-z]{1,4}-\d+)`?")   # an override register entry
 SPEAKER = re.compile(r"\s*\*\*([^*:\n]+?)(?:\s*\([^)\n]*\))?:\*\*")
+POSITION = re.compile(r"(?<![*\w])\*([^*\n]{1,60}?)\*\s*[—–-]")   # "*Selena* — the distinction is legal…"
 CHAPTER_HEAD = re.compile(r"(?:chapter|ch)\.?\s*0*(\d+)\b\s*[:.—–-]?\s*(.*)", re.I)
 MEMBER_ROLES = ("kind", "member_of")
 
@@ -257,12 +258,18 @@ class Matcher:
                 if len(re.sub(r"\W", "", n)) >= 3 and n.lower() not in exclude:
                     self.names.setdefault(n, []).append(e)
         ordered = sorted(self.names, key=len, reverse=True)
-        self.rx = re.compile(r"(?<!\w)(" + "|".join(map(re.escape, ordered)) + r")(?!\w)") if ordered else None
+        pattern = r"(?<!\w)(" + "|".join(map(re.escape, ordered)) + r")(?!\w)"
+        self.rx = re.compile(pattern) if ordered else None
+        self.rx_any_case = re.compile(pattern, re.I) if ordered else None   # for headings, often in capitals
+        self.lower = {}
+        for n, es in self.names.items():
+            self.lower.setdefault(n.lower(), []).extend(es)
 
-    def find(self, text):
+    def find(self, text, any_case=False):
         out = {}
-        for m in self.rx.finditer(text) if self.rx else ():
-            for e in self.names[m[1]]:
+        rx = self.rx_any_case if any_case else self.rx
+        for m in rx.finditer(text) if rx else ():
+            for e in (self.lower[m[1].lower()] if any_case else self.names[m[1]]):
                 out.setdefault(id(e), e)
         return list(out.values())
 
@@ -416,14 +423,20 @@ class Plan:
                 # entries are the deepest numbered headings (§A.252 …); a deeper unnumbered "#### Beats" stays inside
                 deepest = max((x["level"] for x in secs if x["number"]), default=None) or \
                     max((x["level"] for x in secs), default=0)
+                numbered = any(x["number"] for x in secs)
                 for x in secs:
-                    if x["level"] != deepest:
+                    if x["level"] != deepest or (numbered and not x["number"]):   # "The tic list" is no dialogue
                         continue
-                    named = m.find(x["title"])
+                    # the entry's own heading and the headings around it ("PART A — SELENA VANE AND ILYRA"),
+                    # then its speakers: "**Name:**" labels and "*Name* —" position markers
+                    around = [y["title"] for y in secs if y["line"] < x["line"] and y["end"] >= x["end"]]
+                    named = m.find("\n".join(around + [x["title"]]), any_case=True)
                     for raw in lines[x["line"] + 1:x["end"]]:
                         label = SPEAKER.match(raw)
                         if label:
                             named += m.find(label[1])
+                        for who in POSITION.findall(raw):
+                            named += m.find(who)
                     for e in dict.fromkeys(named):
                         row = {"source": s.name, "section": x["ref"], "title": x["title"]}
                         if row not in out[id(e)]["dialogues"]:

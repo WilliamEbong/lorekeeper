@@ -148,7 +148,7 @@ class ReviewFindingTests(unittest.TestCase):
         with open(path, "w", encoding="utf-8", newline="") as fh:
             fh.write(text.replace("**Sava:** asks about the data.\n", "#### Beats\n**Sava:** asks about the data.\n"))
         self.assertEqual([d["section"] for d in run("planning", {"item": "Sava"}, root)["links"]["dialogues"]],
-                         ["A.252"])
+                         ["A.252", "A.253"])
 
     def test_canonical_names_win_over_aliases(self):
         base, root = copy_fixture()
@@ -287,10 +287,12 @@ class ViewTests(unittest.TestCase):
         sava = run("planning", {"item": "Sava"})["links"]
         self.assertEqual([c["n"] for c in sava["appears_in"]], [1, 3])
         self.assertEqual(sava["appears_in"][0]["title"], "Night Arrives")
-        self.assertEqual([d["section"] for d in sava["dialogues"]], ["A.252"])
+        self.assertEqual([d["section"] for d in sava["dialogues"]], ["A.252", "A.253"])   # Part A names her
         edran = run("planning", {"item": "Edran"})["links"]
         self.assertEqual([c["n"] for c in edran["appears_in"]], [2, 3, 4])   # not 1: Meanwhile lines skipped
-        self.assertEqual([d["section"] for d in edran["dialogues"]], ["A.252"])   # setting text is not a speaker
+        self.assertEqual([d["section"] for d in edran["dialogues"]], ["A.252", "A.253"])   # Part A, not setting text
+        mirela = run("planning", {"item": "Mirela"})["links"]
+        self.assertEqual([d["section"] for d in mirela["dialogues"]], ["B.10"])   # a *Name* — position marker
         will = run("planning", {"item": "Will Marsh"})["links"]
         self.assertEqual([c["n"] for c in will["appears_in"]], [1])
         self.assertEqual([d["section"] for d in will["dialogues"]], ["A.253"])

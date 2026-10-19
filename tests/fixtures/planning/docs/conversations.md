@@ -17,6 +17,9 @@ Light, then serious.
 **Setting:** a road. Edran waits.
 **Will Marsh:** talks about the weather.
 
+# PART B — NIGHT CREWS
+
 ### §B.10 — Night Flight
 **Setting:** the Nightjar fighter cockpit.
 **Bo:** hums.
+**Positions:** *Mirela* — wants more speed. *Bo* — wants quiet.
