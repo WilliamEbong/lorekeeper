@@ -2,7 +2,25 @@
 
 Lorekeeper helps you keep track of what happened, when it happened, and who was there. Your writing stays in files you can open without Lorekeeper. You can use the browser editor without an AI assistant.
 
-## Start a world
+## Open Lorekeeper
+
+On Windows, double-click **Set up Lorekeeper** in the Lorekeeper folder once. It checks that Python is installed (and, if not, opens its download page and tells you what to do), puts a **Lorekeeper** icon on your Desktop and in the Start menu, and opens Lorekeeper. From then on, double-click the icon. If you move the Lorekeeper folder, run **Set up Lorekeeper** again.
+
+The icon opens the start screen in your browser. You never need a terminal.
+- **Your worlds** lists the worlds you have opened, newest first. **Open** opens one. **Remove from list** only shortens the list; the world's files stay where they are. A world whose folder was moved or deleted says "Folder not found".
+- **Start a new world**: type a name, choose what to start from (a blank page, or a small novel, series or game-campaign example to learn from), and check where it will be kept. New worlds go in a **Lorekeeper worlds** folder in your Documents; **Change…** chooses another place. Press **Create world**.
+- **Open a folder…** opens a world you already have, or a saga. If the folder is not a Lorekeeper world yet, Lorekeeper offers to make it one; your files stay as they are.
+- **Close Lorekeeper** stops Lorekeeper. Save your work in any open world first. If you only close the browser, Lorekeeper keeps running quietly, and the icon brings the start screen back.
+
+In a world, **All worlds** at the top left returns to the start screen.
+
+## Working with an AI assistant
+
+Every world you open from the start screen includes instructions written for AI assistants such as Claude. They live in the world's folder: `AGENTS.md` and `CLAUDE.md` point to a detailed guide in `.lore/AI-GUIDE.md`, which explains your world's kinds of items, connections and fields, how everything fits together, and the exact way to read and change it safely. If you already have your own `AGENTS.md` or `CLAUDE.md`, Lorekeeper leaves it alone.
+
+To use them, open the world's folder in your assistant. Under **Using an AI assistant** on the start screen, **Copy a message for your assistant** copies a short message to paste in first, and **Show the folder** opens the folder. You can keep working in the editor while the assistant works: each of you sees the other’s changes within seconds, and neither can silently overwrite the other.
+
+## Start a world from a terminal
 
 Follow the [installation and quickstart](../README.md) once. Choose an empty folder for each story. The novel template gives you a small example world to explore. Series adds books with a series order; campaign adds a faction, a quest, sessions and session notes. These are examples, not facts about your story.
 

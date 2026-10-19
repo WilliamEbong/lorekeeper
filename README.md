@@ -8,6 +8,14 @@ Lorekeeper keeps the people, places and events of your story in ordinary Markdow
 
 There is no database. One Markdown file holds each item; `lore.json` holds the project's settings. The runtime uses only Python's standard library.
 
+## The Lorekeeper app (no terminal)
+
+On Windows, double-click **Set up Lorekeeper** in this folder. If Python is missing, it opens the python.org download page and explains what to do; afterwards, run it again. It then puts a **Lorekeeper** icon on your Desktop and in the Start menu and opens Lorekeeper in your browser.
+
+The icon opens the start screen: your worlds, **Start a new world** (blank, or a novel, series or game-campaign example), **Open a folder…** and **Close Lorekeeper**. A world opens in the editor, whose **All worlds** link comes back here. **Open Lorekeeper** in this folder does the same as the icon. On other systems, run `lore app`.
+
+Each world opened from the app also gets instructions for AI assistants: `AGENTS.md` and `CLAUDE.md` (created only if you have none) point to `.lore/AI-GUIDE.md`, a detailed guide to this world and every operation, and `.mcp.json` connects MCP clients such as Claude Code. Open the world's folder in your assistant and it knows how your world fits together.
+
 ## Install
 
 You need Python 3.11 or later and either uv or pipx. From a local checkout of this repository, run one of:

@@ -113,9 +113,11 @@ class Templates(unittest.TestCase):
         self.assertEqual(settings["packages"], ["lorekeeper"])
         self.assertEqual(settings["dynamic"]["version"]["attr"], "lorekeeper.__version__")
         assets = settings["package-data"]["lorekeeper"]
-        # Every file the editor server serves must ship with the package.
+        # Every file the editor and the start screen serve or read must ship with the package.
+        from lorekeeper.app import PAGES
         from lorekeeper.serve import ASSETS
-        self.assertEqual(set(assets), {"editor.html" if path == "/" else path[1:] for path in ASSETS})
+        served = {"editor.html" if path == "/" else path[1:] for path in ASSETS} | {name for name, _ in PAGES.values()}
+        self.assertEqual(set(assets), served | {"lorekeeper.ico", "agent-skill.md"})
         for asset in assets:
             self.assertTrue(Path(REPO, "lorekeeper", asset).is_file())
 

@@ -81,12 +81,12 @@ function aiNote(world) {
 }
 
 function worldCard(world) {
-  const card = el('li', null, {class: `world${world.kind === 'missing' ? ' missing' : ''}`});
+  const card = el('li', null, {class: `world-card${world.kind === 'missing' ? ' missing' : ''}`});
   const head = el('div', null, {class: 'world-head'});
   const name = el('h2', world.name);
   head.append(name);
   if (world.kind === 'saga') head.append(el('span', 'Saga · proposals only', {class: 'mode'}));
-  if (world.open) head.append(el('span', 'Open', {class: 'open-badge'}));
+  if (world.open && world.kind !== 'missing') head.append(el('span', 'Open', {class: 'open-badge'}));
   card.append(head, el('p', world.folder, {class: 'path'}));
   const meta = el('p', world.kind === 'missing' ? 'Folder not found. It may have been moved, renamed or deleted.' : opened(world.opened),
     {class: world.kind === 'missing' ? 'warning' : 'hint'});
