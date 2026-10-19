@@ -8,7 +8,7 @@ Lorekeeper (command `lore`) is a standalone, stdlib-only story-world engine: Mar
 
 ## 2. Current state
 
-- **Lorekeeper:** branch `feat/010-progressive-wiki`, local commits only. **Not pushed and not merged into `main`**; both wait for the owner. `main` = `origin/main` = d0b564a.
+- **Lorekeeper:** owner approved (2026-10-19): `feat/010-progressive-wiki` merged into `main` by fast-forward and pushed. `main` = `origin/main` = b3b1ac0 plus this docs commit; the repository is PRIVATE (checked with gh).
   - Run 4 commits: 8b4ea81, 21c5931 (spec work), 25cd2aa (engine, ops, CLI, MCP), 66b3d95 (Wiki tab), 8ea9023 (templates, docs), 0f6aaaa (reveal as a section), 73bd8a1, 9364e92 (editor polish), 88d131c (review fixes), 64d84c8 and this handoff (docs).
   - Suite: 312 OK (1 POSIX-only skip). Impeccable detector on editor.html: `[]`.
 - **Sagas (landed fast-forward, 2026-10-19):**
@@ -42,11 +42,10 @@ Lorekeeper (command `lore`) is a standalone, stdlib-only story-world engine: Mar
 
 ## 5. Next actions
 
-1. **Owner:** review, then approve merging `feat/010-progressive-wiki` into `main` and pushing to the private repo.
-2. **Owner, in Claude Code inside a saga:** approve the project MCP server `lorekeeper` once when asked.
-3. After each future chapter freeze, run `_system/skills/story_wiki_update.md` before `cleanup` (the PIPELINE paragraph points there).
-4. Feature 011, the planning wiki (BUILD-PLAN "Planning wiki"), is next to specify. Not started.
-5. Carried over: Space chronology report (cards 051/052, four impossible SRD days); deferred saga keys in `chronology_deferred.md`.
+1. **Owner, in Claude Code inside a saga:** approve the project MCP server `lorekeeper` once when asked.
+2. After each future chapter freeze, run `_system/skills/story_wiki_update.md` before `cleanup` (the PIPELINE paragraph points there).
+3. Feature 011, the planning wiki (BUILD-PLAN "Planning wiki"), is next to specify. Not started.
+4. Carried over: Space chronology report (cards 051/052, four impossible SRD days); deferred saga keys in `chronology_deferred.md`.
 
 ## 6. Gotchas
 
