@@ -361,7 +361,11 @@ function revealInView(item) {
     }
     renderView();
   }
-  requestAnimationFrame(() => $('view').querySelector(`[data-path="${CSS.escape(item.path)}"]`)?.scrollIntoView({block: 'nearest', inline: 'nearest'}));
+  requestAnimationFrame(() => showStart($('view').querySelector(`[data-path="${CSS.escape(item.path)}"]`)));
+}
+// Scroll an item into view by its label, which sits at its start: a long life line can be wider than the view.
+function showStart(node) {
+  (node?.querySelector('.item-label') || node)?.scrollIntoView({block: 'nearest', inline: 'nearest'});
 }
 
 // ---- inspector ----------------------------------------------------------------------------
@@ -695,7 +699,39 @@ function fit() {
   const pad = Math.max(1440, (hi - lo) * .04);
   range = [lo - pad, hi + pad];
 }
+// The Timeline can be drawn at a set number of years per visible width (0 fits everything), wider than the view
+// and scrolled sideways. The scale and the year gridlines are kept between visits, like the wiki's date.
+const SCALES = [5, 10, 25, 50, 100, 500], SCALE_KEY = 'lore-timeline-scale', GRID_KEY = 'lore-timeline-grid';
+const MAX_WIDTH = 500000;   // ponytail: one SVG for the whole span; draw only the visible window if worlds outgrow this
+let timeChart = null, lastStep = 0;
+try {
+  ui.scale = SCALES.includes(Number(localStorage.getItem(SCALE_KEY))) ? Number(localStorage.getItem(SCALE_KEY)) : 0;
+  ui.grid = localStorage.getItem(GRID_KEY) !== 'off';
+} catch { ui.scale = 0; ui.grid = true; }
+const keep = (key, value) => { try { localStorage.setItem(key, value); } catch { /* not kept */ } };
+const scaled = () => tab === 'Timeline' && ui.scale > 0;
+const timeBox = () => $('view').querySelector('.scroll.chart');
+function fitAll() {
+  if (tab === 'Timeline') { ui.scale = 0; keep(SCALE_KEY, 0); }
+  fit(); renderView();
+}
+function setScale(years, anchor = .5) {
+  if (!range) fit();
+  // Keep the moment at the anchor (a fraction of the visible width) where it is.
+  const box = timeBox(), span = range[1] - range[0];
+  const at = scaled() && box && timeChart
+    ? range[0] + (box.scrollLeft + anchor * box.clientWidth - timeChart.left) / (timeChart.right - timeChart.left) * span
+    : range[0] + anchor * span;
+  ui.scale = years; keep(SCALE_KEY, years);
+  renderView();
+  const now = timeBox();
+  if (now && timeChart) now.scrollLeft = timeChart.x(at) - anchor * now.clientWidth;
+}
 function zoom(factor, anchor = .5) {
+  if (scaled()) {
+    const next = factor < 1 ? SCALES.filter(s => s < ui.scale).at(-1) ?? ui.scale : SCALES.find(s => s > ui.scale);
+    return next ? setScale(next, anchor) : fitAll();
+  }
   if (!range) fit();
   const span = Math.min(5.3e14, Math.max(60, (range[1] - range[0]) * factor));
   const center = range[0] + (range[1] - range[0]) * anchor;
@@ -703,6 +739,7 @@ function zoom(factor, anchor = .5) {
   scheduleRender();
 }
 function pan(fraction) {
+  if (scaled() && timeBox()) { timeBox().scrollBy({left: fraction * timeBox().clientWidth}); return; }
   if (!range) fit();
   const shift = (range[1] - range[0]) * fraction;
   range = range.map(v => v + shift);
@@ -715,8 +752,21 @@ function zoomControls() {
     button([icon('plus')], () => zoom(.5), {id: 'zoom-in', class: 'icon-only', 'aria-label': 'Zoom in', title: 'Zoom in (+)'}),
     button([icon('left')], () => pan(-.25), {id: 'pan-left', class: 'icon-only', 'aria-label': 'Move earlier', title: 'Move earlier'}),
     button([icon('right')], () => pan(.25), {id: 'pan-right', class: 'icon-only', 'aria-label': 'Move later', title: 'Move later'}),
-    button([icon('fit'), 'Fit'], () => { fit(); renderView(); }, {id: 'fit-all', title: 'Fit everything (0)'}));
+    button([icon('fit'), 'Fit'], fitAll, {id: 'fit-all', title: 'Fit everything (0)'}));
   return group;
+}
+function scaleControls() {
+  const scale = el('select', null, {id: 'time-scale'});
+  for (const years of [0, ...SCALES]) scale.append(el('option', years ? `${years} years` : 'Fit all', {value: years}));
+  scale.value = String(ui.scale);
+  scale.addEventListener('change', () => { Number(scale.value) ? setScale(Number(scale.value)) : fitAll(); });
+  const grid = el('input', null, {type: 'checkbox', id: 'show-grid'});
+  grid.checked = ui.grid;
+  grid.addEventListener('change', () => { ui.grid = grid.checked; keep(GRID_KEY, grid.checked ? 'on' : 'off'); renderView(); });
+  const scaleLabel = el('label', 'Scale'), gridLabel = el('label');
+  scaleLabel.append(scale);
+  gridLabel.append(grid, 'Gridlines');
+  return [scaleLabel, gridLabel];
 }
 function legend() {
   const box = el('div', null, {class: 'legend', 'aria-hidden': 'true'});
@@ -750,8 +800,14 @@ function chart(box, width, gutter = 0) {
   svg.addEventListener('wheel', event => {
     if (event.ctrlKey || event.metaKey) {
       event.preventDefault();
-      zoom(event.deltaY > 0 ? 1.25 : .8, Math.max(0, Math.min(1, (px(event) - left) / (right - left))));
-    } else if (event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
+      if (scaled()) {
+        // A pinch sends a stream of wheel events: step one scale at a time.
+        if (event.timeStamp - lastStep < 300) return;
+        lastStep = event.timeStamp;
+        zoom(event.deltaY > 0 ? 2 : .5, (event.clientX - box.getBoundingClientRect().left) / box.clientWidth);
+      } else zoom(event.deltaY > 0 ? 1.25 : .8, Math.max(0, Math.min(1, (px(event) - left) / (right - left))));
+    } else if (!scaled() && (event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY))) {
+      // (A scaled chart is scrolled natively instead.)
       event.preventDefault();
       pan((event.deltaX || event.deltaY) / (right - left));
     }
@@ -764,14 +820,15 @@ function chart(box, width, gutter = 0) {
     const finish = (e) => {
       cleanup();
       if (Math.abs(e.clientX - start) < DRAG_THRESHOLD) return;
+      if (scaled()) { box.scrollLeft -= e.clientX - start; return; }
       const shift = (e.clientX - start) / (right - left) * (initial[1] - initial[0]);
       range = initial.map(v => v - shift);
       renderView();
     };
     svg.addEventListener('pointerup', finish); svg.addEventListener('pointercancel', cleanup);
   });
-  const grid = (height) => {
-    for (const tick of marks) { const p = x(tick.minute); svg.prepend(svgEl('line', {x1: p, x2: p, y1: 0, y2: height, class: 'grid'})); }
+  const grid = (height, lines = true) => {
+    if (lines) for (const tick of marks) { const p = x(tick.minute); svg.prepend(svgEl('line', {x1: p, x2: p, y1: 0, y2: height, class: 'grid'})); }
     svg.setAttribute('height', height);
   };
   return {svg, x, left, right, grid, px};
@@ -788,7 +845,8 @@ function wireItems(svg) {
       event.preventDefault();
       const target = nodes[Math.max(0, Math.min(nodes.length - 1, next))];
       selectItem(target.dataset.path);
-      target.focus();
+      target.focus({preventScroll: true});
+      showStart(target);
     });
   }
 }
@@ -807,7 +865,7 @@ function typeChips(types, items) {
 function timeline(view) {
   const all = dated(), types = [...new Set(all.map(i => i.type))].sort(typeOrder);
   const bar = el('div', null, {class: 'toolbar'});
-  bar.append(zoomControls(), el('span', null, {class: 'spacer'}), legend());
+  bar.append(zoomControls(), ...scaleControls(), el('span', null, {class: 'spacer'}), legend());
   view.append(bar);
   if (!all.length) {
     view.append(emptyState('Nothing is dated yet', 'Give an item a date, or a person a birth date, in the inspector and it appears here.'));
@@ -816,7 +874,21 @@ function timeline(view) {
   if (types.length > 1) view.append(typeChips(types, all));
   const box = scrollBox('chart');
   view.append(box);
-  const width = Math.max(280, box.clientWidth), c = chart(box, width);
+  const fitted = Math.max(280, box.clientWidth);
+  let width = fitted, capped = false;
+  if (scaled()) {
+    // Everything is drawn, as wide as the scale needs: the visible width spans the chosen number of years.
+    fit();
+    const want = ui.scale * UNIT.year;
+    if (range[1] - range[0] < want) { const mid = (range[0] + range[1]) / 2; range = [mid - want / 2, mid + want / 2]; }
+    width = Math.round(28 + (fitted - 28) * (range[1] - range[0]) / want);
+    capped = width > MAX_WIDTH;
+    width = Math.min(width, MAX_WIDTH);
+    box.classList.add('wide');
+    box.tabIndex = 0; box.setAttribute('role', 'region'); box.setAttribute('aria-label', 'Timeline, scrolls sideways');
+  }
+  const c = timeChart = chart(box, width);
+  c.svg.dataset.box = fitted;
   c.svg.setAttribute('aria-label', 'Timeline. Use the arrow keys to move between items.');
   const ROW = 36, BAND = 30;
   // Someone with no recorded death is alive: their life line runs on to the latest date in the story.
@@ -862,9 +934,10 @@ function timeline(view) {
     }
     y += Math.max(1, rows.length) * ROW + 12;
   }
-  c.grid(y);
+  c.grid(y, ui.grid);
   wireItems(c.svg);
   const undated = graph.items.length - all.length, note = el('p', null, {class: 'hint'});
+  if (capped) note.append('This world spans too many years to draw at that scale, so the chart is as wide as it can be. ');
   note.append(saga ? 'Select an item to propose a change. ' : 'Select an item to open it. Drag an exactly dated item sideways to move it, '
     + 'or drag either end of a bar to change just its start or end. ');
   if (undated) note.append(`${plural(undated, 'item')} without a date ${undated === 1 ? 'is' : 'are'} not shown; `,
@@ -1767,14 +1840,15 @@ document.addEventListener('keydown', event => {
   if (typing(target) || event.ctrlKey || event.metaKey || event.altKey) return;
   if (event.key === '/') { event.preventDefault(); $('find').focus(); return; }
   if (!['Timeline', 'Subway'].includes(tab)) return;
-  const action = {'+': () => zoom(.5), '=': () => zoom(.5), '-': () => zoom(2), '_': () => zoom(2), '0': () => { fit(); renderView(); }}[event.key];
+  const action = {'+': () => zoom(.5), '=': () => zoom(.5), '-': () => zoom(2), '_': () => zoom(2), '0': fitAll}[event.key];
   if (action) { event.preventDefault(); action(); }
 });
 window.addEventListener('beforeunload', event => { if (anyDirty()) { event.preventDefault(); event.returnValue = ''; } });
 // Charts are drawn at the box's real width; redraw when it changes (window resize, a scrollbar appearing).
 new ResizeObserver(() => {
   const box = $('view').querySelector('.scroll.chart'), svg = box?.querySelector('#time-chart');
-  if (svg && Math.abs(box.clientWidth - Number(svg.getAttribute('width'))) > 1 && !dragging) scheduleRender();
+  // A scaled timeline is wider than its box: compare the box width it was drawn for.
+  if (svg && Math.abs(box.clientWidth - Number(svg.dataset.box || svg.getAttribute('width'))) > 1 && !dragging) scheduleRender();
 }).observe($('view'));
 
 document.title = `${worldName} · Lorekeeper`;

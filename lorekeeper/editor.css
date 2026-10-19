@@ -115,6 +115,8 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 360px)
 .legend svg { width: 26px; height: 14px; vertical-align: middle; }
 .scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; border: 1px solid var(--hair); border-radius: 8px; background: var(--panel); overscroll-behavior: contain; }
 .scroll.chart { overflow-x: hidden; }
+.scroll.chart.wide { overflow-x: auto; }
+.wide .axis { width: max-content; }
 .empty { margin: auto; max-width: 52ch; text-align: center; padding: 48px 20px; display: grid; gap: 12px; justify-items: center; }
 .empty h2 { font: 600 24px/1.25 var(--serif); }
 .empty p { color: var(--muted); }
