@@ -720,9 +720,10 @@ function zoomControls() {
 }
 function legend() {
   const box = el('div', null, {class: 'legend', 'aria-hidden': 'true'});
-  for (const [kind, text] of [['', 'Exact'], ['fuzzy', 'Approximate']]) {
-    const sample = svgEl('svg', {viewBox: '0 0 26 14'}), g = svgEl('g', {class: `cat-event ${kind}`});
-    g.append(svgEl('rect', {x: 1, y: 2, width: 24, height: 10, rx: 3, class: 'mark'}));
+  for (const [kind, text] of [['', 'Exact'], ['fuzzy', 'Approximate'], ['life', 'Alive, no death recorded']]) {
+    const sample = svgEl('svg', {viewBox: '0 0 26 14'}), g = svgEl('g', {class: `cat-event ${kind === 'life' ? '' : kind}`});
+    g.append(kind === 'life' ? svgEl('rect', {x: 1, y: 5, width: 24, height: 4, rx: 2, class: 'life'})
+      : svgEl('rect', {x: 1, y: 2, width: 24, height: 10, rx: 3, class: 'mark'}));
     sample.append(g);
     const entry = el('span');
     entry.append(sample, ` ${text}`);
@@ -818,19 +819,22 @@ function timeline(view) {
   const width = Math.max(280, box.clientWidth), c = chart(box, width);
   c.svg.setAttribute('aria-label', 'Timeline. Use the arrow keys to move between items.');
   const ROW = 36, BAND = 30;
+  // Someone with no recorded death is alive: their life line runs on to the latest date in the story.
+  const storyEnd = Math.max(...all.map(i => i.hi));
   let y = 6;
   for (const type of types) {
     if (ui.hidden.has(type)) continue;
     const items = all.filter(i => i.type === type), rows = [], placed = [];
     for (const item of items) {
-      const x0 = c.x(item.lo), x1 = c.x(item.hi);
-      if (x1 < c.left - 1 || x0 > c.right + 1) continue;
-      const v0 = Math.max(c.left, x0), v1 = Math.min(c.right, x1), w = labelWidth(item.name);
-      const lx = Math.max(c.left, Math.min(v0, c.right - w)), start = Math.min(lx, v0) - 6, end = Math.max(v1, lx + w) + 12;
+      const living = isPerson(item) && !hasEnd(item) && item.hi < storyEnd;
+      const x0 = c.x(item.lo), x1 = c.x(item.hi), xl = living ? c.x(storyEnd) : x1;
+      if (xl < c.left - 1 || x0 > c.right + 1) continue;
+      const v0 = Math.max(c.left, x0), v1 = Math.min(c.right, x1), vl = Math.min(c.right, xl), w = labelWidth(item.name);
+      const lx = Math.max(c.left, Math.min(v0, c.right - w)), start = Math.min(lx, v0) - 6, end = Math.max(vl, lx + w) + 12;
       let row = rows.findIndex(e => e <= start);
       if (row < 0) { row = rows.length; rows.push(0); }
       rows[row] = end;
-      placed.push({item, row, x0, x1, v0, v1, lx, start, end, w});
+      placed.push({item, row, x0, x1, v0, v1, vl, living, lx, start, end, w});
     }
     const outside = items.length - placed.length;
     c.svg.append(svgEl('text', {x: c.left, y: y + 18, class: 'band-label'}, typePlural(type)),
@@ -840,14 +844,18 @@ function timeline(view) {
     y += BAND;
     for (const p of placed) {
       const top = y + p.row * ROW, item = p.item, mid = top + 24;
+      const when = whenText(item) + (p.living ? ', alive (no death recorded)' : '');
       const g = svgEl('g', {class: `item cat-${category(item)}${fuzzy(item) ? ' fuzzy' : ''}`, role: 'button', tabindex: '-1',
-        'data-path': item.path, 'aria-label': `${item.name}, ${typeLabel(item.type)}, ${whenText(item)}`,
+        'data-path': item.path, 'aria-label': `${item.name}, ${typeLabel(item.type)}, ${when}`,
         id: `timeline-${encodeURIComponent(item.path)}`});
       g.append(svgEl('rect', {class: 'hit', x: p.start, y: top + 1, width: p.end - p.start - 6, height: ROW - 3, rx: 5}),
-        svgEl('text', {x: p.lx, y: top + 14, class: 'item-label'}, item.name),
+        svgEl('text', {x: p.lx, y: top + 14, class: 'item-label'}, item.name));
+      const lifeFrom = Math.max(c.left, p.x1);
+      if (p.living && p.vl > lifeFrom) g.append(svgEl('rect', {x: lifeFrom, y: mid - 2, width: p.vl - lifeFrom, height: 4, rx: 2, class: 'life'}));
+      g.append(
         p.x1 - p.x0 < 6 ? svgEl('circle', {cx: Math.max(c.left, Math.min(c.right, p.x0)), cy: mid, r: 5.5, class: 'mark'})
           : svgEl('rect', {x: p.v0, y: mid - 5, width: Math.max(2, p.v1 - p.v0), height: 10, rx: 3, class: 'mark'}),
-        svgEl('title', {}, `${item.name} · ${whenText(item)}`));
+        svgEl('title', {}, `${item.name} · ${when}`));
       if (!saga) enableRedate(g, item, c, {x: p.lx + p.w + 4, y: top + 14,
         bar: p.x1 - p.x0 < 6 ? null : {v0: p.v0, v1: p.v1, x0: p.x0, x1: p.x1, mid}});
       c.svg.append(g);
@@ -1409,6 +1417,9 @@ async function wikiLoad() {
     }
     if (wiki.loading !== want) return;   // a newer request is on its way: never show this older answer
     Object.assign(wiki, {index, card, cardError, error: null});
+    // The inspector follows the open card in Complete; at a chapter it is cleared, since its fields would give later facts away.
+    const follow = card?.page && byPath.has(card.page) ? card.page : wiki.open ? '' : selected;
+    if (follow !== selected && tab === 'Wiki') { selected = follow; renderInspector(); }
   } catch (error) { if (wiki.loading !== want) return; wiki.error = error; }
   wiki.loading = null; wiki.loaded = want;
   if (tab === 'Wiki') renderView();

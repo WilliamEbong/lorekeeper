@@ -133,6 +133,7 @@ svg .hit { fill: transparent; }
 svg .item:hover .hit { fill: var(--soft); opacity: .5; }
 svg .mark { fill: var(--c, var(--accent)); stroke: var(--panel); stroke-width: 1.5; }
 svg .fuzzy .mark { fill-opacity: .28; stroke: var(--c, var(--accent)); stroke-dasharray: 3 2; }
+svg .life { fill: var(--c, var(--accent)); fill-opacity: .4; }
 svg .item-label { font-size: 12.5px; }
 svg .item.selected .mark, svg .item:focus-visible .mark { stroke: var(--focus); stroke-width: 3; stroke-dasharray: none; }
 svg .item.selected .item-label { font-weight: 700; }
