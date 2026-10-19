@@ -1,6 +1,6 @@
 # HANDOFF — Lorekeeper
 
-Written 2026-10-19, at the end of run 5. **Feature 011, the planning wiki, is built, reviewed and landed in the three sagas.** The Lorekeeper branch `feat/011-planning-wiki` is local only and waits for the owner's approval to merge and push. This document is authoritative, including over memory and older summaries. History is in SESSION-LOG.md and BUILD-PLAN.md ("Run 5").
+Written 2026-10-19, at the end of run 5. **Feature 011, the planning wiki, is built, reviewed, merged into main, pushed, and landed in the three sagas, together with the owner's timeline controls (year scale, gridline toggle, side scroll).** This document is authoritative, including over memory and older summaries. History is in SESSION-LOG.md and BUILD-PLAN.md ("Run 5").
 
 ## 1. Snapshot
 
@@ -22,19 +22,16 @@ Lorekeeper (command `lore`) is a standalone, stdlib-only story-world engine.
 ## 2. Current state
 
 - **Lorekeeper:**
-  - **Branch:** `feat/011-planning-wiki` (local commits only; not pushed, not merged).
-    - It contains main up to 65c93d8 (the other session's merged work).
-    - HEAD is the docs commit after 12ef7b3. 12ef7b3 is the engine vendored into the sagas.
-  - **Checks:** suite 358 OK (1 POSIX-only skip). Impeccable detector: editor.html clean; editor.css has one finding (tab underline) that main has too.
-  - **Earlier fix branch:** `fix/mcp-cache-hints` (68b63e5, the 2026-07-28 MCP fix) was merged into main by the other session and pushed.
-  - **Timeline branch:** `feat/timeline-scale` (a1fbd5d, worktree `lk-scratch/lk-timeline-scale`) holds the owner's mid-run timeline request: year scale, gridline toggle, side scroll. It was built by a separate session, is not merged, and its session reports it merges cleanly.
+  - **main** (pushed to the private repo, owner-approved 2026-10-19) holds feature 011 and the timeline controls (`feat/timeline-scale` merged at 3b1bc0c, the engine vendored into the sagas), plus the other session's work and the 2026-07-28 MCP fix.
+  - **Checks:** suite 358 OK (1 POSIX-only skip). Impeccable detector: editor.html clean; editor.css has one finding (tab underline) that predates 011.
+  - **Leftover branches:** `feat/011-planning-wiki`, `feat/timeline-scale` (worktree `lk-scratch/lk-timeline-scale`) and `fix/mcp-cache-hints` are merged and can be deleted.
 - **Sagas** (landed by fast-forward on 2026-10-19):
 
   | Saga | Live HEAD | Engine | Planning Wiki | In progress |
   |---|---|---|---|---|
-  | Realm | `de4cee0` | `12ef7b3` | 150 pages, 952 facts | CH004 READY_FOR_HUMAN |
-  | Space | `21364f4` | `12ef7b3` | 229 pages, 3,185 facts | CH005 READY_FOR_HUMAN |
-  | Zombies | `b628d43` | `12ef7b3` | 209 pages, 1,093 facts | CH004 READY_FOR_HUMAN |
+  | Realm | `565f433` | `3b1bc0c` | 150 pages, 952 facts | CH004 READY_FOR_HUMAN |
+  | Space | `4dfdabe` | `3b1bc0c` | 230 pages (Mara Chen added) | CH005 READY_FOR_HUMAN |
+  | Zombies | `5674e84` | `3b1bc0c` | 209 pages, 1,093 facts | CH004 READY_FOR_HUMAN |
 
   Each saga has:
   - a `planning_wiki` key in `_system/lorekeeper.json`: folder `../Planning Wiki`, sources in AUTHORITY.md order, `exclude_names`;
@@ -48,11 +45,11 @@ Lorekeeper (command `lore`) is a standalone, stdlib-only story-world engine.
 
 ## 3. What the owner may want to decide
 
-- **Merge and push** `feat/011-planning-wiki` into main (private repo). It merges cleanly with main as of 65c93d8. Then decide on `feat/timeline-scale`.
+- **Settled by the owner (2026-10-19):** "Sarkis" is an important character's surname, so it is not excluded from link matching (Zombies); the Assault pilot Mara Chen is fine, so Space has a Mara Chen planning page from the name register (the CH004 pilot who dies stays unidentified on the page).
 - **Review findings in the saga planning documents** (no change made):
   - Space WB §CI-4 names Mara Chen and Tiriq Sen near the Sable Five. It is a naming-collision list; the members follow §X.14.2 and ruling N-12.
   - Space HO-029 revised the demonologist staffing without stating it.
-  - Space name register: Mira Quill is called human (the World Bible says digital person), and the Assault pilot is called "Mara Chen" (the mystery ledger keeps the pilot anonymous).
+  - Space name register: Mira Quill is called human (the World Bible says digital person).
   - Realm: the Architecture's Ch 230 card names the Great Ship "the Long Detour", while the register keeps its name pending.
 - **Planning wiki choices to confirm:**
   - Realm and Zombies record mystery answers as decided facts (it is the author's view).
@@ -87,8 +84,7 @@ Lorekeeper (command `lore`) is a standalone, stdlib-only story-world engine.
 
 ## 5. Next actions
 
-1. Owner: approve merging `feat/011-planning-wiki` (and, separately, `feat/timeline-scale`) into main and pushing to the private repo. **← NEXT**
-2. In a saga, try the planning wiki: run `python _system/scripts/saga.py timeline`, open the Wiki tab and pick Planning.
+1. In a saga, try the planning wiki: run `python _system/scripts/saga.py timeline`, open the Wiki tab and pick Planning.
 3. For a planning change, tell the AI in plain words. It follows `_system/skills/planning_wiki_change.md`.
 4. After each chapter freeze, keep running `story_wiki_update` (unchanged).
 
