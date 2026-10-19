@@ -1420,6 +1420,11 @@ async function wikiLoad() {
     }
     if (plan && !wiki.hasPlan) wiki.asOf = null;
     const index = await api('wiki', typeof wiki.asOf === 'number' ? {as_of: wiki.asOf} : {});
+    if (wiki.carried) {   // an entry carried over from the other mode stays open only if this mode has it
+      const names = ((planMode() ? wiki.planIndex : index)?.groups || []).flatMap(g => g.entries.flatMap(e => [e.name, ...(e.also || [])]));
+      if (!names.some(n => n.toLowerCase() === String(wiki.open).toLowerCase())) Object.assign(wiki, {open: null, openName: ''});
+      wiki.carried = false;
+    }
     let card = null, cardError = null;
     if (wiki.open) {
       try { card = planMode() ? await api('planning', {item: wiki.open}) : await api('wiki', {item: wiki.open, ...(wiki.cardAsOf == null ? {} : {as_of: wiki.cardAsOf})}); }
@@ -1458,7 +1463,7 @@ function wikiView(view) {
   filter.value = wiki.filter;
   filter.addEventListener('input', () => { wiki.filter = filter.value; $('view').querySelector('.wiki-index')?.replaceWith(wikiIndex()); });
   const picker = chapterSelect('wiki-as-of', wiki.asOf, (value) => {
-    if ((value === 'plan') !== planMode() && wiki.open) { wiki.open = wiki.openName; wiki.card = null; }   // the same entry, by name
+    if ((value === 'plan') !== planMode() && wiki.open) { wiki.open = wiki.openName; wiki.card = null; wiki.carried = true; }   // the same entry, by name
     wiki.asOf = value; wiki.cardAsOf = value === 'plan' ? null : value; wiki.form = null; wiki.cite = null; wiki.review = null;
     try { value == null ? localStorage.removeItem(AS_OF_KEY) : localStorage.setItem(AS_OF_KEY, String(value)); } catch { /* not kept */ }
     renderView();
@@ -1713,7 +1718,7 @@ function citeBox(id) {
 }
 function chips(parent, sources, owner) {
   sources.forEach((s, i) => {
-    const id = `${owner}|${i}`, label = s.source ? `${s.source} §${s.section}` : s.ref;
+    const id = `${owner}|${i}`, label = (s.source ? `${s.source} §${s.section}` : s.ref).replace(/`/g, '');
     parent.append(button(label, () => s.source && s.found ? openCite(id, s.source, s.section) : null,
       {class: `cite${s.found ? '' : ' missing'}`, id: `cite-${owner}-${i}`.replace(/[^\w-]/g, '-'),
        'aria-expanded': s.found ? String(wiki.cite === id) : null, disabled: s.found ? null : '',
