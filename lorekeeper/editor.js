@@ -165,6 +165,17 @@ function findingText(f) {
     return `${label(m[1])}: no item is called “${m[2]}”. Create it, or fix the spelling.`;
   if (f.code === 'ROLE_TYPE' && (m = /^(\w+) -> \[\[(.+?)\]\] is a (\w+), expected (.+)$/.exec(f.detail)))
     return `${label(m[1])} points to “${m[2]}”, a ${typeLabel(m[3]).toLowerCase()}, but should point to a ${m[4].split('/').map(t => typeLabel(t).toLowerCase()).join(' or ')}.`;
+  if (f.code === 'UNKNOWN_TYPE' && (m = /^type '(.+)' is not in the schema$/.exec(f.detail)))
+    return `“${m[1]}” isn’t one of this world’s types. Change the item’s Type, or add the type to the world’s settings.`;
+  if (f.code === 'BAD_ENCODING') return 'Open this file in a text editor and save it as UTF-8 text.';
+  if (f.code === 'BAD_FRONTMATTER') return 'The details at the top of this file, between its two --- lines, can’t be read. Open the file and check them.';
+  if (f.code === 'UNSUPPORTED_FRONTMATTER') return 'Lorekeeper keeps this line as it is but can’t read it. Write it as “name: value” on one line.';
+  if (f.code === 'DUPLICATE_ID' && (m = /^(\S+) also in (.+)$/.exec(f.detail)))
+    return `This file and ${m[2]} both claim to be the same item (${m[1]}). Change the ID in one of them.`;
+  if (f.code === 'DUPLICATE_NAME' && (m = /^(.+) also in (.+)$/.exec(f.detail)))
+    return `${m[2]} has the same name, “${m[1]}”, so connections can’t tell them apart. Rename one of them.`;
+  if (f.code === 'AMBIGUOUS_NAME' && (m = /^\[\[(.+?)\]\] could mean (.+) \(.+\) or (.+) \(.+\)$/.exec(f.detail)))
+    return `“${m[1]}” could mean ${m[2]} or ${m[3]}, so connections may pick the wrong one. Rename one, or remove the extra alias.`;
   if (f.code === 'DATE_UNPARSED' && (m = /^(\w+): (.*)$/.exec(f.detail)))
     return `${label(m[1])} “${m[2]}” can’t be read as a date. Try 1764, July 1764, 12 July 1764 or about 1764.`;
   if ((m = /^(.+) \(([^()]*)\): (.+); (.+) \(([^()]*)\)$/.exec(f.detail))) {
