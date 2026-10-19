@@ -312,7 +312,7 @@ class Story:
             for s in entry.parsed:
                 if s["heading"].lower() == "names":
                     continue
-                shown = [self._fact(f, n, tag) for f in s["facts"] if covers(f["from"], f["to"], n)]
+                shown = [self._fact(f, n, tag, entry.key) for f in s["facts"] if covers(f["from"], f["to"], n)]
                 if tag and not shown:
                     continue
                 into = next((o for o in out if o["heading"].lower() == s["heading"].lower()), None)
@@ -340,10 +340,10 @@ class Story:
         card["chapters"] = self.chapters()
         return card
 
-    def _fact(self, f, n, tag):
+    def _fact(self, f, n, tag, key):
         out = {"text": self.guard(f["text"], n), "from": f["from"], "to": f["to"]}
         if tag:
-            out["as"] = tag
+            out["as"], out["key"] = tag, key   # the folded page that holds it
         return out
 
     def _worked_out(self, r, n, out):

@@ -284,3 +284,49 @@ tbody tr.selected { background: var(--soft); }
   .back-to-view { display: inline-flex; }
   .popover { position: fixed; left: 16px; right: 16px; top: auto; width: auto !important; }
 }
+
+/* Story wiki */
+.wiki { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(200px, 280px) minmax(0, 1fr); gap: 12px; margin-top: 10px; }
+.wiki-index { display: grid; align-content: start; gap: 6px; }
+.wiki-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 1px; }
+.wiki-list li { display: grid; }
+.wiki-list .hint { padding: 0 10px 4px; font-size: 12px; }
+button.wiki-entry { border: 0; background: none; justify-content: flex-start; text-align: left; padding: 5px 10px; border-radius: 6px; overflow-wrap: anywhere; }
+button.wiki-entry[aria-current="true"] { background: var(--soft); color: var(--accent); font-weight: 600; }
+.wiki-card { display: grid; align-content: start; gap: 16px; padding: 18px 22px; }
+.wiki-head { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: start; justify-content: space-between; }
+.wiki-head > div:first-child { display: grid; gap: 4px; min-width: 0; flex: 1 1 260px; }
+.wiki-head h2 { font: 600 24px/1.25 var(--serif); overflow-wrap: anywhere; }
+.wiki-head h2:focus { outline: none; }
+.wiki-head .meta { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; color: var(--muted); font-size: 13px; }
+.card-toggle { display: inline-flex; align-items: center; gap: 2px; }
+.card-toggle select { max-width: 15em; }
+.wiki-section { display: grid; gap: 6px; }
+.wiki-section h3 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.facts { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.fact { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding-left: 14px; position: relative; }
+.fact::before { content: ""; position: absolute; left: 2px; top: .62em; width: 5px; height: 5px; border-radius: 50%; background: var(--line); }
+.fact .text { flex: 1 1 24ch; min-width: 0; overflow-wrap: anywhere; }
+.fact .marks { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.fact .ch { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fact .tag { font-size: 12px; padding: 0 7px; border-radius: 999px; background: var(--sunken); color: var(--muted); white-space: nowrap; }
+.fact.ended .text { color: var(--muted); }
+.fact.ended::before { background: transparent; border: 1px solid var(--line); }
+button.small { font-size: 13px; padding: 2px 8px; }
+.wiki-form { display: grid; gap: 8px; padding: 12px; background: var(--sunken); border-radius: 8px; width: 100%; }
+.wiki-form .row { display: flex; gap: 8px; flex-wrap: wrap; }
+.chapter-field { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
+.chapter-field input { width: 6em; }
+.wiki-fields { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; font-size: 14px; }
+.wiki-fields dt { color: var(--muted); font-weight: 600; font-size: 13px; }
+.wiki-fields dd { margin: 0; overflow-wrap: anywhere; }
+.working { background: var(--sunken); border-radius: 8px; padding: 10px 14px; }
+.working summary { cursor: pointer; font-size: 13px; color: var(--muted); font-weight: 600; }
+.md { display: grid; gap: 8px; margin-top: 8px; }
+.md h4 { font-size: 14px; margin-top: 4px; }
+.md ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+@media (max-width: 900px) {
+  .wiki { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .wiki-index { max-height: 40vh; }
+  .wiki-card { padding: 16px; }
+}
