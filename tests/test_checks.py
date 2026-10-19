@@ -514,3 +514,21 @@ class AgelessPeople(unittest.TestCase):
         self.assertIn("AGE_LIMIT", world(None))
         self.assertNotIn("AGE_LIMIT", world("none"))
         self.assertNotIn("AGE_LIMIT", world("6000"))
+
+    def test_probably_dead_by_the_story_end(self):
+        """No recorded death, yet older than anyone could be by the latest date in the story."""
+        from lorekeeper import checks
+        from lorekeeper.store import Item, Project
+        def world(born, **extra):
+            person = Item.from_fields("P.md", {"id": "P", "type": "character", "canonical_name": "P", "born": born,
+                                               **extra})
+            last = Item.from_fields("Last.md", {"id": "L", "type": "event", "canonical_name": "Last",
+                                                "date": "2071-03-03"})
+            return [f for f in checks.run(Project.from_items(".", {}, [person, last])) if f["code"] == "PROBABLY_DEAD"]
+        found = world("1900")
+        self.assertEqual([(f["severity"], f["line"] > 1) for f in found], [("WARN", True)])
+        self.assertIn("record died", found[0]["detail"])
+        self.assertEqual(world("~1950"), [])                     # 121 at most: still possible
+        self.assertEqual(world("1900", died="1980"), [])         # the death is recorded
+        self.assertEqual(world("~3000 BC", max_age="none"), [])  # ageless
+        self.assertEqual(len(world("1990", max_age="60")), 1)    # a person's own limit counts
