@@ -1,34 +1,64 @@
-# HANDOFF — Lorekeeper (run 4 in progress)
+# HANDOFF — Lorekeeper
 
-Written mid-run, 2026-10-19, while three backfill agents work. Authoritative over memory. History: SESSION-LOG.md (the "Run 4" entries), BUILD-PLAN.md ("Run 4" section and its checklist), specs/010-progressive-wiki (spec with Clarifications, plan.md, tasks.md).
+Final state after run 4 (2026-10-19). Authoritative, including over memory and older summaries. History: SESSION-LOG.md (the "Run 4" entries), BUILD-PLAN.md ("Run 4" section), specs/010-progressive-wiki (spec with Clarifications, plan.md, tasks.md).
 
-## 1. Where things stand
-- **Lorekeeper** (branch `feat/010-progressive-wiki`, local commits only, never pushed or merged): feature 010 is built and green.
-  - Commits: 21c5931 (clarify/plan/tasks), 25cd2aa (engine, ops, CLI, MCP), 66b3d95 (Wiki tab), 8ea9023 (templates and docs), 0f6aaaa ("Revealed to be" section). Suite: 297 OK, 1 POSIX-only skip.
-  - Playwright evidence on lk-scratch/ui-wiki is in SESSION-LOG; screenshots in `.playwright-mcp/` (gitignored).
-- **Sagas** (work only under `C:\Users\Owner\lk-scratch`):
-  - Fresh clones: `lk-scratch/sagas/<saga>`; each has one new commit "system: Story Wiki layer (vendored Lorekeeper 0f6aaaa, ...)" (Realm 9d5a021, Space 26e123e, Zombies cef47a6). Clone suites: 219 / 216 / 211 OK with parity.
-  - Probes (full copies of the live repos): `lk-scratch/probe6`. Before-baseline: `lk-scratch/run4-before` (suites OK, health, status and validate per chapter, `trees.txt` with git tree ids of Wiki, roles, skills, templates, workflow). In-progress packets verify (`snap/verify_packets.py`).
-  - SC-7 handshake passes on all three clones (`snap/handshake.py <clone>` and `... dot`).
-  - **In flight:** three backfill agents writing `Story Wiki/` in the clones, following `snap/story_backfill_brief.md`. A Lorekeeper reviewer agent is reviewing `main...feat/010-progressive-wiki`.
-- Live saga HEADs at the start: Realm 6ee4816, Space 87db843, Zombies 89095c4. Re-check before landing.
+## 1. Snapshot
 
-## 2. Exact next steps
-1. When each backfill agent reports: inspect its Story Wiki (check, index per chapter, spot-check), then commit in the clone: `git add -- "Story Wiki" _system/knowledge/agent_decisions.md` as two commits (`wiki: Story Wiki backfill through CH00k`; decisions `knowledge: Story Wiki backfill decisions`). Never stage anything else.
-2. Fix confirmed reviewer findings in Lorekeeper (TDD), commit, re-vendor (`snap/vendor4.sh`), commit `system:` in the clones, rerun clone suites.
-3. Replay on probes: `git -C probe6/<saga> fetch <clone> main && git -C probe6/<saga> merge --ff-only FETCH_HEAD`; run `snap/baseline.sh /c/Users/Owner/lk-scratch/probe6 /c/Users/Owner/lk-scratch/run4-after`; require identical status/validate files and health; Wiki/roles/templates tree ids unchanged (skills tree changes only by the new skill and README row); `verify_packets.py` OK.
-4. After-freeze proof on a probe copy: `snap/reset_chapter.py <saga> <last frozen>` then a fresh agent runs `_system/skills/story_wiki_update.md` for that chapter; compare with the backfill.
-5. Saga reviewer (fresh context): three characters per saga against each chapter's CURRENT_WORLD_BIBLE_OUT.md.
-6. Playwright on `saga.py timeline` in a clone: Wiki tab, Propose a fact queues a request, screenshots.
-7. Land with `lk-scratch/snap/land.sh "<saga>" <expected live HEAD>` (fast-forward only). If a live repo moved, re-clone and redo.
-8. Finish: full checks, docs, final HANDOFF, memory, delete cron `6ae28ced`, PushNotification, SendUserFile screenshots, report.
+Lorekeeper (command `lore`) is a standalone, stdlib-only story-world engine: Markdown files, one per item; dates, ages and continuity checks; one operations table driving a CLI (`--json`), an MCP server (`lore mcp`) and a local browser editor (`lore serve`). Feature 010 adds the **progressive story wiki**: chapter stamps on facts (`[ch 7]`, `[ch 2-5]`), an index and cards as the reader knows them after chapter N, and a complete mode.
 
-## 3. Gotchas
-- Python heredocs through the shell tool lose backslashes; use the Edit tool or script files. Several engine files are CRLF (checks, dates, fm, interop, mcp, ops, serve, store, timeinfo, editor.js, tests/test_mcp, tests/test_cli); check with `file` and `git diff --stat`.
-- Playwright may only write screenshots inside the Lorekeeper folder (`.playwright-mcp/`).
-- `saga.py cleanup` deletes approved deltas, so the after-freeze routine runs between freeze and cleanup.
-- Saga Lorekeeper project root is `Wiki/`; settings come from `_system/lorekeeper.json` (`--config`); the Story Wiki is `../Story Wiki` from there.
-- Saga shared files (skills, roles, templates, PIPELINE, vendored engine) must be identical in all three sagas and must not mention any Wiki page title, saga name or HO id.
+## 2. Current state
 
-## 4. Decisions to surface to the owner
-In SESSION-LOG with undo notes: `--config` and `mcp --saga`; `fact-remove` and `fact-end --reopen` for Undo; companion naming `<Name> (story).md`; narrative items never wiki entries; names resolve links late; `kind`/`revealed_as` accept any type; reveal also as a "Revealed to be" section; the after-freeze routine sits between freeze and cleanup.
+- **Lorekeeper:** branch `feat/010-progressive-wiki`, local commits only. **Not pushed and not merged into `main`**; both wait for the owner. `main` = `origin/main` = d0b564a.
+  - Run 4 commits: 8b4ea81, 21c5931 (spec work), 25cd2aa (engine, ops, CLI, MCP), 66b3d95 (Wiki tab), 8ea9023 (templates, docs), 0f6aaaa (reveal as a section), 73bd8a1, 9364e92 (editor polish), 88d131c (review fixes), 64d84c8 and this handoff (docs).
+  - Suite: 312 OK (1 POSIX-only skip). Impeccable detector on editor.html: `[]`.
+- **Sagas (landed fast-forward, 2026-10-19):**
+
+  | Saga | Live HEAD | Vendored engine | Story Wiki | In progress (untouched) |
+  |---|---|---|---|---|
+  | Realm | `bbf9b36` | `88d131c` | CH001–003, 29 entries | CH004 at READY_FOR_HUMAN |
+  | Space | `1390389` | `88d131c` | CH001–004, 24 entries | CH005 at READY_FOR_HUMAN |
+  | Zombies | `5821c8f` | `88d131c` | CH001–003, 21 entries | CH004 at READY_FOR_HUMAN |
+
+  Each saga has: the `story_wiki` key in `_system/lorekeeper.json`, a `Story Wiki/` folder, the shared skill `_system/skills/story_wiki_update.md` with its README row and one paragraph in PIPELINE §6 (after `freeze N`, before `cleanup N`), and `.mcp.json` running `lore mcp --saga`.
+- **In flight:** nothing. Resume cron deleted.
+
+## 3. What feature 010 does (for the owner)
+
+- **Progressive mode:** pick chapter N and the wiki lists only what the reader has met, under the names the reader knows; each entry opens a card with its own chapter control. Someone seen before being named is listed under the reader's description. A secret identity is its own card until the reveal chapter, then folded in ("as Lord Vane").
+- **Complete mode:** everything as of the latest chapter, all identities on one card, ended facts marked "no longer current", page fields and the working page shown.
+- **Spoiler guard:** at chapter N no answer (editor, CLI, MCP JSON) contains a hidden name, a later chapter's title, a page path or a fact from later.
+- **AI use:** operations `wiki`, `fact-add`, `fact-end`, `fact-remove` (CLI with `--json`, MCP tools, editor API) with guides written for AI readers; facts are written only through them.
+
+## 4. Decisions the owner may want to change (each logged with how to undo it)
+
+1. `--config FILE` for worlds whose settings are not in `lore.json`; `lore mcp --saga` offers only reading tools and the three fact tools, and refuses them without a story folder.
+2. Undo uses a fourth operation, `fact-remove`, and `fact-end --reopen`.
+3. Companion pages are named `<Name> (story).md` under `Story Wiki/<Type plural>/`.
+4. Chapters, books, sessions and saga chapter cards are never wiki entries; they only label the chapter list.
+5. A reveal can be written as a `## Revealed to be` section (so AI can record it with fact-add).
+6. Entry keys are opaque (`id:…`); in progressive mode the editor's Edit button and page paths appear only in Complete.
+7. The saga after-freeze update runs between `freeze N` and `cleanup N` (cleanup deletes the approved deltas it reads). It is outside the stage machine; skipping it only leaves the Story Wiki behind.
+8. Backfill scope: standalone story pages only for named people who matter; e.g. no page for Zombies' Sarkis Accord or Realm's machine Mapping One (recorded in each saga's agent_decisions.md).
+
+## 5. Next actions
+
+1. **Owner:** review, then approve merging `feat/010-progressive-wiki` into `main` and pushing to the private repo.
+2. **Owner, in Claude Code inside a saga:** approve the project MCP server `lorekeeper` once when asked.
+3. After each future chapter freeze, run `_system/skills/story_wiki_update.md` before `cleanup` (the PIPELINE paragraph points there).
+4. Feature 011, the planning wiki (BUILD-PLAN "Planning wiki"), is next to specify. Not started.
+5. Carried over: Space chronology report (cards 051/052, four impossible SRD days); deferred saga keys in `chronology_deferred.md`.
+
+## 6. Gotchas
+
+- Several engine and test files are CRLF (checks, dates, fm, interop, mcp, ops, serve, store, timeinfo, editor.js, some tests). `sed -i` in Git Bash turns CRLF into LF, and Python heredocs through the shell tool lose backslashes: edit with the Edit tool or script files, then check line endings against `main`.
+- Playwright writes screenshots only inside the Lorekeeper folder (`.playwright-mcp/`, gitignored).
+- Saga Lorekeeper projects are rooted at `Wiki/` with settings from `_system/lorekeeper.json`; the Story Wiki is `../Story Wiki` from there. Saga shared files must stay identical across the three sagas and must not mention any Wiki page title, saga name or HO id.
+- Scratch: `C:\Users\Owner\lk-scratch` (clones `sagas/`, probes `probe6/`, baselines `run4-before/`, `run4-after/`, tools in `snap/`). Old run-3 clones are in `sagas-run3/`.
+
+## 7. How to verify
+
+- `python -m unittest discover -s tests` in this repo: 312 OK, 1 skipped.
+- `lore init --template novel` in an empty folder, then `lore wiki --as-of 1` and `lore wiki "Ash" --as-of 2`; or `lore serve` and open the Wiki tab.
+- In a saga: `python _system/scripts/saga.py timeline`, Wiki tab; or `python _system/vendor/lorekeeper --root Wiki --config _system/lorekeeper.json wiki --as-of 2`.
+- In each saga: `python -m unittest discover -s _system/tests` (Realm 219, Space 216, Zombies 211).
+- MCP: `python C:\Users\Owner\lk-scratch\snap\handshake.py "<saga folder>"`.
