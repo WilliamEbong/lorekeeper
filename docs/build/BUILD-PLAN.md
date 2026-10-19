@@ -402,7 +402,7 @@ Paths are relative to each saga root and identical in all three repos.
 - Does the editor get a chapter picker that filters every view?
 - How does a hand-written world, with no saga pipeline, record the same stamps?
 
-## Planning wiki (requested 2026-10-19; shape confirmed; to be specified as feature 011 after run 4 builds 010)
+## Planning wiki (requested 2026-10-19; shape confirmed; to be specified and built as feature 011 in run 5, prompt in KICKOFF-PROMPT.md)
 **The request, in the owner's terms:** a third wiki, the planning wiki: the intended end state of the story, everything the author has designed, including what no reader knows yet. Today the bibles and some other documents together play this role.
 - **Flow of information:** design happens in the planning wiki → it is used to create the chapter cards → the cards are used to draft → the full and progressive wikis are updated from the written story.
 - **Audience:** a back-end reference for the author and the AI, to plan and keep continuity.

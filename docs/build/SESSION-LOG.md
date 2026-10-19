@@ -327,3 +327,7 @@ Append-only. Newest entries at the bottom. Each entry gives: date/time (UTC if k
 - LANDED by fast-forward with land.sh (live HEADs re-checked first; working trees untouched): Realm 6ee4816 → bbf9b36, Space 87db843 → 1390389, Zombies 89095c4 → 5821c8f. Read-only MCP handshake on the live repos passes.
 - Final checks: Lorekeeper suite 312 OK (1 POSIX-only skip, includes the stdlib-only import scan and the no-bare-open scan), detector `[]`, Playwright console clean. Screenshots: .playwright-mcp/final-progressive-card.png, final-complete-card.png, final-saga-wiki-tab.png.
 - Owner approved ("complete all outstanding tasks, you have full permission"): merged `feat/010-progressive-wiki` into `main` by fast-forward and pushed to the private repo (d0b564a..b3b1ac0); visibility PRIVATE confirmed with gh. Feature 011 (planning wiki) is not started; it is offered as its own session.
+
+### Run 5 prepared: planning wiki (feature 011) (2026-10-19)
+- Owner asked for a handoff and a kickoff prompt to build the planning wiki in a new session with build-continuously. HANDOFF.md rewritten for run 5 (locked 011 decisions, gotchas); KICKOFF-PROMPT.md holds the run 5 prompt and resume prompt.
+- Finding recorded for run 5: every unfrozen chapter's provenance stores the sha256 of the World Bible, architecture, style bible and Conversations, so the planning wiki's write-back must never touch a live authority during a build; the full change flow (override, write-back, impact review, refresh-sources) is proven on probes only.
