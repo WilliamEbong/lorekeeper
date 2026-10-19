@@ -383,13 +383,13 @@ Paths are relative to each saga root and identical in all three repos.
 - [x] Specify and clarify (5 answers in the spec)
 - [x] Plan, tasks, analyze
 - [x] Engine: settings, source reader, citations, pages, matcher, link lists, views, fact, impact, change, leak tests (TDD)
-- [x] Faces: ops, MCP, CLI, serve, editor; timing (Playwright and detector pending: browser shared with another session)
+- [x] Faces: ops, MCP, CLI, serve, editor; timing; Playwright (fixture and saga mode); detector
 - [x] Docs: README, user guide, agent skill
 - [x] Sagas: baseline, clones, vendor, key, skill and pointer
-- [ ] Sagas: three build agents; probe replay; change-flow proof
-- [ ] Reviewers and fixes
-- [ ] Land the three sagas (fast-forward only)
-- [ ] Finish: all checks, docs, handoff, memory, cron deleted, notification
+- [x] Sagas: three build agents; probe replay; change-flow proof
+- [x] Reviewers and fixes
+- [x] Land the three sagas (fast-forward only)
+- [x] Finish: all checks, docs, handoff, memory, cron deleted, notification
 
 # Feature requests from the owner
 
