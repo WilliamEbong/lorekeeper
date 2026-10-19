@@ -8,7 +8,8 @@ from . import __version__, fm, ops, store
 from .store import LoreError
 
 ADAPTERS = {"mcp": "Run the MCP server on stdin/stdout for AI agents.",
-            "serve": "Open the local interactive editor."}
+            "serve": "Open the local interactive editor.",
+            "app": "Open the Lorekeeper start screen: your worlds, a new world, or a folder."}
 
 
 def key_value(text):
@@ -50,6 +51,9 @@ def build_parser():
         if name == "serve":
             sp.add_argument("--port", type=int, default=0, help="local port (default: choose a free port)")
             sp.add_argument("--saga", action="store_true", help="queue change requests instead of editing canon")
+        elif name == "app":
+            sp.add_argument("--install", action="store_true",
+                            help="make Lorekeeper shortcuts on the Desktop and in the Start menu (Windows), then start it")
         else:
             sp.add_argument("--saga", action="store_true",
                             help="offer only reading and the story-wiki fact tools (Wiki pages stay with the pipeline)")
@@ -209,8 +213,17 @@ def human(op, args, result):
 
 def main(argv=None):
     for stream in (sys.stdout, sys.stderr):
-        stream.reconfigure(encoding="utf-8")
+        if stream:   # none at all under pythonw, the window-less launch the app shortcut uses
+            stream.reconfigure(encoding="utf-8")
     ns = build_parser().parse_args(argv)
+    if ns.op == "app":
+        from . import app
+        if ns.install:   # the setup file: shortcuts, then the app in the background
+            for link in app.install():
+                print(f"  Made the shortcut {link}")
+            app.launch()
+            return 0
+        return app.run()
     try:
         config = None
         if ns.config and ns.op != "init":   # settings kept elsewhere (a saga's _system/lorekeeper.json)

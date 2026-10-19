@@ -1,0 +1,67 @@
+/* The start screen. Tokens, type, controls and themes come from editor.css. */
+body.app { display: block; height: auto; min-height: 100%; }
+.app .topbar { position: sticky; top: 0; z-index: 5; }
+.home { max-width: 1120px; margin: 0 auto; padding: 36px 24px 64px; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, 1fr); gap: 40px; align-items: start; }
+.home h1, .closed h1 { margin: 0 0 18px; font: 600 30px/1.2 var(--serif); letter-spacing: -.4px; }
+.lede { color: var(--muted); font-size: 16px; max-width: 46ch; }
+
+/* Your worlds */
+.world-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.world { display: grid; gap: 6px; padding: 18px 20px; background: var(--panel); border: 1px solid var(--hair); border-radius: 10px; }
+.world-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+.world h2 { font: 600 20px/1.3 var(--serif); overflow-wrap: anywhere; }
+.world .path { font-size: 12.5px; }
+.world .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.world.missing { background: transparent; border-style: dashed; }
+.world.missing h2 { color: var(--muted); }
+.open-badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--soft); color: var(--accent); }
+.warning { color: var(--warn); font-size: 13px; }
+.ai-note { margin-top: 6px; border-top: 1px solid var(--hair); padding-top: 10px; }
+.ai-note summary { cursor: pointer; color: var(--muted); font-size: 14px; width: fit-content; }
+.ai-note summary:hover { color: var(--ink); }
+.ai-body { display: grid; gap: 4px; padding-top: 8px; max-width: 62ch; }
+
+/* Start a new world */
+.new-world { position: sticky; top: 84px; }
+.card { display: grid; gap: 18px; padding: 22px 24px 24px; background: var(--panel); border: 1px solid var(--hair); border-radius: 12px; box-shadow: var(--shadow); }
+.card h2 { font: 600 22px/1.25 var(--serif); }
+.card .field { display: grid; gap: 6px; }
+.card label, .card .label, .starts legend { font-weight: 600; font-size: 14px; }
+.card input:not([type="radio"]) { width: 100%; }
+.starts { border: 0; margin: 0; padding: 0; display: grid; gap: 6px; }
+.starts legend { padding: 0; margin-bottom: 4px; }
+.start { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; padding: 10px 12px; border: 1px solid var(--hair); border-radius: 8px; cursor: pointer; font-weight: 400; }
+.start input { margin: 3px 0 0; accent-color: var(--accent); }
+.start > span { display: grid; gap: 2px; }
+.start strong { font-weight: 600; }
+.start:has(input:checked) { border-color: var(--accent); background: var(--soft); }
+.start:hover { border-color: var(--line); }
+.place { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.place-path { flex: 1; min-width: 0; font: 12.5px/1.4 ui-monospace, Consolas, monospace; color: var(--muted); overflow-wrap: anywhere; }
+.error { color: var(--danger); font-size: 14px; }
+.error:empty { display: none; }
+#create { justify-self: start; padding: 9px 18px; }
+
+/* Dialog, closed page, status */
+.ask { border: 0; border-radius: 12px; padding: 22px 24px; width: min(440px, calc(100vw - 32px)); background: var(--panel); color: var(--ink); box-shadow: var(--shadow); }
+.ask::backdrop { background: rgba(19, 27, 24, .45); }
+.ask form { display: grid; gap: 12px; }
+.ask h2 { font: 600 20px/1.3 var(--serif); }
+.ask .actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.closed { max-width: 640px; margin: 0 auto; padding: 96px 24px; }
+.status-line { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); max-width: min(560px, calc(100vw - 32px)); padding: 10px 14px; border-radius: 8px; background: var(--panel); box-shadow: var(--shadow); }
+.status-line:empty { display: none; }
+
+@media (max-width: 900px) {
+  .home { grid-template-columns: 1fr; padding: 24px 16px 48px; gap: 28px; }
+  .new-world { position: static; }
+  .home:has(#worlds-empty:not([hidden])) .new-world { order: -1; }
+  .app .brand { width: auto; }
+}
+@media (max-width: 480px) {
+  .app .topbar { padding: 10px 16px; }
+  .app .brand { width: 100%; }
+  .home h1 { font-size: 26px; }
+  .card { padding: 18px 16px 20px; }
+  .world { padding: 16px; }
+}

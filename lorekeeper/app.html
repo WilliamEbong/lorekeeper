@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="lore-token" content="__LORE_TOKEN__">
+  <title>Lorekeeper</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/editor.css">
+  <link rel="stylesheet" href="/app.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body class="app">
+  <header class="topbar">
+    <div class="brand"><span class="wordmark">Lorekeeper</span></div>
+    <button type="button" id="open-folder">Open a folder…</button>
+    <button type="button" id="close-app" class="quiet">Close Lorekeeper</button>
+  </header>
+  <main id="home" class="home">
+    <section class="worlds" aria-labelledby="worlds-title">
+      <h1 id="worlds-title">Your worlds</h1>
+      <p id="worlds-empty" class="lede" hidden>Your worlds will be listed here. Start one on the right, or open a folder you already have.</p>
+      <ul id="world-list" class="world-list"></ul>
+    </section>
+    <section class="new-world" aria-labelledby="new-title">
+      <form id="new-form" class="card" novalidate>
+        <h2 id="new-title">Start a new world</h2>
+        <div class="field">
+          <label for="new-name">Name</label>
+          <input id="new-name" autocomplete="off" placeholder="The Glass Orchard" aria-describedby="new-error">
+        </div>
+        <fieldset class="starts">
+          <legend>Start from</legend>
+          <label class="start"><input type="radio" name="start" value="" checked>
+            <span><strong>A blank page</strong><span class="hint">Nothing yet. Add people, places and events as you go.</span></span></label>
+          <label class="start"><input type="radio" name="start" value="novel">
+            <span><strong>A novel</strong><span class="hint">A small example story with characters, a place, events and two chapters, to show how things fit together.</span></span></label>
+          <label class="start"><input type="radio" name="start" value="series">
+            <span><strong>A series</strong><span class="hint">The novel example, plus two books for planning across a series.</span></span></label>
+          <label class="start"><input type="radio" name="start" value="campaign">
+            <span><strong>A game campaign</strong><span class="hint">For tabletop games: the example world with a faction, a quest and two sessions.</span></span></label>
+        </fieldset>
+        <div class="field">
+          <span class="label" id="place-label">Kept in</span>
+          <div class="place">
+            <span id="place" class="place-path" aria-labelledby="place-label"></span>
+            <button type="button" id="change-place" class="quiet">Change…</button>
+          </div>
+          <input id="place-input" hidden aria-labelledby="place-label" autocomplete="off">
+        </div>
+        <p id="new-error" class="error" role="alert"></p>
+        <button type="submit" class="primary" id="create">Create world</button>
+      </form>
+    </section>
+  </main>
+  <main id="closed" class="closed" hidden>
+    <h1>Lorekeeper is closed</h1>
+    <p class="lede">You can close this tab. To come back, open Lorekeeper again from its icon.</p>
+  </main>
+  <dialog id="ask" class="ask" aria-labelledby="ask-title">
+    <form method="dialog">
+      <h2 id="ask-title"></h2>
+      <p id="ask-text"></p>
+      <div class="actions">
+        <button value="cancel" id="ask-cancel" class="quiet"></button>
+        <button value="ok" id="ask-ok" class="primary"></button>
+      </div>
+    </form>
+  </dialog>
+  <div id="status" class="status-line" role="status" aria-live="polite"></div>
+</body>
+</html>
