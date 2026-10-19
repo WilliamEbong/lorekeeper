@@ -1,6 +1,6 @@
 # HANDOFF — Lorekeeper
 
-Written 2026-10-19, at the end of run 6. **Run 6 built feature 012, the Lorekeeper app (no-terminal setup, a desktop launcher, a start screen, an AI guide inside each world), and feature 013, a plain-language editor, and merged into main and pushed with the owner's approval (a7966b7). `Set up Lorekeeper.bat` has been run from the main checkout: the Lorekeeper shortcuts are on the Desktop and in the Start menu.** Run 5 (feature 011, the planning wiki, and the timeline controls) is on main, pushed and in the sagas. This document is authoritative, including over memory and older summaries. History is in SESSION-LOG.md and BUILD-PLAN.md ("Run 6").
+Written 2026-10-19, at the end of run 6; updated after run 7 (engine 456bfe9 re-vendored into the three sagas, owner-approved, landed by fast-forward). **Run 6 built feature 012, the Lorekeeper app (no-terminal setup, a desktop launcher, a start screen, an AI guide inside each world), and feature 013, a plain-language editor, and merged into main and pushed with the owner's approval (a7966b7). `Set up Lorekeeper.bat` has been run from the main checkout: the Lorekeeper shortcuts are on the Desktop and in the Start menu.** Run 5 (feature 011, the planning wiki, and the timeline controls) is on main, pushed and in the sagas. This document is authoritative, including over memory and older summaries. History is in SESSION-LOG.md and BUILD-PLAN.md ("Run 6").
 
 ## 1. Snapshot
 
@@ -31,13 +31,13 @@ Lorekeeper (command `lore`) is a standalone, stdlib-only story-world engine.
   - **main** (pushed to the private repo, owner-approved 2026-10-19) holds feature 011 and the timeline controls (`feat/timeline-scale` merged at 3b1bc0c, the engine vendored into the sagas), plus the other session's work and the 2026-07-28 MCP fix.
   - **Checks:** suite 358 OK (1 POSIX-only skip). Impeccable detector: editor.html clean; editor.css has one finding (tab underline) that predates 011.
   - **Leftover branches:** `feat/011-planning-wiki`, `feat/timeline-scale` (worktree `lk-scratch/lk-timeline-scale`) and `fix/mcp-cache-hints` are merged and can be deleted.
-- **Sagas** (landed by fast-forward on 2026-10-19):
+- **Sagas** (landed by fast-forward on 2026-10-19; run 7 re-vendored engine 456bfe9, so the saga editors use the plain-language wording):
 
   | Saga | Live HEAD | Engine | Planning Wiki | In progress |
   |---|---|---|---|---|
-  | Realm | `565f433` | `3b1bc0c` | 150 pages, 952 facts | CH004 READY_FOR_HUMAN |
-  | Space | `4dfdabe` | `3b1bc0c` | 230 pages (Mara Chen added) | CH005 READY_FOR_HUMAN |
-  | Zombies | `5674e84` | `3b1bc0c` | 209 pages, 1,093 facts | CH004 READY_FOR_HUMAN |
+  | Realm | `fad7be0` | `456bfe9` | 150 pages, 952 facts | CH004 READY_FOR_HUMAN |
+  | Space | `55c52a5` | `456bfe9` | 230 pages (Mara Chen added) | CH005 READY_FOR_HUMAN |
+  | Zombies | `45472b6` | `456bfe9` | 209 pages, 1,093 facts | CH004 READY_FOR_HUMAN |
 
   Each saga has:
   - a `planning_wiki` key in `_system/lorekeeper.json`: folder `../Planning Wiki`, sources in AUTHORITY.md order, `exclude_names`;
@@ -86,11 +86,13 @@ Lorekeeper (command `lore`) is a standalone, stdlib-only story-world engine.
   - `r5-clones`, `r5-probe`, `r5-before` and `r5-after`, and `r5-proof` (the change-flow proof);
   - the scripts in `snap/`: `add_planning_key.py`, `r5_vendor.sh`, `commit_system5.sh`, `replay5.sh`, `land5.sh`, `handshake5.py`, `exclude5.py`, `saga_ui5.js`, `planning_build_brief.md`, `planning_wiki_change.md`.
 
+  Run 7 used `r7-clones`, `r7-probe`, `r7-before`, `r7-after`, `r7-ui` and `snap/r7_*` (`r7_saga_ui.js` checks a saga editor's wording).
+
   The other session uses `fix-sagas`, `probe7`, `probe8`, `run7-*`, `run8-*`, `lk-lifespan` and `lk-lives`.
 
 ## 5. Next actions
 
-0. **Run 6:** done and pushed. Optional: re-vendor the engine into the sagas (clones, probe, land by fast-forward) so the saga editors get the plain-language wording; the app itself is for standalone worlds and opens sagas through their own launchers.
+0. **Run 6:** done and pushed. **Run 7:** the engine is re-vendored into the sagas (456bfe9, with the app files), so their editors use the plain-language wording. The app itself is for standalone worlds and opens sagas through their own launchers.
 
 1. In a saga, try the planning wiki: run `python _system/scripts/saga.py timeline`, open the Wiki tab and pick Planning.
 3. For a planning change, tell the AI in plain words. It follows `_system/skills/planning_wiki_change.md`.
