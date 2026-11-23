@@ -188,8 +188,11 @@ tbody tr.selected { background: var(--soft); }
 .sheet .saved { border-color: var(--accent); box-shadow: 0 0 0 2px var(--soft); }
 .sheet .failed, input.failed { border-color: var(--danger); background: var(--danger-soft); }
 .sheet td.open { width: 1%; white-space: nowrap; }
-.sheet td.open button.quiet { color: var(--accent); opacity: 0; }
-.sheet tr:hover td.open button.quiet, .sheet tr:focus-within td.open button.quiet, .sheet tr.selected td.open button.quiet, .sheet td.open button.quiet:focus { opacity: 1; }
+.sheet td.open button.quiet { color: var(--accent); }
+@media (hover: hover) {
+  .sheet td.open button.quiet { opacity: 0; }
+  .sheet tr:hover td.open button.quiet, .sheet tr:focus-within td.open button.quiet, .sheet tr.selected td.open button.quiet, .sheet td.open button.quiet:focus { opacity: 1; }
+}
 .ages th[scope="row"] { position: sticky; left: 0; z-index: 1; background: var(--panel); border-right: 1px solid var(--hair); }
 .ages thead th:first-child { left: 0; z-index: 3; }
 .ages thead th { min-width: 118px; max-width: 160px; font-weight: 600; }
@@ -203,7 +206,7 @@ tbody tr.selected { background: var(--soft); }
 .ages td.young { background: var(--warn-soft); color: var(--warn); font-weight: 600; }
 .ages td.bad { background: var(--danger-soft); color: var(--danger); font-weight: 600; }
 .ages tr.selected th[scope="row"] { background: var(--soft); }
-.ages td.on:not(.young):not(.bad) { background: var(--soft); }
+.ages td.adult { background: var(--soft); }
 .ages td[aria-busy]::after { content: "working out…"; color: var(--muted); font-size: 12px; }
 
 /* Relationships */
@@ -246,7 +249,7 @@ tbody tr.selected { background: var(--soft); }
 .summary strong { font: 600 19px/1.3 var(--serif); }
 .section-title { font: 600 15px/1.3 var(--serif); color: var(--ink); margin-top: 6px; }
 .scroll.pad { flex: 0 1 auto; padding: 0; border: 0; background: none; }
-.scroll.wiki-card { background: var(--panel); border: 1px solid var(--hair); border-radius: 8px; padding: 18px 22px; }
+.scroll.wiki-card { background: var(--panel); border: 1px solid var(--hair); border-radius: 8px; padding: 18px 22px; max-height: 100%; overflow: auto; }
 
 /* Inspector */
 .inspector { min-height: 0; overflow: auto; background: var(--panel); border-left: 1px solid var(--hair); padding: 18px 20px 28px; overscroll-behavior: contain; }

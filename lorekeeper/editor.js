@@ -1214,7 +1214,7 @@ function agesView(view) {
           cell.setAttribute('aria-busy', 'true');
           jobs.push(async () => {
             try { ages.set(key, await api('age', {item: ref(p), at: ref(e)})); cell.removeAttribute('aria-busy'); paintAge(cell, ages.get(key)); }
-            catch { cell.textContent = 'Unknown'; cell.title = 'This age can’t be worked out from the dates given.'; }
+            catch { cell.removeAttribute('aria-busy'); cell.textContent = 'Unknown'; cell.title = 'This age can’t be worked out from the dates given.'; }
           });
         }
       }
@@ -1234,7 +1234,9 @@ function paintAge(cell, age) {
   cell.textContent = age.text;
   cell.classList.toggle('bad', age.status !== 'alive');
   cell.classList.toggle('young', age.status === 'alive' && age.years?.[1] < 18);
+  cell.classList.toggle('adult', age.status === 'alive' && age.years?.[0] >= 18);
 }
+const PLURALS = {Parent: 'Parents', Sibling: 'Siblings', Child: 'Children', Friend: 'Friends', Ally: 'Allies', Enemy: 'Enemies', Rival: 'Rivals'};
 function relationships(view) {
   // A relationship is a resolved link between two people or groups (parent, spouse, member of...);
   // events, places and timing links belong to the other views.
@@ -1272,7 +1274,7 @@ function relationships(view) {
     for (const [kind, others] of [...cards.get(item.path)].sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]))) {
       const names = el('dd');
       for (const other of [...others.values()].sort(byName)) names.append(button(other.name, () => selectItem(other.path, {show: true}), {class: 'link'}));
-      list.append(el('dt', others.size > 1 && /^(Parent|Sibling|Child|Friend|Ally|Enemy|Rival)$/.test(kind) ? kind + 's' : kind), names);
+      list.append(el('dt', others.size > 1 && PLURALS[kind] || kind), names);
     }
     card.append(head, list);
     grid.append(card);
@@ -1450,7 +1452,7 @@ function narrative(view) {
   const sort = (list) => list.sort((a, b) => order(a) - order(b) || byName(a, b));
   let chapters = sort(graph.items.filter(i => category(i) === 'narrative' || i.type === 'card')), fallback = false;
   if (!chapters.length) {   // an import's story parts can arrive under a type not marked as one (Aeon's Narrative Folder)
-    const parts = sort(graph.items.filter(i => /narrative|chapter|scene|book|part/i.test(i.type)));
+    const parts = sort(graph.items.filter(i => /\b(narrative|chapter|scene|book|part)s?\b/i.test(i.type.replace(/[_-]/g, ' '))));
     if (parts.length) {
       const kinds = [...new Set(parts.map(i => typeLabel(i.type)))].join(', ');
       chapters = parts;
