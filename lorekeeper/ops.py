@@ -326,9 +326,15 @@ def op_export(p, format, out):
     writer = {"aeon": interop.write_aeon, "csv": interop.write_csv, "md": interop.write_markdown}.get(format)
     if writer is None:
         raise LoreError("INVALID", "format must be aeon, csv or md")
+    # Never replace the project's own files: items, lore.json, narrative.md, wiki pages, or a settings file
+    # kept elsewhere (--config), which has another extension than an export of this format.
     own = [store.CONFIG, "narrative.md"] + [item.path for item in p.items]
-    if os.path.normcase(os.path.realpath(out)) in {os.path.normcase(os.path.realpath(os.path.join(p.root, f))) for f in own}:
-        raise LoreError("INVALID", f"export would overwrite {out}, which is part of this project; choose another file")
+    target = os.path.normcase(os.path.realpath(out))
+    if (target in {os.path.normcase(os.path.realpath(os.path.join(p.root, f))) for f in own}
+            or any(store.inside(layer, out) for layer in p.layers())
+            or os.path.exists(out) and os.path.splitext(target)[1] != "." + format):
+        raise LoreError("INVALID", f"export would overwrite {out}, which is part of this project or not an "
+                        f"earlier {format} export; choose another file")
     writer(p, out)
     return {"written": os.path.abspath(out), "format": format, "count": len(p.items)}
 

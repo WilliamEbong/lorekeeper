@@ -258,12 +258,16 @@ class Project:
             return path[len(prefix):].replace(os.sep, "/")
         return os.path.relpath(path, self.root).replace(os.sep, "/")
 
-    def files(self):
-        skip = SKIP_DIRS | set(self.config.get("exclude", []))
+    def layers(self):
+        """The story wiki and planning wiki folders, normcased: their pages are not items."""
         story = self.config.get("story_wiki")
         plan = self.config.get("planning_wiki")
         plan = plan.get("folder") if isinstance(plan, dict) and isinstance(plan.get("folder"), str) else None
-        layers = {os.path.normcase(os.path.normpath(os.path.join(self.root, f))) for f in (story, plan) if f}
+        return {os.path.normcase(os.path.normpath(os.path.join(self.root, f))) for f in (story, plan) if f}
+
+    def files(self):
+        skip = SKIP_DIRS | set(self.config.get("exclude", []))
+        layers = self.layers()
         for base in self.config.get("paths", ["."]):
             top = os.path.normpath(os.path.join(self.root, base))
             if not inside(self.root, top):

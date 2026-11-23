@@ -161,6 +161,21 @@ class InteropTests(unittest.TestCase):
             self.assertEqual(path.read_bytes() if path.exists() else None, before, target)
         ops.run("export", {"format": "md", "out": str(self.world / "reading-copy.md")}, root=str(self.world))
         self.assertTrue((self.world / "reading-copy.md").is_file())   # a new file in the folder is still fine
+        ops.run("export", {"format": "md", "out": str(self.world / "reading-copy.md")}, root=str(self.world))
+        # a settings file kept elsewhere (--config) and story and planning wiki pages are not items, but are
+        # the project's too
+        settings = self.root / "settings.json"
+        settings.write_text(json.dumps({**self.project.config, "story_wiki": "Story",
+                                        "planning_wiki": {"folder": "Plan"}}), encoding="utf-8")
+        config = json.loads(settings.read_text(encoding="utf-8"))
+        for folder in ("Story", "Plan"):
+            (self.world / folder).mkdir()
+            (self.world / folder / "Page.md").write_text("# Page\n", encoding="utf-8")
+        for path in (settings, self.world / "Story" / "Page.md", self.world / "Plan" / "Page.md"):
+            before = path.read_bytes()
+            with self.assertRaises(store.LoreError):
+                ops.run("export", {"format": "md", "out": str(path)}, root=str(self.world), config=config)
+            self.assertEqual(path.read_bytes(), before, path.name)
 
     def empty(self, name="empty", config=None):
         root = self.root / name
