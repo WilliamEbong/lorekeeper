@@ -101,7 +101,8 @@ const whenText = (item) => {
 const narrow = () => matchMedia('(max-width: 900px)').matches;
 // A phone is too narrow for a readable time axis: the Timeline and Subway become lists there (World Anvil's list mode).
 const phone = () => matchMedia('(max-width: 600px)').matches;
-const yearOf = (item) => shownDate(item.start.text).match(/\d+( BC)?$/)?.[0] ?? 'Undated';
+const yearOf = (item) => shownDate(item.start.text).replace(/,\s*\d{1,2}:\d{2}$/, '').match(/\d+( BC)?$/)?.[0] ?? 'Undated';
+matchMedia('(max-width: 600px)').addEventListener('change', () => { if (tab === 'Timeline' || tab === 'Subway') renderView(); });
 function phoneList(view, groups) {
   const box = el('div', null, {class: 'age-cards phone-list'});
   for (const [title, items, note] of groups) {
@@ -988,6 +989,12 @@ function timeline(view) {
     if (types.length > 1) view.append(typeChips(types, all));
     const byYear = groupBy(all.filter(i => !ui.hidden.has(i.type)), yearOf);
     phoneList(view, [...byYear].map(([year, items]) => [year, items]));
+    const undated = graph.items.length - all.length;
+    if (undated) {
+      const note = el('p', `${plural(undated, 'item')} without a date ${undated === 1 ? 'is' : 'are'} not shown; `, {class: 'hint'});
+      note.append(button('see them in the Spreadsheet', () => activateTab($('tab-spreadsheet')), {class: 'link'}), '.');
+      view.append(note);
+    }
     return;
   }
   const bar = el('div', null, {class: 'toolbar'});
@@ -1194,6 +1201,7 @@ function subway(view) {
   if (phone()) {
     bar.querySelector('.subway-key')?.remove(); bar.querySelector('[role="group"]')?.remove(); bar.querySelector('.hint').textContent = 'Each person’s events, in time order.';
     phoneList(view, lanes.map(p => [p.name, events().filter(e => takesPart(p, e)), p.start ? `born ${shownDate(p.start.text)}` : null]));
+    if (!q && ranked.length > lanes.length) view.append(el('p', `Showing the ${lanes.length} people with the most events. Filter to find the other ${ranked.length - lanes.length}.`, {class: 'hint'}));
     return;
   }
   const box = scrollBox('chart');
@@ -1685,7 +1693,9 @@ function continuity(view) {
         const where = el('div', null, {class: 'where'});
         if (who) where.append(button(`Open ${who.name}`, () => selectItem(who.path, {reveal: true, focus: 'title'}), {class: 'link'}));
         row.append(el('strong', `${source.person}: ${group.length} events ${SOURCE_KINDS[source.kind]}`),
-          el('span', `${source.person} ${born ? 'was born' : 'died'} ${shownDate(source.when)}. If that date is right, these events need changing; if not, changing it fixes all ${group.length}.`, {class: 'detail'}),
+          el('span', severity === 'FAIL'
+            ? `${source.person} ${born ? 'was born' : 'died'} ${shownDate(source.when)}. If that date is right, these events need changing; if not, changing it fixes all ${group.length}.`
+            : `${source.person} ${born ? 'was born' : 'died'} ${shownDate(source.when)}, an uncertain date. These events may clash with it; check the date first.`, {class: 'detail'}),
           more, where);
         list.append(row);
         continue;
