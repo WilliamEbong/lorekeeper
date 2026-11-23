@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -248,3 +249,37 @@ class LaunchTests(AppTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(os.name == "nt", "Windows launcher")
+class LauncherTests(unittest.TestCase):
+    def launch(self, old_python):
+        """Run Open Lorekeeper.bat with a stand-in pyw/pythonw that records a launch instead of starting the app."""
+        system = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32")
+        with tempfile.TemporaryDirectory() as fake:
+            marker = os.path.join(fake, "launched")
+            for name in ("pyw", "pythonw"):   # `exit`: start keeps a .bat window open otherwise
+                Path(fake, name + ".bat").write_text(f'@echo x> "{marker}"\r\n@exit\r\n', encoding="utf-8")
+            path = [fake, system]
+            if old_python:   # an exe that fails on "-3 -c ...", as Python 3.10 fails the version check
+                for name in ("py", "python"):
+                    shutil.copy(os.path.join(system, "findstr.exe"), os.path.join(fake, name + ".exe"))
+            else:
+                path.insert(1, os.path.dirname(shutil.which("py")))
+            out = subprocess.run(["cmd", "/c", str(REPO / "Open Lorekeeper.bat")], env=dict(os.environ, PATH=os.pathsep.join(path)),
+                                 capture_output=True, stdin=subprocess.DEVNULL, timeout=30, encoding="utf-8", errors="replace")
+            for _ in range(50):   # `start` runs in the background
+                if os.path.exists(marker):
+                    break
+                time.sleep(0.1)
+            return os.path.exists(marker), out.stdout
+
+    def test_open_lorekeeper_refuses_a_python_older_than_3_11(self):
+        launched, text = self.launch(old_python=True)
+        self.assertFalse(launched, text)
+        self.assertIn("3.11", text)
+
+    @unittest.skipUnless(shutil.which("py"), "needs the py launcher")
+    def test_open_lorekeeper_starts_with_a_current_python(self):
+        launched, text = self.launch(old_python=False)
+        self.assertTrue(launched, text)
