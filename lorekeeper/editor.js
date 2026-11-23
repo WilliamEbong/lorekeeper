@@ -91,7 +91,11 @@ const hasEnd = (item) => Boolean(item.fields[endKey(item)] || item.fields.durati
 // Dates as written, with year-month-day forms read out in words ("2 April 1988").
 const everyday = calendars.every(c => c.type === 'gregorian');   // a custom calendar's months have their own names
 const shownDate = (text) => everyday ? dateWords(text) : text;
-const whenText = (item) => item.start ? shownDate(item.start.text) + (hasEnd(item) && item.end ? ` to ${shownDate(item.end.text)}` : '') : 'Undated';
+const whenText = (item) => {
+  if (!item.start) return 'Undated';
+  const from = shownDate(item.start.text), to = hasEnd(item) && item.end ? shownDate(item.end.text) : from;
+  return to === from ? from : `${from} to ${to}`;
+};
 const narrow = () => matchMedia('(max-width: 900px)').matches;
 const typing = (node) => Boolean(node?.closest?.('input, textarea, select, [contenteditable="true"]'));
 // ponytail: label width from the character count; measure text if long names collide in practice.
@@ -101,12 +105,19 @@ const labelWidth = (text) => text.length * 7 + 6;
 class ApiError extends Error {
   constructor(code, message, data) { super(message); this.code = code; this.data = data || {}; }
 }
-function status(text, kind = 'ok') { const node = $('status'); node.textContent = text; node.dataset.kind = kind; }
+function status(text, kind = 'ok') {
+  const node = $('status');
+  if (node.textContent === text && node.dataset.kind === kind) return;
+  node.textContent = text; node.dataset.kind = kind;
+}
 const anyDirty = () => [...drafts.values()].some(dirty) || cells.size > 0;
 function idle() {
   if (offline) status('Lost contact. Retrying…', 'error');
-  else if (anyDirty()) status('Unsaved changes', 'dirty');
-  else status('Up to date', 'ok');
+  else if (anyDirty()) {
+    const names = [...drafts.entries()].filter(([, d]) => dirty(d)).map(([path]) => byPath.get(path)?.name).filter(Boolean);
+    status(names.length === 1 ? `Unsaved changes in ${names[0]}` : 'Unsaved changes', 'dirty');
+  }
+  else status('All changes saved', 'ok');
 }
 function toast(message, {kind = 'info', actions = [], timeout} = {}) {
   const box = el('div', null, {class: `toast ${kind}`, role: kind === 'error' ? 'alert' : 'status'});
@@ -576,6 +587,7 @@ async function saveInspector(draft) {
     $('change-note')?.focus();
     return;
   }
+  const unreadable = [...$('inspector').querySelectorAll('.readback.warn')].map(n => n.closest('.field')?.querySelector('label')?.textContent).filter(Boolean);
   const controls = [...$('inspector').querySelectorAll('input, select, textarea, button')];
   const focusId = $('inspector').contains(document.activeElement) ? document.activeElement.id : null;
   draft.saving = true;
@@ -591,7 +603,8 @@ async function saveInspector(draft) {
       const result = await api('set', {item: ref(item), field, unset, version: item.version, expect: before});
       drafts.delete(item.path);
       offerUndo(item, before, {...field, ...Object.fromEntries(unset.map(k => [k, null]))}, result,
-        result.merged ? `Saved ${item.name}, merged with other changes made on disk.` : `Saved ${item.name}.`);
+        (result.merged ? `Saved ${item.name}, merged with other changes made on disk.` : `Saved ${item.name}.`)
+        + (unreadable.length ? ` ${unreadable.join(' and ')} can’t be read as a date, so ${item.name} is left off the Timeline until it can.` : ''));
     }
     await refresh();
     renderInspector();
@@ -602,7 +615,8 @@ async function saveInspector(draft) {
     draft.saving = false;
     controls.forEach(c => { if (c.isConnected) c.disabled = false; });
     if ($('save-item')?.isConnected && drafts.has(item.path)) $('save-item').disabled = $('discard-item').disabled = !dirty(drafts.get(item.path));
-    if (focusId && !$('inspector').contains(document.activeElement)) $(focusId)?.focus({preventScroll: true});
+    const target = focusId && $(focusId);
+    if (focusId && !$('inspector').contains(document.activeElement)) (target && !target.disabled ? target : $('inspector-title'))?.focus({preventScroll: true});
   }
 }
 function offerUndo(item, before, after, result, message) {
@@ -828,7 +842,7 @@ function scaleControls() {
 }
 function legend() {
   const box = el('div', null, {class: 'legend', 'aria-hidden': 'true'});
-  for (const [kind, text] of [['', 'Exact'], ['fuzzy', 'Approximate'], ['life', 'Alive (or reborn)']]) {
+  for (const [kind, text] of [['', 'Exact'], ['fuzzy', 'Approximate'], ['life', graph.items.some(i => i.reborn) ? 'Alive (or reborn)' : 'Alive']]) {
     const sample = svgEl('svg', {viewBox: '0 0 26 14'}), g = svgEl('g', {class: `cat-event ${kind === 'life' ? '' : kind}`});
     g.append(kind === 'life' ? svgEl('rect', {x: 1, y: 5, width: 24, height: 4, rx: 2, class: 'life'})
       : svgEl('rect', {x: 1, y: 2, width: 24, height: 10, rx: 3, class: 'mark'}));
@@ -1165,7 +1179,7 @@ function agesView(view) {
   for (const e of cols) {
     const th = el('th', null, {scope: 'col', 'data-path': e.path, title: `${e.name} · ${whenText(e)}`});
     const name = button(e.name, () => selectItem(e.path, {show: true}), {class: 'link ev-name'});
-    th.append(name, el('span', e.start.text, {class: 'ev-date'}));
+    th.append(name, el('span', shownDate(e.start.text), {class: 'ev-date'}));
     head.append(th);
   }
   add(table, el('thead')).append(head);
@@ -1490,8 +1504,8 @@ function continuity(view) {
       const item = byPath.get(f.path), where = el('div', null, {class: 'where'});
       if (item) where.append(button(`Open ${item.name}`, () => selectItem(item.path, {reveal: true, focus: 'title'}), {class: 'link'}));
       where.append(el('span', `in ${f.path}${f.line ? `, line ${f.line}` : ''}`, {class: 'path'}));
-      row.append(el('span', severity === 'FAIL' ? 'Definite' : 'Possible', {class: `flag ${severity === 'FAIL' ? 'fail' : 'warn'}`}),
-        el('strong', TITLES[f.code] || words(f.code.toLowerCase())), el('span', findingText(f), {class: 'detail'}), where);
+      row.classList.add(severity === 'FAIL' ? 'fail' : 'warn');
+      row.append(el('strong', TITLES[f.code] || words(f.code.toLowerCase())), el('span', findingText(f), {class: 'detail'}), where);
       list.append(row);
     }
     box.append(list);
@@ -1582,7 +1596,7 @@ function setCardChapter(value) { wiki.cardAsOf = value; wiki.form = null; render
 function chapterSelect(id, value, onChange, labelText, withPlan = false) {
   const select = el('select', null, {id, 'aria-label': labelText});
   if (withPlan && wiki.hasPlan) select.append(el('option', 'Planning', {value: 'plan'}));
-  select.append(el('option', 'Complete', {value: ''}));
+  select.append(el('option', 'All chapters', {value: ''}));
   for (const c of wiki.index?.chapters || []) select.append(el('option', chapterName(c), {value: String(c.n)}));
   select.value = value == null ? '' : String(value);
   select.addEventListener('change', () => onChange(select.value === '' ? null : select.value === 'plan' ? 'plan' : Number(select.value)));
