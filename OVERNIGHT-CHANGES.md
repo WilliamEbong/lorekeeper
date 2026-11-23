@@ -284,7 +284,10 @@ The fifth was not changed, as a fringe case. Exporting from a read-only world to
 
 Screenshots: `.playwright-mcp\design\s7` and `s8` in the worktree; reviewer tables in `C:\Users\Owner\lk-scratch\r4-design\s7-*.md` and `s8-*.md`.
 
-## Design root causes (after S8)
+## Design root-cause pass
+
+Branch `claude/design-root-cause`, from `origin/main` at `7bb82a0`.
+
 
 William asked what actually keeps the screens under 9, and for those causes to be fixed directly instead of running more rounds of fixes and rescoring. This table merges every reason the three S8 reviewers gave (S7's were the same in substance). "Said by" counts the S8 reviewers who named it. The table is the plan, biggest first.
 
@@ -376,6 +379,31 @@ Phone rose a full point, and Subway, Relationships, Planning, Continuity, Inspec
   - Event labels crowd and are clipped at the bottom of the chart.
   - A person with only a birth date shows as a bare dot.
 - **Subway:** the hairlines between shared events still bunch up near 1800, and half the chart below the lanes is empty.
+
+**How each fix was verified:**
+- In the browser, by checking the specific thing each cause names, in a clean Playwright context, at 1440 px and at 390 px or 360 px. For example: the counts read 24 in both places; the inspector is the same width selected and unselected; no sideways scroll at 360 px.
+- By the full suite, green (397 OK) at every commit.
+- Then by a fresh reviewer, asked one question per cause about the before (S8) and after (S9) screenshots.
+
+**Final Codex review** of the branch against `origin/main`: seven findings, six confirmed and fixed in `3166b30`:
+- a date with a time is grouped under its year on the phone Timeline;
+- list and chart swap when the window crosses 600 px;
+- Continuity cards fit a 360 px screen;
+- possible problems are worded as uncertain;
+- the phone lists keep the undated-items and top-8 notices.
+
+The seventh, two characters with the same name grouped together, is a fringe case; Continuity already flags duplicate names.
+
+**How reliable the scores are.**
+- Each score is the median of three reviewers, and each reviewer's score is the weakest of three aspects. Different reviewers on the same screenshots differ by about ±0.5 to 1 point, so a half-point move, up or down, is noise.
+- S8 fell from S6 mostly because the brief changed: from S7 on, a 9 meant "ship it in a commercial writing app without changes", and the reviewers saw the phone, the planning world and dark mode as well. One real regression (cause 4) added to it, and so did test data being read as design.
+- Scores move only about half a point when a cause is confirmed gone because each fresh reviewer finds the next weakest thing on the screen. Removing the worst problem exposes the second, and the score is set by whatever is now weakest.
+- So the per-cause check ("is this gone?") is the reliable measure. The 1–10 score is a rough guide to how much is left.
+
+**Does this branch affect the sagas?**
+- It changes only the editor's interface: `editor.js`, `editor.css`, `editor.html` and `app.js`. No Python engine file changes, so no data, check, MCP or command-line behaviour changes.
+- The sagas vendor the whole `lorekeeper/` folder, editor included, so they get the new interface only after a re-vendor.
+- A re-vendor is optional. Their tests, `saga.py` tooling, MCP and skills don't depend on these files.
 
 **Not design causes** (so not fixed here):
 - "imp2" in the header comes from the test copy's settings file.
