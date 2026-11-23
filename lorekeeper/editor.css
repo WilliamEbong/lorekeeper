@@ -55,7 +55,7 @@ textarea { resize: vertical; min-height: 64px; }
 select { padding-right: 6px; }
 .icon { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 button.icon-only { padding: 6px; }
-.hint { color: var(--muted); font-size: 13px; }
+.hint { color: var(--muted); font-size: 14px; }
 .badge { display: inline-block; min-width: 20px; padding: 1px 7px; border-radius: 999px; font-size: 12px; font-weight: 700; line-height: 18px; text-align: center; background: var(--sunken); color: var(--muted); font-variant-numeric: tabular-nums; }
 .badge.fail { background: var(--danger); color: var(--panel); }
 .badge.warn { background: var(--warn-soft); color: var(--warn); }

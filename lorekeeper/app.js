@@ -87,7 +87,8 @@ function worldCard(world) {
   head.append(name);
   if (world.kind === 'saga') head.append(el('span', 'Saga · proposals only', {class: 'mode'}));
   if (world.open && world.kind !== 'missing') head.append(el('span', 'Open', {class: 'open-badge'}));
-  card.append(head, el('p', `Folder: ${world.folder.split(/[\\/]/).filter(Boolean).at(-1)}`, {class: 'path', title: world.folder}));
+  name.title = world.folder;
+  card.append(head);
   const meta = el('p', world.kind === 'missing' ? 'Folder not found. It may have been moved, renamed or deleted.' : opened(world.opened),
     {class: world.kind === 'missing' ? 'warning' : 'hint'});
   card.append(meta);
@@ -126,7 +127,9 @@ function folderName(name) {
 function separator() { return (parent || state.parent).includes('\\') ? '\\' : '/'; }
 function showPlace() {
   const base = parent || state.parent;
-  $('place').textContent = `${base}${separator()}${folderName($('new-name').value)}`;
+  const full = `${base}${separator()}${folderName($('new-name').value)}`;
+  $('place').textContent = full.split(/[\\/]/).filter(Boolean).slice(-3).join(' › ');
+  $('place').title = full;
   if (!state.picker && !$('place-input').value) $('place-input').value = base;
 }
 

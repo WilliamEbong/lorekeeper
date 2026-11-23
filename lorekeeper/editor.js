@@ -1873,7 +1873,7 @@ function wikiCard() {
   }
   if (card.body?.trim()) {
     const page = add(box, el('details', null, {class: 'working', open: ''}));
-    page.append(el('summary', 'Notes from the item’s page'), markdown(card.body));
+    page.append(el('summary', 'Notes'), markdown(card.body));
   }
   // Empty sections (a new story page's starter headings) stay out of sight; "another section" offers them.
   const sections = card.sections.filter(s => s.facts.length);
@@ -1891,7 +1891,10 @@ function wikiCard() {
     if (fields.length) {
       const facts = add(box, el('section', null, {class: 'wiki-section'})), dl = el('dl', null, {class: 'wiki-fields'});
       facts.append(el('h3', 'Details'), dl);
-      for (const [key, value] of fields) { dl.append(el('dt', label(key))); inline(add(dl, el('dd')), display(value).replace(/\n/g, ', ')); }
+      for (const [key, value] of fields) {
+        const text = display(value).replace(/\n/g, ', ');
+        dl.append(el('dt', label(key))); inline(add(dl, el('dd')), key === 'tags' ? text.replace(/[-_]/g, ' ') : text);
+      }
     }
   }
   return box;
