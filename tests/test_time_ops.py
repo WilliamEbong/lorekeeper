@@ -58,6 +58,7 @@ class TimeOps(unittest.TestCase):
         self.assertEqual((year["location"], year["uncertain"]), ("Saltmarsh", True))
         there = run("where", item="Mara Quell", at="Crossing Harrow Pass")
         self.assertEqual((there["location"], there["uncertain"]), ("Harrow Pass", False))
+        self.assertTrue(run("where", item="Mara Quell", at="2020-03")["uncertain"])   # the crossing's month, not the crossing
 
     def test_link_under_an_undeclared_role_warns(self):
         with tempfile.TemporaryDirectory() as tmp:

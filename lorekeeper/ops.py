@@ -240,7 +240,7 @@ def op_where(p, item, at):
     start, event, place = placed[-1]
     # uncertain when the event may fall after the date, an earlier event may in fact be later, or the
     # person moves during the asked period ("1780" holds a move in August); asked at an event itself, it is sure
-    itself = (start.lo, start.hi) == (when.lo, when.hi)
+    itself = dates.parse(at, p.calendars) is None and p.find(at) is event
     uncertain = (start.hi - 1 > when.lo and not itself) or any(s.hi - 1 > start.lo for s, _, _ in placed[:-1]) \
         or any(when.lo < s.lo < when.hi for s, _, _ in located)
     return {"item": who.name, "at": show_when(p, when), "location": place.name,

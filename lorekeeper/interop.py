@@ -699,7 +699,8 @@ def import_into(project, data, into=None):
                                expect=store.file_sha(path))
     if dropped:   # a CSV column the world does not declare: say so, or its links are lost without a word
         warnings.append("WARN columns not imported, because this world has no such role or property: "
-                        + ", ".join(sorted(dropped)) + ". Add them to lore.json (or copy the source world's) and import again.")
+                        + ", ".join(sorted(dropped)) + ". To keep them, add them to lore.json (or copy the source world's) "
+                        "in a new, empty world, then import there.")
     if data.get("attachments"):
         warnings.append("WARN attachments were not imported: " + ", ".join(data["attachments"]))
     return {"created": len(pending), "skipped": skipped, "warnings": warnings}

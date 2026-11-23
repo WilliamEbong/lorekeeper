@@ -190,6 +190,7 @@ def human(op, args, result):
         years = result.get("years") or []   # a year-precise birth allows two ages: say so
         lo, hi = (years + [None, None])[:2]
         allow = "" if result.get("status") != "alive" or lo == hi or lo is None else \
+            f" (the dates allow not yet born, up to {hi})" if lo < 0 else \
             f" (the dates allow {lo} or {hi})" if hi - lo == 1 else f" (the dates allow {lo} to {hi})"
         return f"{result['item']} at {at}: {result['text']}{allow}"
     if op == "when":

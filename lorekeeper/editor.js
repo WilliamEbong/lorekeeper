@@ -120,7 +120,6 @@ function idle() {
   else status('All changes saved', 'ok');
 }
 function toast(message, {kind = 'info', actions = [], timeout} = {}) {
-  if (kind !== 'error') document.querySelectorAll('.toast.error').forEach(old => { if (!old.querySelector('.toast-actions button')) old.remove(); });
   const box = el('div', null, {class: `toast ${kind}`, role: kind === 'error' ? 'alert' : 'status'});
   const row = el('div', null, {class: 'toast-actions'});
   for (const [text, action] of actions) row.append(button(text, async () => { box.remove(); await action(); }));
