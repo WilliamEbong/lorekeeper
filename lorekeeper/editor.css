@@ -293,6 +293,7 @@ tbody tr.selected { background: var(--soft); }
   .scroll.pad { max-height: none; }
   .inspector { border-left: 0; border-top: 1px solid var(--hair); padding: 16px; scroll-margin-top: 8px; }
   .back-to-view { display: inline-flex; }
+  .actions .hint { display: none; }
   .popover { position: fixed; left: 16px; right: 16px; top: auto; width: auto !important; }
 }
 

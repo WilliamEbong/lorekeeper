@@ -120,6 +120,7 @@ function idle() {
   else status('All changes saved', 'ok');
 }
 function toast(message, {kind = 'info', actions = [], timeout} = {}) {
+  if (kind !== 'error') document.querySelectorAll('.toast.error').forEach(old => { if (!old.querySelector('.toast-actions button')) old.remove(); });
   const box = el('div', null, {class: `toast ${kind}`, role: kind === 'error' ? 'alert' : 'status'});
   const row = el('div', null, {class: 'toast-actions'});
   for (const [text, action] of actions) row.append(button(text, async () => { box.remove(); await action(); }));
@@ -416,7 +417,7 @@ function selectItem(path, {focus = false, reveal = false, show = false} = {}) {
   if (focus === 'title') $('inspector-title')?.focus();
   else if (focus) $('inspector').querySelector('input:not([readonly]), select, textarea')?.focus();
   // On a phone the inspector sits below the view: bring it up when an item is chosen there.
-  if ((reveal || show) && narrow()) $('inspector-panel').scrollIntoView({block: 'start'});
+  if ((reveal || show) && narrow()) requestAnimationFrame(() => $('inspector-panel').scrollIntoView({block: 'start'}));
 }
 function markSelection() {
   const view = $('view');
@@ -615,7 +616,7 @@ async function saveInspector(draft) {
       const result = await api('set', {item: ref(item), field, unset, version: item.version, expect: before});
       drafts.delete(item.path);
       offerUndo(item, before, {...field, ...Object.fromEntries(unset.map(k => [k, null]))}, result,
-        (result.merged ? `Saved ${item.name}, merged with other changes made on disk.` : `Saved ${item.name}.`)
+        (result.merged ? `Saved ${item.name}, keeping the other changes made to it since you opened it.` : `Saved ${item.name}.`)
         + (!unreadable.length ? '' : ` ${unreadable.map(u => u.label).join(' and ')} can’t be read as a date`
           + (unreadable.some(u => ['born', 'date', 'start'].includes(u.key)) ? `, so ${item.name} is left off the Timeline until it can.` : '.')));
     }
