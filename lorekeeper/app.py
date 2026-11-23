@@ -166,10 +166,6 @@ def create_world(name, template, folder):
 
 
 # ---- instructions for AI assistants ----------------------------------------------------------
-def cli_command(root):
-    return f'"{console_python()}" "{HERE}" <operation> [arguments] --root "{root}" --json'
-
-
 def ai_guide(root):
     root = os.path.abspath(root)
     p = store.Project(root)

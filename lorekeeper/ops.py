@@ -360,14 +360,6 @@ def op_fact_add(p, item, section, text, to=None, version=None, type=None, **span
     return wiki.fact_add(p, item, section, text, span["from"], to, version, type)
 
 
-def op_fact_end(p, item, section, fact, after=None, reopen=None, version=None):
-    return wiki.fact_end(p, item, section, fact, after, bool(reopen), version)
-
-
-def op_fact_remove(p, item, section, fact, version=None):
-    return wiki.fact_remove(p, item, section, fact, version)
-
-
 def op_planning(p, item=None):
     pl = planning.plan(p)
     return pl.index() if item is None else pl.card(item)
@@ -390,13 +382,6 @@ def op_planning_fact(p, item, section=None, text=None, source=None, fact=None, r
     return planning.fact(p, item, section, text, source, fact, bool(remove), type, version)
 
 
-def op_planning_impact(p, item=None, terms=None, written=None, limit=None):
-    return planning.impact(p, item, terms, written, 40 if limit is None else limit)
-
-
-def op_planning_change(p, item, decision, fact=None, text=None, remove=None, section=None, terms=None, written=None,
-                       version=None):
-    return planning.change(p, item, decision, fact, text, bool(remove), section, terms, written, version)
 
 
 def op_check(p):
@@ -505,7 +490,7 @@ OPS = [
         Param("after", I, False, "last chapter the fact is true in"),
         Param("reopen", B, False, "clear the end instead (undo a fact-end)"),
         Param("version", S, False, "the card's version you read")],
-       True, op_fact_end,
+       True, wiki.fact_end,
        "Use it when a belief, place, state or relationship changes: end the old fact, then fact-add the new one. "
        "It rewrites only that fact's stamp, so [ch 2] becomes [ch 2-5]; an unstamped fact starts at the page's "
        "first appearance. Returns item, path, version, text, from and to. Example: {\"item\": \"Darius\", "
@@ -515,7 +500,7 @@ OPS = [
         Param("fact", S, True, "the fact's id from the card (fact:...), or its text or the start of it "
                                  "(case and spacing ignored; it must match one fact)"),
         Param("version", S, False, "the card's version you read")],
-       True, op_fact_remove,
+       True, wiki.fact_remove,
        "Use it only to take back a fact that was added by mistake; when something stops being true, use fact-end, "
        "because the reader still knew it until then. Returns item, path, version and the removed text. "
        "Example: {\"item\": \"Darius\", \"section\": \"Wants\", \"fact\": \"To go home\"}."),
@@ -563,7 +548,7 @@ OPS = [
         Param("terms", L, False, "extra phrases, e.g. an old value such as Mach 20"),
         Param("written", I, False, "last written (frozen) chapter; default: the story wiki's last chapter"),
         Param("limit", I, False, "most hits per group (default 40); the rest are counted in more")],
-       False, op_planning_impact,
+       False, planning.impact,
        "Use it before and after a planning change to see what it touches, instead of reading whole documents. "
        "Whole-word, case-insensitive. Returns planning (decided facts), sources (per document, highest authority "
        "first: section, title and matching lines), chapters (cards and written prose, each with status frozen = "
@@ -580,7 +565,7 @@ OPS = [
         Param("terms", L, False, "extra phrases for the impact review, e.g. the old value"),
         Param("written", I, False, "last written (frozen) chapter; default: the story wiki's last chapter"),
         Param("version", S, False, "the card's version you read")],
-       True, op_planning_change,
+       True, planning.change,
        "Use it only on the author's word. It appends a HUMAN OVERRIDE to the override register, adds a dated "
        "'Amended by HO-NNN' line at the end of the highest-ranked source section the fact cites (the write-back), "
        "updates the planning fact (citing the override first) and returns the impact review. Then update what the "
