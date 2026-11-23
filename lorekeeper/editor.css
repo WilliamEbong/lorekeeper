@@ -139,7 +139,7 @@ svg .item:hover .hit { fill: var(--soft); opacity: .5; }
 svg .mark { fill: var(--c, var(--accent)); stroke: var(--panel); stroke-width: 1.5; }
 svg .fuzzy .mark { fill-opacity: .28; stroke: var(--c, var(--accent)); stroke-dasharray: 3 2; }
 svg .life { fill: var(--c, var(--accent)); fill-opacity: .7; }
-svg .item-label { font-size: 13px; }
+svg .item-label { font-size: 13px; paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
 svg .item.selected .mark { stroke: var(--ink); stroke-width: 2; stroke-dasharray: none; }
 svg .item:focus-visible .mark { stroke: var(--focus); stroke-width: 3; stroke-dasharray: none; }
 svg .item.selected .item-label { font-weight: 700; }
@@ -185,6 +185,7 @@ tbody tr.selected { background: var(--soft); }
 .sheet .saved { border-color: var(--accent); box-shadow: 0 0 0 2px var(--soft); }
 .sheet .failed, input.failed { border-color: var(--danger); background: var(--danger-soft); }
 .sheet td.open { width: 1%; white-space: nowrap; }
+.sheet td.open button.quiet { color: var(--accent); }
 .ages th[scope="row"] { position: sticky; left: 0; z-index: 1; background: var(--panel); border-right: 1px solid var(--hair); }
 .ages thead th:first-child { left: 0; z-index: 3; }
 .ages thead th { min-width: 118px; max-width: 160px; font-weight: 600; }
@@ -223,7 +224,7 @@ tbody tr.selected { background: var(--soft); }
 .flag.muted { background: var(--sunken); color: var(--muted); }
 .findings > li { grid-template-columns: 1fr; border-left: 3px solid var(--warn); border-radius: 2px 8px 8px 2px; }
 .findings > li.fail { border-left-color: var(--danger); }
-.findings .detail { color: var(--muted); font-size: 14px; max-width: 75ch; line-height: 1.55; }
+.findings .detail { color: var(--ink); font-size: 14px; max-width: 75ch; line-height: 1.55; }
 .findings .where { display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
 .summary { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .summary strong { font: 600 19px/1.3 var(--serif); }
