@@ -42,6 +42,17 @@ class Readme(unittest.TestCase):
             self.assertEqual(re.findall(r"`([^`]+)`", optional), [p.name for p in op.params if not p.required])
             self.assertIn("lore " + op.name, example)
 
+    def test_relative_links_in_the_docs_resolve(self):
+        docs = [Path(REPO, "README.md"), Path(REPO, "AGENTS.md"), Path(REPO, "lorekeeper", "agent-skill.md"),
+                *Path(REPO, "docs").glob("*.md")]
+        for doc in docs:
+            text = re.sub(r"```.*?```", "", doc.read_text(encoding="utf-8"), flags=re.S)
+            for target in re.findall(r"\]\(([^)\s]+)\)", text):
+                if re.match(r"[a-z]+:", target) or target.startswith("#"):
+                    continue
+                with self.subTest(doc=doc.name, link=target):
+                    self.assertTrue((doc.parent / target.split("#")[0]).exists())
+
 
 if __name__ == "__main__":
     unittest.main()
