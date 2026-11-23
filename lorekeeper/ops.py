@@ -326,6 +326,9 @@ def op_export(p, format, out):
     writer = {"aeon": interop.write_aeon, "csv": interop.write_csv, "md": interop.write_markdown}.get(format)
     if writer is None:
         raise LoreError("INVALID", "format must be aeon, csv or md")
+    own = [store.CONFIG, "narrative.md"] + [item.path for item in p.items]
+    if os.path.normcase(os.path.realpath(out)) in {os.path.normcase(os.path.realpath(os.path.join(p.root, f))) for f in own}:
+        raise LoreError("INVALID", f"export would overwrite {out}, which is part of this project; choose another file")
     writer(p, out)
     return {"written": os.path.abspath(out), "format": format, "count": len(p.items)}
 

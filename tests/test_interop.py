@@ -94,6 +94,19 @@ class InteropTests(unittest.TestCase):
         shutil.copytree(FIXTURE, self.world)
         self.project = store.Project(self.world)
 
+    def test_export_never_overwrites_the_projects_own_files(self):
+        from lorekeeper import ops
+        item = self.project.items[0].path
+        for target in ("lore.json", item, "narrative.md"):
+            path = self.world / target
+            before = path.read_bytes() if path.exists() else None
+            with self.assertRaises(store.LoreError) as caught:
+                ops.run("export", {"format": "md", "out": str(path)}, root=str(self.world))
+            self.assertEqual(caught.exception.code, "INVALID")
+            self.assertEqual(path.read_bytes() if path.exists() else None, before, target)
+        ops.run("export", {"format": "md", "out": str(self.world / "reading-copy.md")}, root=str(self.world))
+        self.assertTrue((self.world / "reading-copy.md").is_file())   # a new file in the folder is still fine
+
     def empty(self, name="empty", config=None):
         root = self.root / name
         root.mkdir()
