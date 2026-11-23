@@ -74,7 +74,9 @@ const isDateKey = (key) => graph.properties[key]?.format === 'date' || ['born', 
 const label = (key) => ({canonical_name: 'Name', name: 'Name', type: 'Type', id: 'ID'})[key]
   || graph.properties[key]?.label || graph.roles[key]?.label || words(key);
 // A link A -role-> B, seen from B: the role's stated inverse, else 'Sibling of' (B is A's sibling).
-const inverseLabel = (role) => graph.roles[role]?.inverse || (/^\w+$/.test(label(role)) ? `${label(role)} of` : `${label(role)} (from)`);
+const SAME_BOTH_WAYS = new Set(['sibling', 'siblings', 'spouse', 'friend', 'friends', 'ally', 'allies', 'enemy', 'enemies', 'rival', 'rivals', 'partner']);
+const inverseLabel = (role) => graph.roles[role]?.inverse || (SAME_BOTH_WAYS.has(role) ? label(role)
+  : /^\w+$/.test(label(role)) ? `${label(role)} of` : `${label(role)} (from)`);
 const startKey = (item) => ['born', 'date', 'start'].find(k => item.fields[k]) || (isPerson(item) ? 'born' : 'date');
 const endKey = (item) => ['died', 'end'].find(k => item.fields[k]) || (isPerson(item) ? 'died' : 'end');
 const nameKey = (item) => item.fields.canonical_name != null ? 'canonical_name' : 'name';
@@ -679,8 +681,7 @@ function renderLinks(panel, item) {
   section.append(el('h3', 'Connections', {id: 'links-title'}));
   const outgoing = graph.links.filter(l => l.from_path === item.path);
   const incoming = graph.links.filter(l => l.to_path === item.path && l.resolved);
-  if (!outgoing.length) section.append(el('p', incoming.length ? 'None set on this item. Others link to it, below.'
-    : saga ? 'No connections.' : 'No connections yet.', {class: 'hint'}));
+  if (!outgoing.length && !incoming.length) section.append(el('p', saga ? 'No connections.' : 'No connections yet.', {class: 'hint'}));
   for (const [role, links] of groupBy(outgoing, l => l.role)) {
     section.append(el('h4', label(role), {class: 'role-name'}));
     const list = el('ul', null, {class: 'links'});
@@ -1137,7 +1138,7 @@ function subway(view) {
   bar.prepend(zoomControls());
   view.append(bar);
   const q = ui.people.toLowerCase(), ranked = rankedPeople().filter(r => r.n > 0);
-  const lanes = (q ? ranked.filter(({p}) => p.name.toLowerCase().includes(q)) : ranked.slice(0, 12)).map(r => r.p);
+  const lanes = (q ? ranked.filter(({p}) => p.name.toLowerCase().includes(q)) : ranked.slice(0, 8)).map(r => r.p);
   if (!lanes.length) {
     view.append(q ? emptyState('No one matches', `No person whose name contains “${ui.people}” takes part in a dated event.`)
       : emptyState('No journeys yet', 'Connect people to dated events with the Participants connection, and their lines appear here.'));
@@ -1176,7 +1177,7 @@ function subway(view) {
   if (!q && ranked.length > lanes.length) view.append(el('p', `Showing the ${lanes.length} people with the most events. Filter to find the other ${ranked.length - lanes.length}.`, {class: 'hint'}));
 }
 function agesView(view) {
-  view.append(peopleFilter(view, 'Ages at the events each person takes part in. Yellow: under 18. Red: before birth or after death. Who is related to whom is under Relationships.'));
+  view.append(peopleFilter(view, 'Ages at the events each person takes part in; a blank cell means that person was not there. Yellow: under 18. Red: before birth or after death. Who is related to whom is under Relationships.'));
   const q = ui.people.toLowerCase();
   const ranked = rankedPeople().filter(r => r.n > 0 && (!q || r.p.name.toLowerCase().includes(q))), ROWS = q ? 200 : 40;
   const shown = ranked.slice(0, ROWS).map(r => r.p).sort(byName);
@@ -1210,9 +1211,9 @@ function agesView(view) {
         if (p.lo == null) cell.textContent = 'No birth date';
         else if (ages.has(key)) paintAge(cell, ages.get(key));
         else {
-          cell.textContent = '…';
+          cell.setAttribute('aria-busy', 'true');
           jobs.push(async () => {
-            try { ages.set(key, await api('age', {item: ref(p), at: ref(e)})); paintAge(cell, ages.get(key)); }
+            try { ages.set(key, await api('age', {item: ref(p), at: ref(e)})); cell.removeAttribute('aria-busy'); paintAge(cell, ages.get(key)); }
             catch { cell.textContent = 'Unknown'; cell.title = 'This age can’t be worked out from the dates given.'; }
           });
         }
@@ -1446,6 +1447,13 @@ function narrative(view) {
   const order = (i) => Number(i.fields.chapter ?? i.fields.order ?? i.fields.number ?? i.name.match(/\d+/)?.[0] ?? Infinity);
   const chapters = graph.items.filter(i => category(i) === 'narrative' || i.type === 'card')
     .sort((a, b) => order(a) - order(b) || byName(a, b));
+  const unmapped = graph.items.filter(i => /narrative|chapter|scene|book|part/i.test(i.type));
+  if (!chapters.length && unmapped.length) {
+    const kinds = [...new Set(unmapped.map(i => typeLabel(i.type)))].join(', ');
+    view.append(emptyState('Story parts aren’t set up as chapters yet', `This world has ${plural(unmapped.length, 'item')} of the kind ${kinds}, `
+      + 'but that kind isn’t marked as a story part, so this view can’t order them. In the world’s settings (lore.json), give that type "category": "narrative".'));
+    return;
+  }
   if (!chapters.length) {
     view.append(emptyState('No chapters yet', 'Chapters and other story parts appear here in reading order, with a flag wherever the story steps back in time.',
       saga || !graph.types.chapter ? null : ['Create a chapter', () => openCreate('chapter')]));
@@ -1603,7 +1611,7 @@ function openEntry(key, name, fromIndex = false) {
     ...(key !== wiki.open ? {cite: null, citeText: null, review: null} : {})});
   if (wiki.open !== wiki.card?.key) wiki.card = null;
   renderView();
-  requestAnimationFrame(() => $('wiki-title')?.focus({preventScroll: true}));
+  requestAnimationFrame(() => $('wiki-title')?.focus({preventScroll: !narrow()}));
 }
 function setCardChapter(value) { wiki.cardAsOf = value; wiki.form = null; renderView(); }
 function chapterSelect(id, value, onChange, labelText, withPlan = false) {
@@ -1878,7 +1886,7 @@ function citeBox(id) {
 }
 function chips(parent, sources, owner) {
   sources.forEach((s, i) => {
-    const id = `${owner}|${i}`, label = (s.source ? `${s.source} §${s.section}` : s.ref).replace(/`/g, '');
+    const id = `${owner}|${i}`, label = (s.source ? `${s.source} §${s.section}` : s.ref).replace(/`/g, '') + (s.found ? '' : ' · not found');
     parent.append(button(label, () => s.source && s.found ? openCite(id, s.source, s.section) : null,
       {class: `cite${s.found ? '' : ' missing'}`, id: `cite-${owner}-${i}`.replace(/[^\w-]/g, '-'),
        'aria-expanded': s.found ? String(wiki.cite === id) : null, disabled: s.found ? null : '',
@@ -1959,7 +1967,7 @@ function planLinks(card) {
   const box = el('section', null, {class: 'wiki-section links', 'aria-labelledby': 'links-title'}), links = card.links;
   box.append(el('h3', 'Links', {id: 'links-title'}), el('p', 'Worked out by Lorekeeper from tags, the dialogue documents and the chapter cards.', {class: 'hint'}));
   const dl = add(box, el('dl', null, {class: 'wiki-fields'}));
-  const row = (label, fill) => { dl.append(el('dt', label)); fill(add(dl, el('dd'))); };
+  const row = (label, fill) => { if (/ · 0$/.test(label)) return; dl.append(el('dt', label)); fill(add(dl, el('dd'))); };
   row(`Notable members · ${links.members.length}`, dd => links.members.length
     ? links.members.forEach((m, i) => { if (i) dd.append(', '); dd.append(button(m.name, () => openEntry(m.key, m.name), {class: 'link'})); })
     : dd.append(el('span', 'none', {class: 'hint'})));
@@ -1985,6 +1993,7 @@ function planLinks(card) {
       } else li.append(name);
     });
   });
+  if (!dl.children.length) dl.replaceWith(el('p', 'Nothing links to it yet.', {class: 'hint'}));
   return box;
 }
 function planForm(card, section, fact, formId) {
@@ -2111,6 +2120,7 @@ $('find').addEventListener('keydown', event => {
   if (event.key === 'Enter') { event.preventDefault(); pickFind(true); }
   if (event.key === 'Escape') { $('find').value = ''; $('find').blur(); }
 });
+$('create-cancel').addEventListener('click', () => { $('new-item').open = false; $('create-name').value = ''; });
 $('create-form').addEventListener('submit', async event => {
   event.preventDefault();
   const submit = event.target.querySelector('button'), name = $('create-name').value.trim();

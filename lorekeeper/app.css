@@ -17,9 +17,12 @@ body.app { display: block; height: auto; min-height: 100%; }
 .world-card.missing h2 { color: var(--muted); }
 .open-badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--soft); color: var(--accent); }
 .warning { color: var(--warn); font-size: 13px; }
+.world-card .path { font-size: 12px; }
 .ai-note { margin-top: 6px; border-top: 1px solid var(--hair); padding-top: 10px; }
 .ai-note summary { cursor: pointer; color: var(--muted); font-size: 14px; width: fit-content; }
 .ai-note summary:hover { color: var(--ink); }
+.ai-note summary::before { content: ""; display: inline-block; border: 5px solid transparent; border-left-color: currentColor; margin-right: 6px; transform: translateY(1px); transition: transform .15s; }
+.ai-note[open] summary::before { transform: translate(-2px, 3px) rotate(90deg); }
 .ai-body { display: grid; gap: 4px; padding-top: 8px; max-width: 62ch; }
 
 /* Start a new world */
