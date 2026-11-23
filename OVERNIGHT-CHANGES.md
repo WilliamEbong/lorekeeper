@@ -340,6 +340,43 @@ William asked what actually keeps the screens under 9, and for those causes to b
 - **Cause 9, New item** (`657d048`): a "New item" heading, and a line on what happens next.
 - **Cause 7, Relationships** (`41760c3`): the cards flow in columns with no ragged gaps, and the names look like links.
 
+**Check of each cause.** A fresh Opus reviewer compared the S8 and S9 screenshots, asking one question per cause. It answered "gone" for all ten (`C:\Users\Owner\lk-scratch\r4-design\s9-causes.md`).
+
+**S9 scores**, from three fresh Opus reviewers on the same brief as S7 and S8, with screenshots from a clean browser:
+
+| Screen | S8 | S9 |
+|---|---|---|
+| Start | 8 | 8 |
+| Timeline | 7.5 | 7.5 |
+| Subway | 6.5 | 7 |
+| Relationships | 8 | 8.5 |
+| Ages | 7.5 | 7.5 |
+| Spreadsheet | 7.5 | 7 |
+| Narrative | 7 | 7 |
+| Wiki card | 7.5 | 7.5 |
+| Planning card | 7.5 | 8 |
+| Continuity | 7.5 | 8 |
+| Inspector | 7.5 | 8 |
+| New item form | 7.5 | 7.5 |
+| Phone overall | 6.5 | 7.5 |
+| Dark overall | 7.5 | 8 |
+
+Phone rose a full point, and Subway, Relationships, Planning, Continuity, Inspector and Dark rose half a point each. Spreadsheet fell half a point, which is within the noise. No screen reached 9.
+
+**What the S9 reviewers name now.** All three agree on each item. These are the causes for the next pass:
+- **Narrative:**
+  - A world with 40 unnumbered parts shows 40 identical "Set chapter" buttons.
+  - The fix is one "Number these in this order" action, with the per-row control shown on hover.
+- **Spreadsheet:**
+  - Location is cut off ("Wuthering Heig…") while other columns have room.
+  - The phone cuts names short.
+  - Column widths need to follow their content.
+- **New item:** the popover covers the Inspector heading. It should open below its button, clear of the panel.
+- **Timeline:**
+  - Event labels crowd and are clipped at the bottom of the chart.
+  - A person with only a birth date shows as a bare dot.
+- **Subway:** the hairlines between shared events still bunch up near 1800, and half the chart below the lanes is empty.
+
 **Not design causes** (so not fixed here):
 - "imp2" in the header comes from the test copy's settings file.
 - Cathy Linton dying on her birth day, and the "Narrative Folder" type name, are the imported data.
