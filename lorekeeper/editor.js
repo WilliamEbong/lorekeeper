@@ -1673,8 +1673,10 @@ function wikiCard() {
     const next = chapters[at + delta];
     setCardChapter(next === undefined ? (delta > 0 ? null : wiki.cardAsOf) : next);
   };
+  const cardPicker = el('label', 'This card as of ');   // the toolbar has its own picker: say which this one is
+  cardPicker.append(chapterSelect('card-as-of', wiki.cardAsOf, setCardChapter, 'Show this card as of'));
   toggle.append(button([icon('left')], () => step(-1), {class: 'quiet icon-only', 'aria-label': 'Previous chapter', id: 'card-prev', disabled: at === 0 ? '' : null}),
-    chapterSelect('card-as-of', wiki.cardAsOf, setCardChapter, 'Show this card as of'),
+    cardPicker,
     button([icon('right')], () => step(1), {class: 'quiet icon-only', 'aria-label': 'Next chapter', id: 'card-next', disabled: wiki.cardAsOf == null ? '' : null}));
   head.append(title, toggle);
   box.append(head);
