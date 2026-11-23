@@ -16,6 +16,42 @@ def lore(*args, cwd, **kw):
                           capture_output=True, encoding="utf-8", stdin=subprocess.DEVNULL, **kw)
 
 
+class InProcess(unittest.TestCase):
+    """cli.main called directly, as the app and other Python callers do."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def main(self, *argv):
+        import contextlib
+        import io
+        from lorekeeper import cli
+        out, err = io.StringIO(), io.StringIO()   # no reconfigure() here, unlike a console stream
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = cli.main(list(argv))
+        return code, out.getvalue(), err.getvalue()
+
+    def test_deeply_nested_config_is_invalid_not_a_traceback(self):
+        path = os.path.join(self.tmp.name, "settings.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("[" * 100000)
+        code, _, err = self.main("--root", self.tmp.name, "--config", path, "query")
+        self.assertEqual(code, 2)
+        self.assertIn("ERROR INVALID", err)
+
+    def test_failed_shortcut_install_is_one_plain_line(self):
+        from unittest import mock
+        from lorekeeper import app
+        failure = subprocess.CalledProcessError(1, ["powershell"], stderr=b"Access is denied.")
+        with mock.patch.object(app, "install", side_effect=failure), mock.patch.object(app, "launch") as launch:
+            code, _, err = self.main("app", "--install")
+        self.assertEqual(code, 1)
+        self.assertNotIn("Traceback", err)
+        self.assertIn("Access is denied.", err)
+        launch.assert_not_called()
+
+
 class CliFlows(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

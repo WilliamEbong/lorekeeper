@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import subprocess
 import sys
 
 from . import __version__, fm, ops, store
@@ -213,13 +214,20 @@ def human(op, args, result):
 
 def main(argv=None):
     for stream in (sys.stdout, sys.stderr):
-        if stream:   # none at all under pythonw, the window-less launch the app shortcut uses
+        # none at all under pythonw (the shortcut's window-less launch); no reconfigure on a StringIO
+        if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8")
     ns = build_parser().parse_args(argv)
     if ns.op == "app":
         from . import app
         if ns.install:   # the setup file: shortcuts, then the app in the background
-            for link in app.install():
+            try:
+                links = app.install()
+            except (OSError, subprocess.CalledProcessError) as exc:
+                detail = (getattr(exc, "stderr", None) or b"").decode("utf-8", "replace").strip() or str(exc)
+                print(f"  Making the shortcuts failed: {detail}", file=sys.stderr)
+                return 1
+            for link in links:
                 print(f"  Made the shortcut {link}")
             app.launch()
             return 0
@@ -235,7 +243,7 @@ def main(argv=None):
                     config = json.load(fh)
             except OSError as exc:
                 raise LoreError("NOT_FOUND", f"cannot read --config {ns.config}: {exc.strerror}") from exc
-            except ValueError as exc:
+            except (ValueError, RecursionError) as exc:
                 raise LoreError("INVALID", f"--config {ns.config} is not valid JSON: {exc}") from exc
             if not isinstance(config, dict):
                 raise LoreError("INVALID", f"--config {ns.config} must hold a JSON object")
