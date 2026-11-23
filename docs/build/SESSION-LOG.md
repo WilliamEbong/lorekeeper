@@ -470,3 +470,4 @@ Append-only. Newest entries at the bottom. Each entry gives: date/time (UTC if k
 ## Round 3: tidy and graphify (2026-11-23)
 - Opus tidy audit: biggest cut was tracked build output (ec5e3ec, -3,693 lines); wrappers and a dead helper (ea902b2). guard.py left (BUILD-NOTES says kept for reuse).
 - graphify v0.9.17: `graphify update .` (AST, no LLM) into graphify-out/, committed like PaperTiger with cache ignored (d93b509, d622d20).
+- 2026-11-23 design pass 3: acted on reviewer lists (S7, S8 scored); final Codex review vs main, 4/5 fixed (90ce814); record final in OVERNIGHT-CHANGES.md. Next: orchestrator merges ff-only and re-vendors sagas.

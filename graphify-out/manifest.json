@@ -10,8 +10,8 @@
     "semantic_hash": ""
   },
   "lorekeeper/app.js": {
-    "mtime": 1795461895.846033,
-    "ast_hash": "42d5d7a8391112a554a238c52e0671e1",
+    "mtime": 1795466669.3318043,
+    "ast_hash": "d10a85f0e7bc114b586896413f0104ea",
     "semantic_hash": ""
   },
   "lorekeeper/app.py": {
@@ -35,8 +35,8 @@
     "semantic_hash": ""
   },
   "lorekeeper/editor.js": {
-    "mtime": 1795464266.9050736,
-    "ast_hash": "95f8cb59c23300fa21f3609adfa5f8bc",
+    "mtime": 1795468613.016524,
+    "ast_hash": "5bcf7f015a20c046b485a33f08d47ded",
     "semantic_hash": ""
   },
   "lorekeeper/fm.py": {
@@ -280,8 +280,8 @@
     "semantic_hash": ""
   },
   "OVERNIGHT-CHANGES.md": {
-    "mtime": 1795464466.2553434,
-    "ast_hash": "3316ed42d4b85c31291629ed99c18128",
+    "mtime": 1795468882.3841662,
+    "ast_hash": "7b55577be7c6cc68f2301e9675cf23c6",
     "semantic_hash": ""
   },
   "README.md": {
@@ -315,8 +315,8 @@
     "semantic_hash": ""
   },
   "lorekeeper/editor.html": {
-    "mtime": 1795462249.9739606,
-    "ast_hash": "6114586f409b4094ec7a00841fa52c3c",
+    "mtime": 1795464845.4767792,
+    "ast_hash": "77892d98491dcb1de37d6cff3fd44214",
     "semantic_hash": ""
   },
   "specs/001-core/plan.md": {

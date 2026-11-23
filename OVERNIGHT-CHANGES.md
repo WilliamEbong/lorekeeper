@@ -26,6 +26,8 @@
 - The repository is about 3,800 lines lighter: an old copy of the program that was committed by mistake is gone.
 - There is a map of the code in `graphify-out/` that AI tools can search.
 
+**Design scores:** after this pass, fresh reviewers score the screens between 6.5 and 8 out of 10, with no screen at 9. The Subway and the phone layout are lowest (6.5), and the reasons are listed under "Design pass 3". Nothing found should stop the merge: the full suite passes (397 tests), and the final Codex review's confirmed findings are fixed.
+
 **What you might decide:** three of the choices above were yours to make, and each is one commit you can undo: the export rule, keeping AI tools inside the world folder, and the import round-trip rules (see Round 2). Then merge, and upgrade the sagas if you want the new editor there.
 
 
@@ -233,7 +235,52 @@ The reviewers' reasons said what a 9 would need, so this pass made those changes
   - a planning world opening on Wiki when nothing is dated;
   - grouping repeated Continuity problems.
 
-**S8 scores:** pending (fresh reviewers scoring the screens after Round B).
+**S8 scores (final)**, from three fresh Opus reviewers after Round B, scored the same way as S7:
+
+| Screen | S7 | S8 |
+|---|---|---|
+| Start | 7.5 | 8 |
+| Timeline | 7.5 | 7.5 |
+| Subway | 7 | 6.5 |
+| Relationships | 8 | 8 |
+| Ages | 7 | 7.5 |
+| Spreadsheet | 7.5 | 7.5 |
+| Narrative | 6.5 | 7 |
+| Wiki card | 7.5 | 7.5 |
+| Planning card | 7.5 | 7.5 |
+| Continuity | 7.5 | 7.5 |
+| Inspector | 7 | 7.5 |
+| New item form | 7.5 | 7.5 |
+| Phone overall | 6.5 | 6.5 |
+| Dark overall | 7.5 | 7.5 |
+
+Ages, Narrative, Inspector and Start rose, and nothing fell beyond the ±0.5 noise between reviewers. No screen reached 9. The reasons the S8 reviewers still give, which are what remains:
+- **Subway (6.5):**
+  - the axis starts at the earliest birth, so the left of the chart is empty while stops crowd the right;
+  - hollow, filled and numbered circles need a drawn legend, not a sentence.
+- **Phone (6.5):**
+  - the Timeline and Subway squeeze 60 years into 300 px with one or two year labels, and need a readable zoom with sideways scrolling;
+  - the right gutter is wider than the left;
+  - the inspector stacks under the view instead of opening as a sheet.
+- **Narrative (7):**
+  - the dash does not read as a control, and needs a visible "Set chapter" button;
+  - reviewers also asked for drag-to-reorder.
+- **Ages and Inspector (7.5):**
+  - "adult" and "under 18" tints are too close;
+  - an empty Connections line sits above a filled "Linked from";
+  - the inspector's width changes when an item is selected.
+
+Each of these is a further layout or interaction change, not a fix. They are listed here for a later pass.
+
+**Final Codex review** (whole branch against main, at wrap-up): five findings. Four were confirmed and fixed in `90ce814`:
+- chapter 0 (a prologue) can be set;
+- a fresh Aeon import's unnumbered story parts get the chapter control;
+- a long run of evenly spaced Subway stops lists its events instead of zooming in place for ever;
+- "newborn" appears only for an exact birth day.
+
+The fifth was not changed, as a fringe case. Exporting from a read-only world to a writable folder writes the file, then reports that the export ledger couldn't be saved, and a retry to the same path is refused. Nothing is lost, and you can export to a new name.
+
+**What this pass taught.** Changes in presentation alone stopped moving the scores after S3. The rises came from changes in structure, such as Ages as cards and one Narrative design. A fresh set of reviewers marks harder than the last, so compare rounds only within one reviewer brief: S1 to S6, then S7 to S8.
 
 Screenshots: `.playwright-mcp\design\s7` and `s8` in the worktree; reviewer tables in `C:\Users\Owner\lk-scratch\r4-design\s7-*.md` and `s8-*.md`.
 
@@ -256,5 +303,14 @@ Rollback for the merge: `git reset --hard bec45dd` on main, before pushing. Afte
 3. Commit as `system: vendor Lorekeeper <hash>` and land by fast-forward.
 
 Rollback for a saga: `git revert <that system commit>` in the saga (it touches only `_system/vendor/lorekeeper/`). The engine they run today is `456bfe9`.
+
+**How to check each saga still works on the new engine.** Run these in each saga folder (Realm Saga, Space saga, Zombies saga), after the vendor commit:
+1. Version: `type _system\vendor\lorekeeper\VERSION` shows the merged main's short hash, no longer `456bfe9`.
+2. The saga's own tests: `python -m unittest discover -s _system/tests`. Expect 312 (Realm), 309 (Space) and 304 (Zombies) OK, as in the rehearsal.
+3. Saga health: `python _system\scripts\saga.py health` reports no new problems compared with before, and `python _system\scripts\saga.py status` matches.
+4. Lore check: `python _system\vendor\lorekeeper --root Wiki --config _system\lorekeeper.json check`. Expect the same findings as before the upgrade (same count, same items).
+5. Launcher: double-click `Open Realm Lorekeeper.bat` (or Space, Zombies) in `Creative writing`. The editor opens at `http://127.0.0.1:8701/` (8702, 8703 for the others) and shows the saga's items. The inspector's button reads "Propose change", and the new design is visible: the View menu on a narrow window, and Ages as cards.
+6. MCP: in a Claude Code session opened in the saga folder, `/mcp` lists `lorekeeper` as connected. Asking "what does Lorekeeper know about <a character>" returns that character. The server runs the command in the saga's `.mcp.json`: the vendored engine with `--root Wiki --config _system/lorekeeper.json mcp --saga`.
+7. Skills: `_system/skills/story_wiki_update.md` and `planning_wiki_change.md` name Lorekeeper tools. Check those tool names still appear in the tool list the MCP server reports (step 6). This release renames no tools.
 
 What the sagas will notice: the editor (`saga.py timeline`) gets the design changes; `lore mcp --saga` import and export stay inside the saga folder; a command-line export records itself in `<saga>/.lore/exports.json`; `where`, `link` and CSV import messages are clearer. Their own saga tooling output is unchanged (byte-identical in the rehearsal).
