@@ -947,7 +947,7 @@ function typeChips(types, items) {
     const box2 = el('input', null, {type: 'checkbox', id: `show-${type}`});
     box2.checked = !ui.hidden.has(type);
     box2.addEventListener('change', () => { box2.checked ? ui.hidden.delete(type) : ui.hidden.add(type); renderView(); });
-    chip.append(box2, el('span', null, {class: 'swatch'}), `${typePlural(type)} · ${items.filter(i => i.type === type).length}`);
+    chip.append(box2, el('span', null, {class: 'swatch'}), `${typePlural(type)} · ${items.filter(i => i.type === type).length} dated`);
     box.append(chip);
   }
   return box;
@@ -1590,7 +1590,8 @@ function updateBadge() {
   badge.className = `badge ${result.fail ? 'fail' : 'warn'}`;
   tabNode.setAttribute('aria-label', `Continuity: ${plural(result.fail, 'definite problem')}, ${plural(result.warn, 'possible problem')}`);
   const option = $('view-menu').querySelector('option[value="Continuity"]');
-  option.textContent = result.fail || result.warn ? `Continuity (${plural(result.fail + result.warn, 'problem')})` : 'Continuity';
+  option.textContent = result.fail || result.warn
+    ? `Continuity (${[result.fail && `${result.fail} definite`, result.warn && `${result.warn} possible`].filter(Boolean).join(', ')})` : 'Continuity';
 }
 function continuity(view) {
   const bar = el('div', null, {class: 'toolbar'});

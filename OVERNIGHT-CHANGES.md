@@ -301,6 +301,18 @@ William asked what actually keeps the screens under 9, and for those causes to b
 | 9 | New item form | A popover with no title, covering the toolbar | 3 | A floating form with no heading or anchor |
 | 10 | All | Important instructions are in 12–13 px grey | 2 | Helper text is used for instructions as well as asides |
 
+**Tactics, with their sources.** An Opus researcher read the William Web Design kit (`rules\` 00-HARD-RULES, COPY, CRAFT, PREFERENCES, MOTION; `templates\docs\DESIGN.md`) and the impeccable, frontend-design, minimalist-ui, design-critique and ux-copy skills. It also looked at how Aeon Timeline, World Anvil, Plottr and Scrivener solve the same problems. The kit is written for marketing sites, so only its rules on type, copy, glyphs and lists apply here.
+1. **Words on the control, not a glyph.** "Set chapter" in place of the dash; a legend that draws the real marks beside plain words; a labelled "Show the wiki as of" menu in place of the arrows. Sources: CRAFT.md §1 ("never a Unicode glyph standing in"); PREFERENCES.md ("no stepper circles"); impeccable clarify; Plottr and Scrivener, where order comes from position.
+2. **A chart at a readable scale on a phone, not a squeezed one.** A minimum width per year, scrolling sideways with the names held in place; no reserved scrollbar gutter. Sources: impeccable adapt ("don't squeeze"); World Anvil's list and timescale modes.
+3. **Say an error once, at its source.** One line on the person's card and calm pills on the rows; Continuity problems grouped by the item they come from. Sources: impeccable distill ("if it's said elsewhere, don't repeat it"); CRAFT.md §2 ("Say it once"); Aeon's one warning on the broken constraint.
+4. **One rule per count.** Done: the counts now say which rule they use.
+5. **Group by meaning, hide what is empty.** One Connections section with "Links to" and "Linked from"; a fixed inspector width. Source: impeccable layout and clarify.
+6. **Show the name, not the storage.** Folder names and paths on hover only; tags and headings in words. Source: COPY.md §5 ("say what they do").
+7. **Prose has a measure; records use the width.** The 70-character limit applies to running text, while lists of records lay out as grids. Source: impeccable operate ("data can run denser").
+8. **Controls only when there is something to control.** Source: design:ux-copy (what this is, why it is empty, how to start).
+9. **A titled form anchored to its button.** Source: MOTION.md §10; impeccable operate.
+10. **Instructions at reading size.** Helper text at 14 px in the muted token at 4.5:1 or better. Sources: COPY.md §5; impeccable craft-floor.
+
 **Not design causes** (so not fixed here):
 - "imp2" in the header comes from the test copy's settings file.
 - Cathy Linton dying on her birth day, and the "Narrative Folder" type name, are the imported data.
