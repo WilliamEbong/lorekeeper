@@ -1,4 +1,5 @@
 """Clean-room Aeon containers, CSV interchange, and a readable Markdown export."""
+import contextlib
 import copy
 import csv
 import io
@@ -660,12 +661,36 @@ def import_into(project, data, into=None):
     cfg_path = os.path.join(project.root, store.CONFIG)
     if not store.inside(project.root, cfg_path):
         _invalid("lore.json is outside the project")
-    if config != project.config or not os.path.exists(cfg_path):
-        store.atomic_write(cfg_path, json.dumps(config, ensure_ascii=False, indent=2) + "\n", expect=store.file_sha(cfg_path))
-    project.config, project.schema = config, store.merged_schema(config)
-    writer = project if folder is None else store.Project.from_items(project.root, local, project.items)
-    for _, type_, name, fields, body in pending:
-        writer.create(type_, name, fields, body)   # create keeps the writer's index current
+    try:
+        with open(cfg_path, "rb") as fh:
+            old_config = fh.read()
+    except FileNotFoundError:
+        old_config = None
+    old_state, created = (project.config, project.schema, list(project.items)), []
+    try:
+        if config != project.config or old_config is None:
+            store.atomic_write(cfg_path, json.dumps(config, ensure_ascii=False, indent=2) + "\n",
+                               expect=store.file_sha(cfg_path))
+        project.config, project.schema = config, store.merged_schema(config)
+        writer = project if folder is None else store.Project.from_items(project.root, local, list(project.items))
+        for _, type_, name, fields, body in pending:
+            created.append(writer.create(type_, name, fields, body))   # create keeps the writer's index current
+    except BaseException:
+        # A write that fails part-way (a folder name too long, a full disk) undoes this import's files.
+        for item in created:
+            try:
+                os.remove(os.path.join(project.root, item.path))
+            except OSError:
+                pass
+        if old_config is None:
+            with contextlib.suppress(OSError):
+                os.remove(cfg_path)
+        elif store.file_sha(cfg_path) != store.sha256(old_config):
+            with contextlib.suppress(OSError, store.LoreError):
+                store.atomic_write(cfg_path, old_config.decode("utf-8"))
+        project.config, project.schema, project.items = old_state
+        project._index()
+        raise
     project.items = writer.items
     project._index()
     narrative = [targets[key] for key in data.get("narrative", []) if key in targets]
