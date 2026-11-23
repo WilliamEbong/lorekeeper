@@ -217,7 +217,7 @@ lore export csv shared.csv
 lore export md reading-copy.md
 ```
 
-Import creates new items and may add schema entries. Existing names are skipped with warnings; it does not update those items. `--into` puts new files in a folder within the project. Export replaces the destination file, so choose an output filename you are happy to replace.
+Import creates new items and may add schema entries. Existing names are skipped with warnings; it does not update those items. `--into` puts new files in a folder within the project. Export writes a new file. It replaces an existing file only if Lorekeeper exported that file and it has not been changed since; otherwise it stops with an error, so it never overwrites your own files. Lorekeeper keeps that record in `.lore/exports.json`.
 
 CSV needs `label` and `type` columns. Other standard columns are `startDate`, `endDate`, `summary`, `tags` and `displayId`. `summary` becomes the item's prose; dates become birth/death fields for people and date/end fields for other items. Extra columns are read only if their keys are already declared roles or properties in the destination schema. Export includes declared roles and properties. IDs are generated on import; `displayId` is not restored as the item ID.
 

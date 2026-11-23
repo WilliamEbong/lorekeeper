@@ -207,6 +207,29 @@ class InteropTests(unittest.TestCase):
                 ops.run("export", {"format": "md", "out": str(path)}, root=str(self.world), config=config)
             self.assertEqual(path.read_bytes(), before, path.name)
 
+    def test_export_replaces_only_a_file_it_wrote_and_nobody_changed(self):
+        from lorekeeper import ops
+        run = lambda out, fmt="md": ops.run("export", {"format": fmt, "out": str(out)}, root=str(self.world))
+        mine = self.root / "story.aeon"   # a person's own Aeon timeline, the same extension as an export
+        mine.write_bytes(b"not mine to replace")
+        notes = self.root / "notes.md"
+        notes.write_text("# My notes\n", encoding="utf-8")
+        for path, fmt in ((mine, "aeon"), (notes, "md")):
+            with self.assertRaises(store.LoreError) as caught:
+                run(path, fmt)
+            self.assertEqual(caught.exception.code, "INVALID")
+        self.assertEqual(mine.read_bytes(), b"not mine to replace")
+        self.assertEqual(notes.read_text(encoding="utf-8"), "# My notes\n")
+        copy = self.root / "copy.md"
+        run(copy)
+        run(copy)   # its own earlier export, unchanged: replaced
+        run(copy, "csv")   # any format may replace its own export
+        with open(copy, "a", encoding="utf-8") as fh:
+            fh.write("my edit\n")
+        with self.assertRaises(store.LoreError):
+            run(copy)   # changed since: no longer only the export's
+        self.assertTrue(copy.read_text(encoding="utf-8-sig").endswith("my edit\n"))
+
     def empty(self, name="empty", config=None):
         root = self.root / name
         root.mkdir()

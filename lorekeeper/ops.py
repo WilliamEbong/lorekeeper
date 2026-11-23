@@ -326,16 +326,26 @@ def op_export(p, format, out):
     writer = {"aeon": interop.write_aeon, "csv": interop.write_csv, "md": interop.write_markdown}.get(format)
     if writer is None:
         raise LoreError("INVALID", "format must be aeon, csv or md")
-    # Never replace the project's own files: items, lore.json, narrative.md, wiki pages, or a settings file
-    # kept elsewhere (--config), which has another extension than an export of this format.
+    # Export writes a new file, or replaces one it wrote itself that nobody has changed since: never the
+    # project's own files (items, lore.json, wiki pages, planning sources, a --config file) or anyone else's.
+    # The record of what it wrote is .lore/exports.json: each file's path and the sha256 export left there.
     own = [store.CONFIG, "narrative.md"] + [item.path for item in p.items]
     target = os.path.normcase(os.path.realpath(out))
+    ledger_path = os.path.join(p.root, ".lore", "exports.json")
+    try:
+        with open(ledger_path, encoding="utf-8") as fh:
+            ledger = json.load(fh)
+    except (OSError, ValueError, RecursionError):
+        ledger = {}
+    ledger = ledger if isinstance(ledger, dict) else {}
     if (target in {os.path.normcase(os.path.realpath(os.path.join(p.root, f))) for f in own}
             or any(store.inside(layer, out) for layer in p.layers())
-            or os.path.exists(out) and os.path.splitext(target)[1].lower() != "." + format):
-        raise LoreError("INVALID", f"export would overwrite {out}, which is part of this project or not an "
-                        f"earlier {format} export; choose another file")
+            or os.path.lexists(out) and (os.path.isdir(out) or ledger.get(target) != store.file_sha(out))):
+        raise LoreError("INVALID", f"export would replace {out}, which this project's export did not write "
+                        "or which has changed since; choose a new file name")
     writer(p, out)
+    ledger[target] = store.file_sha(out)
+    store.atomic_write(ledger_path, json.dumps(ledger, ensure_ascii=False, indent=2) + "\n")
     return {"written": os.path.abspath(out), "format": format, "count": len(p.items)}
 
 
