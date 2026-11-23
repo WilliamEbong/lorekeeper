@@ -449,3 +449,24 @@ Append-only. Newest entries at the bottom. Each entry gives: date/time (UTC if k
 - Note: test_perf's 1.5 s load limit failed once at 8.9 s while other overnight sessions loaded the machine; it passed on rerun. Not changed.
 - Codex review 1 (branch vs main): 4 findings, all confirmed and fixed: vacuous quit test (c6d2080), Aeon category shape (c598bbc), CSV type named lore.json (863298b), export missing wiki pages and an outside settings file (bf8d6d3). Codex review 2: 4 more; fixed the POSIX extension case (b5584c9); planning sources, a --config named .md and over-long type names are listed in OVERNIGHT-CHANGES.md as needing an owner decision.
 - Finish: suite 383 OK (1 skip); OVERNIGHT-CHANGES.md written; resume cron acd2c891 deleted. Branch claude/overnight-fixes-77b916 is local only.
+
+## Overnight pass, round 2 (2026-11-23): the "found, not changed" items
+- Orchestrator relayed the owner's approval to fix every found item, take safe defaults for the owner's decisions (separate commits, each revertible), then keep auditing in rounds until two in a row find nothing. Resume cron 561a4597 (hourly at :23); keep-awake on.
+- Fixed, test first: import rollback on late failure (c9c4daf); oversized HTTP bodies drained before the error reply (e68d5a5); CLI: nested --config, install traceback, StringIO stdout (4521fd5); nested JSON in app and MCP reads (dfb09ac); Open Lorekeeper.bat version check, tested with stand-in programs on PATH (b7859c4); speed tests take the best of three runs, budgets unchanged (0b9a34c); saga start no longer holds the app lock (cb8cdac); bad-Host bodies drained (45ab600, the race itself could not be reproduced on demand).
+- Not changed: `link` accepting an undeclared role. specs/001-core/spec.md says undeclared roles are allowed, so this is intended.
+- Decision (owner default): export writes only new files or files it wrote and nobody changed, recorded in .lore/exports.json (2e7b960). Undo: revert 2e7b960. Effect on sagas when re-vendored: a CLI export creates <saga>/.lore/exports.json.
+- Decision (owner default): MCP and the editor's HTTP API import and export only inside the world folder; relative paths are relative to it (confine=True in ops.run). The CLI is unchanged. Undo: revert that commit.
+- Decision (owner default): round-trip fidelity is now spec 006 FR-6. Fixed: bounds-only ranges, end equal to start, empty tags, Aeon decade and century precision. Recorded as losses: Aeon-side display, CSV JSON-looking text, weeks.
+- Machine load: other sessions pushed the suite from about 2.5 min to 19 min; the speed test failed once at 7 s and passed alone. Commits now run the suite on a snapshot of the index (scratchpad snap_commit.sh) so work continues meanwhile.
+- Owner bar (relayed): only tangible improvements. Reverted 3 round-2 fixes (5fb746b) and trimmed 3 (b3a33b6); discarded two uncommitted fringe fixes (MCP response objects, aeon_extract traceback). Stopped the fuzz and protocol-edge audits.
+- Desktop app crashed mid-run (ENOTFOUND); resumed: recreated resume cron f2e5849f and keep-awake; a suite run that crashed with the app (39 test_serve errors) passed on rerun.
+- Round-3 core audit (Opus): 8 defects, 1 docs item, 5 test gaps. Fixed only what real use reaches: planning-change remove without fact (48a173c) and two agent-skill examples. The rest listed as fringe in OVERNIGHT-CHANGES.
+
+## Design pass (2026-11-23)
+- Scratch copies only (lk-scratch/r4-design: the 116-item imp2 import and the planning fixture; APPDATA pointed at a scratch folder for the start screen). Servers on localhost 8751-8753. Playwright journey script screenshots desk 1440, phone 390 and dark.
+- Five Opus reviewers (layout, words, flow, craft, a11y), then fresh re-reviews after each batch: rounds 11c3ca7, 709112f (+28ab884 import fix), ef01ba0, 4f0479b. Round 4 left only data (an old import) and a loading moment: stopped.
+- Decisions: date fields keep the file's form (editable cells); file paths stay (spec 013); phone tabs wrap (Continuity count must be visible), after trying one scrolling row.
+
+## Round 3: tidy and graphify (2026-11-23)
+- Opus tidy audit: biggest cut was tracked build output (ec5e3ec, -3,693 lines); wrappers and a dead helper (ea902b2). guard.py left (BUILD-NOTES says kept for reuse).
+- graphify v0.9.17: `graphify update .` (AST, no LLM) into graphify-out/, committed like PaperTiger with cache ignored (d93b509, d622d20).

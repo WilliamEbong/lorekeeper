@@ -7,7 +7,8 @@ The pass fixed defects and added no features. Each fix began with a test that fa
 ## Tests
 
 - **Before:** `python -m unittest discover -s tests` gave 376 OK (1 skipped, POSIX-only).
-- **After:** 383 OK (1 skipped).
+- **After round 1:** 383 OK (1 skipped).
+- **Now:** 395 OK (1 skipped).
 - **No lint or typecheck:** the project has no lint or typecheck configuration, so neither was run.
 
 ## Changes
@@ -32,35 +33,61 @@ Undo any single change with `git revert <hash>`.
 | 14 | `bf8d6d3` | Export also refuses wiki pages and any existing file with another format's extension. | Codex found that #2 missed story and planning wiki pages and a settings file kept elsewhere (`--config`). Re-exporting over an earlier export of the same format still works. The agent skill now says so. |
 | 15 | `b5584c9` | Export compares the extension case-insensitively on every platform. | Codex found that on POSIX `report.CSV` worked once and was then refused. The test simulates POSIX case handling. |
 
-## Found, not changed
+## Round 2: the items round 1 found (owner approved)
 
-Each of these is below the confidence bar, needs your decision, or needs a browser.
+The owner then set a bar: only tangible improvements, nothing for fringe cases. Every change below says who notices. Three round-2 fixes failed that bar and were reverted (`5fb746b`), and three more were trimmed (`b3a33b6`).
 
-- **Export can still replace some project files.**
-  - Codex pass 2 found two cases the guard misses:
-    - planning sources such as `World Bible.md`, or prose chapter files, can live outside the planning folder, even outside the project root;
-    - a `--config` file named with an `.md` extension.
-  - Both need an explicit export path from the CLI (saga mode blocks export over HTTP and MCP).
-  - Recommendation: decide whether export should only ever write a new file, or replace one it wrote itself. That is a behaviour choice, so it was left for you.
-- **A refused import can still leave a changed `lore.json`.** If folder creation fails for a reason the preflight doesn't check, the new type is already saved. Examples are a type name longer than 255 characters (Codex) or a path over the Windows length limit. Recommendation: restore the original `lore.json` bytes when `create` fails during import.
-- **Export can write anywhere.** Over HTTP and MCP, `export` writes to any absolute or working-directory path, and `import` reads any path. This is documented ("relative to the process working directory unless absolute"). The HTTP route needs the editor's token. Recommendation: if AI clients should be confined, restrict `out` to the world folder in MCP and HTTP.
-- **Oversized HTTP bodies reset the connection.** A body over the limit (serve and app) gets a connection reset on Windows instead of a readable 400. Memory stays bounded. Recommendation: send `Connection: close` and drain up to a cap.
-- **MCP replies to responses.** The MCP server answers a JSON-RPC response object (`{"id":1,"result":{}}`) with an error. Harmless in practice, since the server never sends requests.
-- **Round trips lose some date detail.**
-  - A date known only by `date_min`/`date_max` narrows to its lower bound after CSV or Aeon export and import.
-  - CSV re-import adds `end` equal to `date` and `tags: []`.
-  - A CSV text value that looks like a JSON list comes back as a list.
-  - Aeon export drops century, decade and week precision, and writes a born-only person with a null end.
-  - Recommendation: a spec decision about how bounds-only dates export.
-- **`lore app --install` prints a traceback before the friendly message** if PowerShell fails (code reading only; the exit code is still 1, so `Set up Lorekeeper.bat` reports the failure).
-- **`--config` input that is deeply nested** raises a RecursionError traceback. The same applies to app reads of a person's own `.mcp.json`.
-- **`cli.main` with a non-console stdout:** calling it in-process with stdout redirected to a `StringIO` fails on `reconfigure`. Only in-process callers are affected.
-- **`link` accepts an undeclared role,** and `check` doesn't flag it. This may be intended.
-- **`Open Lorekeeper.bat` doesn't check the Python version.** `Set up Lorekeeper.bat` does. With Python 3.10 or older, the window-less app fails silently. Otherwise the quoting is sound.
-- **`tools/aeon_extract.py`** prints a raw traceback if the exe is missing. It is a developer tool.
-- **`app.open_saga`** holds the app lock for up to 20 s while a saga starts (code reading only). Other open actions wait.
-- **A flaky performance test:** `test_perf` (1.5 s load limit) failed twice at about 9 s, when other overnight sessions loaded the machine, and passed on rerun. Not changed.
-- **Needs a browser check:** none of the changes touch the UI. #9 changes which message the app shows for a corrupt `lore.json`, from the generic one to "settings file can't be read". I checked it by test, not in a browser.
+| Commit | Change | Who notices |
+|---|---|---|
+| `e68d5a5`, `45ab600` | The editor and start screen read and drop a request body before replying with an error. | The test suite: a bad-Host test failed once with a connection reset under load. An oversized body (over 1 MiB) gets the same readable error. |
+| `4521fd5` | `lore app --install` prints one line instead of a traceback when PowerShell can't make a shortcut. | The owner, running Set up Lorekeeper. |
+| `b7859c4` | `Open Lorekeeper.bat` checks for Python 3.11 first. | Anyone with an older Python: the app used to fail silently. A test runs the real `.bat` with stand-in programs. |
+| `0b9a34c` | The speed tests take the best of three runs (budgets unchanged). | The test suite: they failed while other work loaded the machine. |
+| `2e7b960`, `d47bb62` | **Owner default:** export writes a new file, or replaces only a file it wrote itself that nobody changed since. It keeps a record in `.lore/exports.json`. | A writer exporting over a file of the same name: a planning document, a chapter, or their own `.aeon` timeline could be overwritten. Revert `2e7b960` to undo. |
+| `0efad5b` | **Owner default:** AI tools (MCP) and the editor import and export only inside the world folder. The command line is unchanged. | Anyone running an AI assistant on a world: it could read or write any file the user can. Revert `0efad5b` to undo. |
+| `52444a3` | **Owner default:** CSV and Aeon round trips keep dates and fields (spec 006 FR-6). | A writer importing from Aeon: every event gained a redundant `end` and every item an empty `tags: []`; Aeon lost decade and century precision. Losses the formats can't avoid are listed in the spec. |
+| `48a173c` | `planning-change --remove` without a fact id is INVALID, not a crash. Two agent-skill examples fixed. | An AI client naming a fact by section and text (found by the round-3 audit). |
+| `28ab884` | Aeon narrative-folder types (Book, Narrative Folder) import as narrative types. | A writer importing from Aeon: the Narrative view said "No chapters yet". |
+
+Reverted for failing the bar (`5fb746b`): the import rollback after a late failure (needs a type name over 255 characters), the nested-JSON guards in the app and MCP (only a hand-made file), and the saga start lock rework (25 lines for a few seconds' wait). Trimmed (`b3a33b6`): the bounds-only date special case, the nested `--config` guard, and a launcher test that timed out under load.
+
+Not changed, and why:
+- `link` accepting an undeclared role: `specs/001-core/spec.md` allows it.
+- MCP answering a JSON-RPC response object, and `tools/aeon_extract.py`'s traceback: nobody meets them.
+- Audit findings judged fringe: a hand-edited bad calendar or checks setting crashes with exit 1; `fact-add` above chapter 9999; `fact-end` on a fenced code block; names `CONIN$` or `...`; `<!--` in fact text; `planning-fact` ignoring a version on a new page.
+
+## Design pass: the editor, wiki and start screen
+
+Method: every journey a novelist takes was screenshotted with Playwright at 1440 px and 390 px, plus dark mode, on scratch copies of a 116-item world imported from Aeon and the planning fixture. Five fresh-context Opus reviewers each took one lens: hierarchy and layout, words, flow and friction, visual craft (taste-skill, frontend-design) and accessibility (design:accessibility-review). Then fixes, new screenshots, and a fresh reviewer each round until the remaining findings were data or taste. Four review rounds.
+
+| Commit | What a writer now sees |
+|---|---|
+| `11c3ca7` | A selected item is marked in ink, not an orange outline that read as an error. Dates of a single moment read once, not "June 1778 to June 1778" (tooltips and screen readers). The status says "All changes saved" or "Unsaved changes in Heathcliff". Saving a date Lorekeeper can't read says the item is left off the Timeline. Focus stays in the inspector after Save. Save and Discard stay in reach. Ages headers show dates in words. "(or reborn)" appears only in worlds with rebirths. Continuity drops 24 repeated "Definite" pills. The "alive" line is visible (was 1.8:1 contrast). Wiki text has a reading width. |
+| `709112f` | The inspector no longer says "No connections yet" for someone others link to, and "Linked from" comes before the add form. Continuity says "Hareton Earnshaw died June 1778, but takes part here (1 January 1803)." instead of a log line. The top bar no longer jumps as the status changes. The start screen no longer says "on the right" on a phone. |
+| `ef01ba0` | "In two places at once" reads as a sentence. On a phone, Continuity and its problem count are visible and card lists scroll with the page. |
+| `4f0479b` | The wiki card's own chapter picker is labelled "This card as of", so it isn't confused with the toolbar's. |
+
+Left, with the reason: date fields show the file's form ("1764-07") with a "Reads as July 1764" line, because the spreadsheet cell is editable and rewriting it would change files; file paths stay as quiet secondary text (spec 013); a world imported before `28ab884` keeps its old type categories; a fresh history (Back button) after following a connection would be a new feature.
+
+Screenshots: `C:\Users\Owner\lk-scratch\r4-design\shots\before\` and `...\after\` (`desk-*`, `phone-*`, `dark-*`; `r2-*` to `r4-*` are the later checks). The scripts are in `C:\Users\Owner\lk-scratch\r4-design\`.
+
+## Round 3: tidy and graphify
+
+| Commit | Change | Measured |
+|---|---|---|
+| `ec5e3ec` | Stopped tracking `build/lib/` and `lorekeeper.egg-info/`, a stale setuptools copy of the package from 17 October (no app, planning or wiki modules). `.gitignore` keeps them out. | −3,693 lines in git. |
+| `ea902b2` | The ops table points at `wiki.fact_end`, `wiki.fact_remove`, `planning.impact` and `planning.change` directly; four pass-through wrappers and the unused `app.cli_command` are gone. | −23 lines. |
+| `d93b509`, `d622d20` | graphify knowledge graph in `graphify-out/` (1,608 nodes, 3,516 edges, 95 communities). Built from code and Markdown structure with `graphify update .`: no LLM, no cost. Cache and dated backups are git-ignored; `.graphifyignore` leaves out `.claude/`, `.specify/` and the test fixture worlds. | |
+
+**Codex review of rounds 2, design and 3** (branch diff against `fc3055f`): 9 findings. Fixed 4 that real use reaches (next commit): the save message said "left off the Timeline" when only an end date was unreadable; a `1990s` date narrowed by `date_min` was sent to Aeon as a whole decade; the check speed test timed a warm cache after the best-of-three change, which hid what a first check costs (the test now times a fresh project each run); export hashed any existing file even when its record ruled it out. Not changed, as nobody meets them: an edit landing during the milliseconds of an export, a `.lore` folder that is a symlink, two exports at the same instant, `.lore/exports.json` itself as an export target, and a client that declares a large body and then stalls.
+
+Net since round 1: lorekeeper and tests +351 / −82 lines; whole repo −3,779 lines (excluding the graph).
+
+Speed: not changed. The suite's own time swung from 2.5 to 19 minutes with other sessions' load, so no measurement this night is trustworthy enough to claim a gain.
+
+Left on the audit's list: the retired continuity-kit hook script `tools/build-hooks/guard.py` (BUILD-NOTES says "kept for reuse"; your call), and three 2-line wrappers (`mcp.story_folder`, `app.world_name`, a duplicate lore.json read in `serve.stamp`) whose removal saves only a few lines each.
+
+**graphify:** open `graphify-out/graph.html` in a browser, read `graphify-out/GRAPH_REPORT.md`, or ask `graphify query "how does export decide what it may overwrite"`, `graphify path "op_export" "atomic_write"`, `graphify explain "item_dates"`. Refresh after code changes with `graphify update .`. Semantic extraction of the docs (concepts across specs) was skipped; it would take subagent time for little gain over the structural graph.
 
 ## Other branches
 
@@ -69,11 +96,11 @@ Each of these is below the confidence bar, needs your decision, or needs a brows
 ## How to merge and re-vendor
 
 1. From the main checkout, run `git merge --ff-only claude/overnight-fixes-77b916`. main has not moved since `bec45dd`, so this fast-forwards.
-2. Run `python -m unittest discover -s tests`. Expect 383 OK, 1 skipped.
+2. Run `python -m unittest discover -s tests`. Expect 395 OK, 1 skipped.
 3. Push to the private repo, if you approve.
 4. Re-vendoring into the sagas follows the run-7 method in `docs/build/SESSION-LOG.md`:
    1. Copy every tracked file of `lorekeeper/` into each saga's `_system/vendor/lorekeeper/` in a clone, and set `VERSION`.
    2. Run each saga's own suite (`python -m unittest discover -s _system/tests`) and replay its status and validate outputs.
    3. Land by fast-forward.
 
-   One change affects sagas: `lore mcp --saga` documentation now names `planning-fact`. The behaviour is unchanged.
+   Changes that affect sagas: `lore mcp --saga` documentation now names `planning-fact`; a CLI export creates `<saga>/.lore/exports.json`; MCP import and export stay inside the saga folder; the editor design changes appear in `saga.py timeline`.

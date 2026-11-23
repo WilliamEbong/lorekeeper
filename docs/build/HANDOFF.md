@@ -120,4 +120,8 @@ Lorekeeper (command `lore`) is a standalone, stdlib-only story-world engine.
 
 ## Overnight maintenance pass (2026-11-22/23)
 
-Branch `claude/overnight-fixes-77b916` (worktree `.claude/worktrees/overnight-fixes-77b916`), 16 commits on main `bec45dd`, local only. Read `OVERNIGHT-CHANGES.md` at the repo root: every fix with its evidence and undo, the "Found, not changed" list, and how to merge and re-vendor. Suite 383 OK (1 skip). Not merged, not pushed, sagas untouched.
+Branch `claude/overnight-fixes-77b916` (worktree `.claude/worktrees/overnight-fixes-77b916`), local only, on main `bec45dd`: not merged, not pushed, sagas untouched. Read `OVERNIGHT-CHANGES.md` at the repo root first: every change with its "who notices" reason, evidence and undo, and how to merge and re-vendor. Suite 395 OK (1 skip).
+- Round 1: defect fixes. Round 2: the items round 1 found, under the owner's "tangible only" bar, including three owner-decision defaults (export ledger, AI confinement to the world folder, round-trip fidelity), each one revertible commit.
+- Design pass on the editor, wiki and start screen: four review rounds with fresh Opus reviewers on Playwright screenshots (`C:/Users/Owner/lk-scratch/r4-design/shots`).
+- Round 3: stopped tracking stale build output, removed pass-through wrappers, added `graphify-out/` (refresh with `graphify update .`).
+- Next step for the owner: review `OVERNIGHT-CHANGES.md`, then `git merge --ff-only claude/overnight-fixes-77b916` from the main checkout, and re-vendor into the sagas with the run-7 method if wanted.

@@ -506,3 +506,4 @@ Goal: find and fix high-confidence defects; no features, no redesign. Record: `O
 Acceptance checks: each fix has a test that failed before and passes after; full suite green (`python -m unittest discover -s tests`, baseline 376 OK, 1 skip); Codex review of the branch diff with confirmed findings fixed; no push, merge or saga change.
 Steps: 1 baseline (done) · 2 audit with three read-only agents · 3 confirm and fix one at a time · 4 Codex review · 5 OVERNIGHT-CHANGES.md and handoff.
 Later: anything below the confidence bar goes to "Found, not changed" in OVERNIGHT-CHANGES.md.
+Status 2026-11-23: rounds 1 to 3 and the design pass done; see OVERNIGHT-CHANGES.md. Rounds 2 and 3 followed the owner's tangible-value bar.
