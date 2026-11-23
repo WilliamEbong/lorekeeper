@@ -148,6 +148,53 @@ Screenshots: `C:\Users\Owner\lk-scratch\r4-design\shots\c2-before\` and `...\c2-
 - **Engine:** the full comparison ran on `931036c`; the last code commit, `c8c3e40` (four small Codex fixes), was then re-vendored into the same copies and the three suites and `health` rerun: all OK (312, 309, 304) and `health` identical. Upgrade all three sagas together: each saga's own parity test checks that the three vendored engines match, so a saga upgraded alone fails it until the others follow.
 - **Scripts:** `C:\Users\Owner\lk-scratch\snap\r8_rehearse.sh` and `r8_final.sh`; logs `r8-rehearse.log` and `r8-final.log` beside them.
 
+## Design scoring: final scores
+
+**Final scores** (S6; each is the lowest of clarity, craft and reading comfort for that screen, as the median of three fresh Opus reviewers who had not seen earlier versions): Start 8.5, Timeline 8, Subway 7.5, Relationships 8.5, Ages 7, Spreadsheet 8, Narrative 7, Wiki card 8, Planning card 8, Continuity 8.5, Inspector 8, New item form 8.5, Phone 7, Dark 8.5. No main screen reached 9 with all three reviewers. Several reached 9 with one or two of them: Start, New item, Dark, Relationships and Continuity.
+
+**Method.** Six scoring rounds (S1 to S6), 18 reviewers in all, on Playwright screenshots of the running app: a copy of the 116-item Aeon import and the planning fixture, at 1440 px, 390 px and in dark mode. Each round, fixes went in for the causes at least two reviewers agreed on, structural ones first. No round was reverted as a whole. Within rounds, two changes that made things worse were undone or fixed straight away: a tint that hid the Ages warning colours, and a header reflow that made the phone header taller.
+
+| Screen | S1 | S2 | S3 | S4 | S5 | S6 |
+|---|---|---|---|---|---|---|
+| Start (with worlds) | 8 | 8 | 8.5 | 9 | 8.5 | 8.5 |
+| Timeline | 8 | 8 | 8.5 | 8.5 | 8.5 | 8 |
+| Subway | 7 | 7 | 8 | 8 | 8 | 7.5 |
+| Relationships | 8.5 | 8 | 8.5 | 8.5 | 8.5 | 8.5 |
+| Ages | 6 | 7 | 7 | 7 (regression, fixed) | 7.5 | 7 |
+| Spreadsheet | 8 | 7 | 8.5 | 8 | 8 | 8 |
+| Narrative | 8 | 6 | 6 | 7 | 7 | 7 |
+| Wiki card | 7.5 | 7 (not captured) | 8.5 | 8 | 8 | 8 |
+| Planning card | 7 | 7 | 8 | 7.5 (regression, fixed) | 7.5 | 8 |
+| Continuity | 8 | 8 | 8.5 | 8.5 | 8.5 | 8.5 |
+| Inspector | 8 | 8 | 8 | 8.5 | 8 | 8 |
+| New item form | 7.5 | 8 | 9 | 9 | 9 | 8.5 |
+| Phone overall | 6.5 | 6 | 7.5 | 7.5 | 7 | 7 |
+| Dark overall | 8.5 | 8 | 8.5 | 9 | 8.5 | 8.5 |
+
+S1 is before this cycle; S2 is affected by a capture fault (the wiki card wasn't captured). Reviewer-to-reviewer spread is about ±1 point, so changes of 0.5 between rounds are noise.
+
+**Rounds and commits:** S2 and S3 in `e7d5939`; S4 and S5 in `7cec7ba`; S6 in `d6427d0`.
+- **Structural changes in these rounds:**
+  - the empty inspector narrows, and is hidden on a phone;
+  - card lists sit on the page, not in frames inside frames;
+  - an imported world's story parts are listed;
+  - one chapter control on the wiki card;
+  - on a phone, tapping a wiki entry shows the card;
+  - the phone tabs fit in two rows.
+- **Wording and craft:** listed in each commit message.
+
+**Codex review of the scoring rounds** (branch diff against `8f6a17a`): 6 findings, all fixed in the next commit. A long wiki card overflowed the wiki area. "part" matched "apartment" and "participant" in the Narrative fallback. Ages shaded undetermined cells green. The spreadsheet's Open was invisible on touch screens. A failed age kept "working out…". "Childs" was shown instead of "Children".
+
+**Why the scores stopped at 7 to 8.5, and what a 9 would need.** Scores stopped rising after S3, through four rounds of changes. What the reviewers still name are structural changes that amount to new layouts or features:
+- **Phone (7):** a layout built for a phone rather than the desktop layout squeezed down. That means a tab menu, a per-person list for Ages, stacked rows for the Spreadsheet, and no scroll areas inside the scrolling page.
+- **Ages (7):** a person-by-event grid is mostly blank by nature, so it needs a different view, such as a list per person. Swatches in the key would help a little.
+- **Narrative (7):** this imported world's story parts have no chapter numbers. That is data, and it is fixed by giving them numbers (or a feature to set the order in place). A world with chapters (the planning fixture) shows them in order.
+- **Subway (7.5):** crowded years need clustering, or zooming to a period.
+- **Spreadsheet and Inspector (8):** to show dates in words in fields you can edit, those fields need a display mode separate from editing. That is a change of behaviour; the decision so far has been to show the date as written, with "Reads as …".
+- **All screens:** the Inspector column is always reserved, and several views scroll inside the page. Changing either is a layout redesign, not a fix.
+
+Screenshots for every round: `C:\Users\Owner\lk-scratch\r4-design\shots\s1` to `s6`.
+
 ## Other branches
 
 `feat/008-editor-ux`, `feat/009-editor-followups`, `feat/010-progressive-wiki`, `feat/011-planning-wiki`, `fix/lives-flashbacks-overflow` and `fix/mcp-cache-hints` are all fully merged into main (0 commits ahead). They hold no unmerged work.
