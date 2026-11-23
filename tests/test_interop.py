@@ -732,6 +732,15 @@ class InteropTests(unittest.TestCase):
         self.assertEqual(counts["created"], 2)
         self.assertEqual({i.name for i in store.Project(target.root).items}, {"Acme Inc.", "Acme Inc (2)"})
 
+    def test_aeon_narrative_folder_types_import_as_narrative(self):
+        doc = sample()
+        defs, data = doc["core"]["definitions"], doc["core"]["data"]
+        defs["types"]["byId"]["folder"] = {"label": "Narrative Folder", "canHaveDate": False, "isNarrativeFolder": True}
+        data["itemsById"]["c"]["type"] = "folder"
+        target = self.empty()
+        interop.import_into(target, self.read_document(doc))
+        self.assertEqual(target.schema["types"]["narrative_folder"]["category"], "narrative")
+
     def test_aeon_role_on_builtin_key_adds_its_target_types(self):
         doc = sample()
         defs, data = doc["core"]["definitions"], doc["core"]["data"]

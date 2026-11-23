@@ -522,7 +522,8 @@ def import_into(project, data, into=None):
             if store.BAD_FILENAME.search(mapped) or store.DEVICE.match(mapped) or mapped != mapped.strip(" ."):
                 _invalid(f"import type {key!r} cannot be used as a folder name; rename it in the file first")
             schema["types"][mapped] = {"label": spec.get("label", mapped), "plural": mapped,
-                                       "category": "event" if spec.get("canHaveDate") else "thing",
+                                       "category": "narrative" if spec.get("isNarrativeFolder") is True
+                                       else "event" if spec.get("canHaveDate") else "thing",
                                        "id_prefix": mapped.upper()}
             config.setdefault("types", {})[mapped] = schema["types"][mapped]
     for section, mapping in (("roles", mapped_roles), ("properties", mapped_props)):
