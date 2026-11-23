@@ -162,6 +162,9 @@ class InteropTests(unittest.TestCase):
         ops.run("export", {"format": "md", "out": str(self.world / "reading-copy.md")}, root=str(self.world))
         self.assertTrue((self.world / "reading-copy.md").is_file())   # a new file in the folder is still fine
         ops.run("export", {"format": "md", "out": str(self.world / "reading-copy.md")}, root=str(self.world))
+        with mock.patch("os.path.normcase", lambda path: path):   # as on POSIX: extensions keep their case
+            for _ in range(2):
+                ops.run("export", {"format": "csv", "out": str(self.root / "report.CSV")}, root=str(self.world))
         # a settings file kept elsewhere (--config) and story and planning wiki pages are not items, but are
         # the project's too
         settings = self.root / "settings.json"

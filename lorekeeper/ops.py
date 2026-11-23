@@ -332,7 +332,7 @@ def op_export(p, format, out):
     target = os.path.normcase(os.path.realpath(out))
     if (target in {os.path.normcase(os.path.realpath(os.path.join(p.root, f))) for f in own}
             or any(store.inside(layer, out) for layer in p.layers())
-            or os.path.exists(out) and os.path.splitext(target)[1] != "." + format):
+            or os.path.exists(out) and os.path.splitext(target)[1].lower() != "." + format):
         raise LoreError("INVALID", f"export would overwrite {out}, which is part of this project or not an "
                         f"earlier {format} export; choose another file")
     writer(p, out)
