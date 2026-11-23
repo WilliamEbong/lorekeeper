@@ -1138,7 +1138,7 @@ function peopleFilter(view, hint) {
   return bar;
 }
 function subway(view) {
-  const bar = peopleFilter(view, 'Each line is a person; stops are the events they take part in. A numbered stop is several events close together: click it to zoom in.');
+  const bar = peopleFilter(view, 'Each line is a person and each circle an event they are in. A numbered circle holds several events: click it to zoom in.');
   bar.prepend(zoomControls());
   view.append(bar);
   const q = ui.people.toLowerCase(), ranked = rankedPeople().filter(r => r.n > 0);
@@ -1153,8 +1153,12 @@ function subway(view) {
   const width = Math.max(300, box.clientWidth), gutter = width < 600 ? 124 : 150, c = chart(box, width, gutter), LANE = 46, TOP = 26;
   c.svg.setAttribute('aria-label', 'Subway. Use the arrow keys to move between stops.');
   lanes.forEach((p, i) => {
-    const y = TOP + i * LANE, cls = `r${i % 8}`, room = Math.floor((gutter - 20) / 7), name = p.name.length > room ? p.name.slice(0, room - 1) + '…' : p.name;
-    const tag = svgEl('text', {x: 14, y: y + 4, class: `lane-name ${cls}`}, name);
+    const y = TOP + i * LANE, cls = `r${i % 8}`, room = Math.floor((gutter - 20) / 7);
+    const cut = (text) => text.length > room ? text.slice(0, room - 1) + '…' : text;
+    const space = p.name.length > room ? p.name.lastIndexOf(' ', room) : -1;
+    const lines = space > 0 ? [p.name.slice(0, space), cut(p.name.slice(space + 1))] : [cut(p.name)];
+    const tag = svgEl('text', {x: 14, y: y + 4 - (lines.length - 1) * 7, class: `lane-name ${cls}`});
+    lines.forEach((line, n) => tag.append(svgEl('tspan', {x: 14, dy: n ? 14 : 0}, line)));
     tag.append(svgEl('title', {}, p.name));
     c.svg.append(tag, svgEl('line', {x1: c.left, x2: c.right, y1: y, y2: y, class: `rail-dim ${cls}`}));
     if (p.lo != null) {

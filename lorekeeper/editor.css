@@ -156,7 +156,7 @@ svg .dragging .handle { display: none; }
 svg .drag-date { font-weight: 700; fill: var(--focus); font-variant-numeric: tabular-nums; }
 svg .rail { stroke: var(--c); stroke-width: 4; stroke-linecap: round; opacity: .85; }
 svg .rail-dim { stroke: var(--c); stroke-width: 1.5; opacity: .2; stroke-dasharray: 2 4; }
-svg .connector { stroke: var(--muted); stroke-width: 1; opacity: .3; }
+svg .connector { stroke: var(--muted); stroke-width: 1; opacity: .15; }
 .scroll.chart:has(.rail) { flex: 0 1 auto; }
 svg .stop { fill: var(--panel); stroke: var(--c); stroke-width: 2; }
 svg .item.selected .stop { fill: var(--c); stroke: var(--ink); stroke-width: 2; }
