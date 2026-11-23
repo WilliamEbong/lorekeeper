@@ -1700,7 +1700,7 @@ function wikiCard() {
   }
   if (card.page) {
     const item = byPath.get(card.page);
-    if (item) head.append(button('Edit', () => selectItem(item.path, {show: true, focus: 'title'}), {class: 'quiet edit-entry'}));
+    if (item) head.append(button('Edit', () => selectItem(item.path, {show: true, focus: 'title'}), {class: 'edit-entry'}));
   }
   if (card.body?.trim()) {
     const page = add(box, el('details', null, {class: 'working', open: ''}));
