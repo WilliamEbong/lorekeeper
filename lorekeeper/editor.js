@@ -1485,13 +1485,25 @@ function sheetLocation(item, places) {
   }}));
   return cell;
 }
-// A story part's chapter number, typed in place: the Narrative list sorts by it.
+// A story part's chapter number, set in place: the Narrative list sorts by it.
+function chapterNumber(item, shown) {
+  const label = shown == null ? `Give ${item.name} a chapter number` : `Change the chapter number of ${item.name}`;
+  const number = button(shown == null ? '–' : String(shown), () => {
+    const input = chapterBox(item);
+    number.replaceWith(input);
+    input.focus();
+    input.addEventListener('blur', () => { if (input.isConnected && input.value === String(item.fields.chapter ?? '')) input.replaceWith(number); });
+  }, {class: 'num set-num', title: label, 'aria-label': label});
+  return number;
+}
 function chapterBox(item) {
   const input = el('input', null, {type: 'number', min: '1', step: '1', class: 'chapter-box', inputmode: 'numeric',
     'aria-label': `Chapter number for ${item.name}`, value: item.fields.chapter ?? ''});
+  input.addEventListener('keydown', event => { if (event.key === 'Escape') { input.value = item.fields.chapter ?? ''; input.blur(); } });
   input.addEventListener('change', async () => {
     const value = input.value.trim();
     if (value && !/^\d+$/.test(value)) { input.value = item.fields.chapter ?? ''; return; }
+    input.blur();   // a focused box would hold off the redraw that moves the part into place
     status('Saving…', 'busy');
     try {
       await api('set', {item: ref(item), ...(value ? {field: {chapter: value}} : {unset: ['chapter']}), version: item.version,
@@ -1512,7 +1524,8 @@ function narrative(view) {
     if (parts.length) {
       const kinds = [...new Set(parts.map(i => typeLabel(i.type)))].join(', ');
       chapters = parts;
-      fallback = `Your story parts (${kinds}). Type a chapter number in the box beside each, and the list follows that order.`;
+      fallback = saga ? `Your story parts (${kinds}), in name order.`
+        : 'Your story parts, in chapter order. Click the dash beside a part to give it a chapter number, or a number to change it.';
     }
   }
   if (!chapters.length) {
@@ -1521,20 +1534,24 @@ function narrative(view) {
     return;
   }
   const kinds = new Set(chapters.map(c => c.type)).size > 1, box = scrollBox('pad'), list = el('ol', null, {class: 'cards'});
+  // An import's parts with no number yet go under their own heading, after the numbered ones.
+  const unplaced = fallback ? chapters.filter(i => order(i) === Infinity) : [], later = el('ol', null, {class: 'cards'});
   let latest = null;
   chapters.forEach((item, index) => {
     const row = el('li', null, {'data-path': item.path}), main = el('div');
     main.append(button(item.name, () => selectItem(item.path, {show: true}), {class: 'link', id: `narrative-${encodeURIComponent(item.path)}`}),
       el('div', `${kinds ? typeLabel(item.type) + (item.start ? ' · ' : '') : ''}${item.start ? whenText(item) : ''}`, {class: 'when'}));
     const back = latest != null && item.lo != null && item.lo < latest;
-    row.append(fallback && !saga ? chapterBox(item) : el('span', String(index + 1), {class: 'num'}), main,
+    const shown = fallback ? (order(item) === Infinity ? null : order(item)) : index + 1;
+    row.append(fallback && !saga ? chapterNumber(item, shown) : el('span', shown == null ? '–' : String(shown), {class: 'num'}), main,
       back ? el('span', 'Earlier than the part before', {class: 'flag warn', title: 'The story steps back in time here. A flashback may be intentional.'})
         : item.lo == null && !fallback ? el('span', 'Undated', {class: 'flag muted'}) : el('span'));
     if (item.lo != null) latest = Math.max(latest ?? item.lo, item.lo);
-    list.append(row);
+    (unplaced.includes(item) ? later : list).append(row);
   });
-  box.append(list);
-  view.append(el('p', fallback || 'Story parts in reading order, by their chapter, order or number field.', {class: 'hint'}), box);
+  if (list.children.length) box.append(list);
+  if (later.children.length) box.append(...(list.children.length ? [el('h3', 'Not placed yet', {class: 'list-head'})] : []), later);
+  view.append(el('p', fallback || 'Your story parts in reading order. Each one’s chapter number sets its place.', {class: 'hint'}), box);
 }
 async function runCheck() {
   if (ui.checking) { ui.recheck = true; return; }
