@@ -218,6 +218,7 @@ tbody tr.selected { background: var(--soft); }
 .age.adult { background: var(--soft); }
 .age.young { background: var(--warn-soft); color: var(--warn); font-weight: 600; }
 .age.bad { background: var(--danger-soft); color: var(--danger); font-weight: 600; }
+.age-note { margin: 0; padding: 6px 10px; border-radius: 6px; background: var(--danger-soft); color: var(--danger); font-size: 13px; }
 .age[aria-busy]::after { content: "…"; color: var(--muted); }
 .ages-key { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0 0 8px; font-size: 13px; }
 

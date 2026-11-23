@@ -1231,7 +1231,7 @@ function agesView(view) {
     const card = el('article', null, {class: 'age-card', 'data-path': p.path}), list = el('ol', null, {class: 'age-list'});
     const head = el('header');
     head.append(button(p.name, () => selectItem(p.path, {show: true}), {class: 'link', id: `person-${encodeURIComponent(p.path)}`}),
-      el('span', p.start ? `born ${shownDate(p.start.text)}` : 'no birth date', {class: 'hint'}));
+      el('span', (p.start ? `born ${shownDate(p.start.text)}` : 'no birth date') + (hasEnd(p) && p.end ? `, died ${shownDate(p.end.text)}` : ''), {class: 'hint'}));
     for (const e of events().filter(e => takesPart(p, e))) {
       const row = el('li', null, {'data-path': e.path}), age = el('span', null, {class: 'age'});
       row.append(button(e.name, () => selectItem(e.path, {show: true}), {class: 'link'}), el('span', shownDate(e.start.text), {class: 'when'}), age);
@@ -1257,10 +1257,16 @@ function agesView(view) {
   for (let n = 0; n < Math.min(4, jobs.length); n++) (async () => { while (jobs.length && grid.isConnected) await jobs.shift()(); })();
 }
 function paintAge(cell, age) {
-  cell.textContent = age.text;
+  cell.textContent = age.status === 'alive' && /^0 [a-z]+$/.test(age.text) ? 'newborn' : age.text;
   cell.classList.toggle('bad', age.status !== 'alive');
   cell.classList.toggle('young', age.status === 'alive' && age.years?.[1] < 18);
   cell.classList.toggle('adult', age.status === 'alive' && age.years?.[0] >= 18);
+  // One plain line on the person's card says why the red ages are there, instead of a wall of alarms.
+  const card = cell.closest('.age-card');
+  if (age.status !== 'alive' && card && !card.querySelector('.age-note')) {
+    const person = card.querySelector('header button');
+    card.querySelector('header').after(el('p', `Some of these events fall before ${person.textContent} was born or after they died. Check their dates.`, {class: 'age-note'}));
+  }
 }
 const PLURALS = {Parent: 'Parents', Sibling: 'Siblings', Child: 'Children', Friend: 'Friends', Ally: 'Allies', Enemy: 'Enemies', Rival: 'Rivals'};
 function relationships(view) {
