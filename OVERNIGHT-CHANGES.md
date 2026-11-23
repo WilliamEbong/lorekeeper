@@ -284,6 +284,35 @@ The fifth was not changed, as a fringe case. Exporting from a read-only world to
 
 Screenshots: `.playwright-mcp\design\s7` and `s8` in the worktree; reviewer tables in `C:\Users\Owner\lk-scratch\r4-design\s7-*.md` and `s8-*.md`.
 
+## Design root causes (after S8)
+
+William asked what actually keeps the screens under 9, and for those causes to be fixed directly instead of running more rounds of fixes and rescoring. This table merges every reason the three S8 reviewers gave (S7's were the same in substance). "Said by" counts the S8 reviewers who named it. The table is the plan, biggest first.
+
+| # | Screen(s) | Why it is under 9 | Said by | Root cause |
+|---|---|---|---|---|
+| 1 | Narrative, Subway, Wiki, Timeline | A control or mark whose meaning you have to guess: the clickable dash, unexplained hollow, filled and numbered circles, the "‹ Showing All chapters ›" stepper, the "Exact / Approximate / Alive" legend | 3 | Meaning is carried by bare glyphs and arrows, with no words on the control itself |
+| 2 | Phone | Timeline and Subway squeeze 60 years into 300 px with one or two year labels; the right gutter is wider than the left; the inspector stacks under the view | 3 | The charts are drawn to the screen's width, not to a readable scale; the phone layout reserves a permanent scrollbar gutter |
+| 3 | Ages, Continuity | One wrong death date shows as ten red pills on one card, and as 24 near-identical cards in Continuity | 3 | Errors are reported once per affected row, not once at their source |
+| 4 | All (trust) | The Continuity badge says 24 while the phone menu says 26; the Timeline says 14 characters while the Wiki says 15 | 3 | The counts use different rules (definite only vs all; dated only vs all) without saying so. The 24 vs 26 gap is a regression from this pass's own Codex fix |
+| 5 | Inspector | "Connections: None yet" sits above a filled "Linked from", which reads as a contradiction; the hint says "further down"; the panel changes width when an item is selected | 3 | Links are split by direction into two sections; the inspector has no fixed width |
+| 6 | Start, Wiki, Spreadsheet | System words: "Folder: big", raw Windows paths, "Notes from the item's page", "species-human" tags, "Wiki as of" vs "Wiki" | 3 | Internal names and raw values are shown as they are stored |
+| 7 | Narrative, Continuity, Relationships | Wide screens use only the left half; Relationships cards have ragged heights | 3 | Lists are capped at 80 characters with no layout for the remaining width; the card grid stretches to the tallest card |
+| 8 | Planning card, Timeline | Zoom, scale and legend stay live over an empty canvas | 3 | Controls are drawn whether or not there is anything to control |
+| 9 | New item form | A popover with no title, covering the toolbar | 3 | A floating form with no heading or anchor |
+| 10 | All | Important instructions are in 12–13 px grey | 2 | Helper text is used for instructions as well as asides |
+
+**Not design causes** (so not fixed here):
+- "imp2" in the header comes from the test copy's settings file.
+- Cathy Linton dying on her birth day, and the "Narrative Folder" type name, are the imported data.
+- They still show the need for cause 3: a data error should be said once.
+
+**Why S7 and S8 scored lower than S6**, a mix of three things:
+- Stricter reviewers. From S7 the brief said a 9 means "ship it in a commercial writing app without changes", and it gave the reviewers more screens: the planning world, every phone screen, dark mode.
+- One real regression: the 24 vs 26 count (cause 4).
+- Data shown as design: Cathy's dates and "imp2", above.
+
+A capture problem was ruled out: each journey clears the browser's remembered settings before the planning world.
+
 ## Other branches
 
 `feat/008-editor-ux`, `feat/009-editor-followups`, `feat/010-progressive-wiki`, `feat/011-planning-wiki`, `fix/lives-flashbacks-overflow` and `fix/mcp-cache-hints` are all fully merged into main (0 commits ahead). They hold no unmerged work.
