@@ -205,7 +205,7 @@ def make_server(root, port=0, saga=False, config=None, factory=None, config_path
                 args = json.loads(body.decode("utf-8"))
                 if not isinstance(args, dict):
                     raise LoreError("INVALID", "Arguments must be a JSON object")
-                result = ops.run(name, args, root=root, config=config,   # ops.run checks parameter types
+                result = ops.run(name, args, root=root, config=config, confine=True,   # ops.run checks parameter types
                                  **({"project": factory()} if factory else {}))
                 self.send(200, ops.to_json(result))
             except LoreError as exc:

@@ -130,7 +130,7 @@ def handle(message: dict, root: str, config: dict | None = None, saga: bool = Fa
             if saga and name in FACT_OPS and not story_folder(root, config):
                 raise LoreError("FORBIDDEN", "the fact tools need a story wiki folder in a saga, or they would write "
                                              "Wiki pages: add \"story_wiki\": \"../Story Wiki\" to the settings file")
-            value = ops.run(name, arguments, root=root, config=config)
+            value = ops.run(name, arguments, root=root, config=config, confine=True)
         except LoreError as exc:
             value, is_error = exc.as_dict(), True
         except Exception as exc:

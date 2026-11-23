@@ -119,6 +119,15 @@ class ServeTests(unittest.TestCase):
                 self.assertEqual(result["error"]["code"], "INVALID")
         self.assertEqual(self.request("/api/set", {"item": "Mara Quell", "unset": [{}]})[0], 400)
 
+    def test_import_and_export_stay_inside_the_world(self):
+        outside = self.root.parent / "outside.md"
+        status, result, _ = self.request("/api/export", {"format": "md", "out": str(outside)})
+        self.assertEqual((status, result["error"]["code"]), (403, "FORBIDDEN"))
+        self.assertFalse(outside.exists())
+        status, result, _ = self.request("/api/export", {"format": "md", "out": "reading-copy.md"})
+        self.assertEqual(status, 200, result)
+        self.assertTrue((self.root / "reading-copy.md").is_file())
+
     def test_unexpected_errors_still_answer_with_json(self):
         # e.g. an odd .aeon whose type entry is a string raised AttributeError deep in interop
         with patch.object(ops, "run", side_effect=AttributeError("'str' object has no attribute 'get'")):

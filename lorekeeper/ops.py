@@ -593,7 +593,9 @@ OPS = [
 BY_NAME = {op.name: op for op in OPS}
 
 
-def run(name, args=None, root=None, config=None, project=None):
+def run(name, args=None, root=None, config=None, project=None, confine=False):
+    """Run one operation. confine (MCP and the editor): import and export paths are relative to the
+    world's folder and must stay inside it; the CLI keeps the process working directory."""
     op = BY_NAME.get(name)
     if op is None:
         raise LoreError("INVALID", f"unknown operation {name!r}")
@@ -616,6 +618,13 @@ def run(name, args=None, root=None, config=None, project=None):
             return op.handler(root or ".", **args)
         if project is None:
             project = Project(root, config) if root else Project.open(".")
+        key = {"import": "file", "export": "out"}.get(name)
+        if confine and key:
+            path = os.path.join(project.root, args[key])
+            if not store.inside(project.root, path):
+                raise LoreError("FORBIDDEN", f"AI tools and the editor can only {name} files inside this world's "
+                                             f"folder; {args[key]} is outside it")
+            args[key] = path
         return op.handler(project, **args)
     except ValueError as exc:          # bad input caught deep down (e.g. the frontmatter writer)
         raise LoreError("INVALID", str(exc)) from exc

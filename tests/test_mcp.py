@@ -32,6 +32,24 @@ class McpTests(unittest.TestCase):
     def call(self, name, arguments=None, root=FIXTURE):
         return self.request("tools/call", {"name": name, "arguments": arguments}, root)["result"]
 
+    def test_import_and_export_stay_inside_the_world(self):
+        with tempfile.TemporaryDirectory(dir=REPO) as tmp:
+            root = os.path.join(tmp, "world")
+            shutil.copytree(FIXTURE, root)
+            outside = os.path.join(tmp, "outside.md")
+            for name, arguments in (("export", {"format": "md", "out": outside}),
+                                    ("export", {"format": "md", "out": os.path.join("..", "up.md")}),
+                                    ("import", {"file": os.path.join(FIXTURE, "..", "nope.csv")})):
+                with self.subTest(name=name, arguments=arguments):
+                    result = self.call(name, arguments, root)
+                    self.assertTrue(result["isError"])
+                    self.assertEqual(result["structuredContent"]["error"]["code"], "FORBIDDEN")
+            self.assertFalse(os.path.exists(outside) or os.path.exists(os.path.join(tmp, "up.md")))
+            # A relative path is inside the world's folder, whatever the server's working directory.
+            result = self.call("export", {"format": "md", "out": "reading-copy.md"}, root)
+            self.assertFalse(result["isError"], result)
+            self.assertTrue(os.path.isfile(os.path.join(root, "reading-copy.md")))
+
     def test_initialize(self):
         for version in VERSIONS[1:] + ["unknown", "2026-07-28", None]:
             with self.subTest(version=version):

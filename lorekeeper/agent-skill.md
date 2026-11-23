@@ -103,7 +103,7 @@ In the owner's sagas the planning wiki is `Planning Wiki/`, built from the plann
 
 These are CLI examples. For MCP use the operation name as the tool name and an arguments object with the listed parameter names. Required string parameters are positional on the CLI. Optional parameters use flags; underscores become hyphens, for example `links_to` becomes `--links-to`. `field` and `expect` are objects in MCP and repeatable `--field key=value` / `--expect key=value` flags on the CLI. `unset` is an array in MCP and repeatable `--unset key` flags on the CLI. Values in MCP field objects should be strings or arrays of strings.
 
-All examples below assume an initialized novel template unless stated otherwise. They illustrate individual operations, not a script to run from top to bottom. `<version>` and `<old body>` are placeholders for actual read values. Paths for import/export are relative to the process working directory unless absolute; `--root` selects the project but does not change that directory.
+All examples below assume an initialized novel template unless stated otherwise. They illustrate individual operations, not a script to run from top to bottom. `<version>` and `<old body>` are placeholders for actual read values. Through the MCP tools and the editor, import and export paths are relative to the world's folder and must stay inside it (FORBIDDEN otherwise). On the command line they are relative to the process working directory unless absolute; `--root` selects the project but does not change that directory.
 
 | Operation | Required parameters | Optional parameters | CLI example |
 | --- | --- | --- | --- |
