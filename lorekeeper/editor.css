@@ -339,7 +339,12 @@ tbody tr.selected { background: var(--soft); }
   .inspector { border-left: 0; border-top: 1px solid var(--hair); padding: 16px; scroll-margin-top: 8px; }
   .back-to-view { display: inline-flex; }
   .actions .hint, .find-key { display: none; }
-  .sheet td:first-child input { min-width: 150px; }
+  .sheet td:first-child input { min-width: 140px; }
+  /* A phone shows the name and the dates first: the type is in the filter above and the inspector, and the
+     name stays in place while the other columns scroll sideways under it. */
+  .sheet th:nth-child(2), .sheet td:nth-child(2) { display: none; }
+  .sheet th:first-child, .sheet td:first-child { position: sticky; left: 0; z-index: 1; background: var(--panel); box-shadow: 1px 0 0 var(--hair); }
+  .sheet thead th:first-child { z-index: 3; background: var(--sunken); }
   .summary strong { text-wrap: balance; }
   .popover { position: fixed; left: 16px; right: 16px; top: auto; width: auto !important; }
 }
