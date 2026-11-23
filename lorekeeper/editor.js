@@ -492,8 +492,7 @@ function renderInspector() {
   }, {class: 'quiet back-to-view'}));
   head.append(el('h2', item.name, {id: 'inspector-title', tabindex: '-1'}));
   const info = el('div', null, {class: 'meta'});
-  info.append(el('span', typeLabel(item.type), {class: `kind cat-${category(item)}`}));
-  info.append(el('span', item.path, {class: 'path', title: 'File'}));
+  info.append(el('span', typeLabel(item.type), {class: `kind cat-${category(item)}`, title: `Kept in ${item.path}`}));
   head.append(info);
   panel.append(head);
 
@@ -1605,8 +1604,9 @@ function continuity(view) {
     for (const f of ui.allFindings ? found : found.slice(0, LIMIT)) {
       const row = el('li', null, f.path && byPath.has(f.path) ? {'data-path': f.path} : {});
       const item = byPath.get(f.path), where = el('div', null, {class: 'where'});
-      if (item) where.append(button(`Open ${item.name}`, () => selectItem(item.path, {reveal: true, focus: 'title'}), {class: 'link'}));
-      where.append(el('span', `in ${f.path}${f.line ? `, line ${f.line}` : ''}`, {class: 'path'}));
+      const file = `${f.path}${f.line ? `, line ${f.line}` : ''}`;
+      if (item) where.append(button(`Open ${item.name}`, () => selectItem(item.path, {reveal: true, focus: 'title'}), {class: 'link', title: `Kept in ${file}`}));
+      else where.append(el('span', `in ${file}`, {class: 'path'}));
       row.classList.add(severity === 'FAIL' ? 'fail' : 'warn');
       row.append(el('strong', TITLES[f.code] || words(f.code.toLowerCase())), el('span', findingText(f), {class: 'detail'}), where);
       list.append(row);

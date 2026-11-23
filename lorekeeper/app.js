@@ -87,7 +87,7 @@ function worldCard(world) {
   head.append(name);
   if (world.kind === 'saga') head.append(el('span', 'Saga · proposals only', {class: 'mode'}));
   if (world.open && world.kind !== 'missing') head.append(el('span', 'Open', {class: 'open-badge'}));
-  card.append(head, el('p', world.folder, {class: 'path'}));
+  card.append(head, el('p', `Folder: ${world.folder.split(/[\\/]/).filter(Boolean).at(-1)}`, {class: 'path', title: world.folder}));
   const meta = el('p', world.kind === 'missing' ? 'Folder not found. It may have been moved, renamed or deleted.' : opened(world.opened),
     {class: world.kind === 'missing' ? 'warning' : 'hint'});
   card.append(meta);
