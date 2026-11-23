@@ -450,6 +450,8 @@ What the sagas will notice: the editor (`saga.py timeline`) gets the design chan
 
 ## Saga upgrade (2026-11-23, landing)
 
+**2026-11-23: design root-cause pass landed.** `main` fast-forwarded `7bb82a0` → `f080dca` and pushed; suite 397 OK (1 skipped). The three sagas stay on engine `99b13f1`: only the editor interface changed, so a re-vendor is optional and was not done.
+
 **Merged and pushed:** `main` fast-forwarded `bec45dd` → `99b13f1` and pushed to the private repo. Suite: 397 OK (1 skipped).
 
 **The live sagas had uncommitted work that is not the engine's:**
