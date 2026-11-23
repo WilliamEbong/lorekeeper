@@ -12,6 +12,8 @@ docs/build/.guard
 __pycache__/
 *.pyc
 .pytest_cache/
+build/
+*.egg-info/
 docs/build/AUTO-SNAPSHOT.md
 docs/build/handoff-history/
 docs/build/baselines/**/*.raw
