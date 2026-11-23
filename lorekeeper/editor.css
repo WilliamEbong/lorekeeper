@@ -162,6 +162,14 @@ svg .stop { fill: var(--panel); stroke: var(--c); stroke-width: 2; }
 svg .item.selected .stop { fill: var(--c); stroke: var(--ink); stroke-width: 2; }
 svg .item:focus-visible .stop { fill: var(--c); stroke: var(--focus); stroke-width: 3; }
 svg .lane-name { font-weight: 600; }
+svg .cluster { cursor: zoom-in; }
+.cluster-picks { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin-top: 10px; }
+.cluster-picks:empty { display: none; }
+svg .cluster .stop { fill: var(--c); stroke: var(--panel); }
+svg .cluster:hover .hit { fill: var(--soft); opacity: .5; }
+svg .cluster:focus-visible { outline: none; }
+svg .cluster:focus-visible .stop { stroke: var(--focus); stroke-width: 3; }
+svg .cluster-count { fill: var(--panel); font-size: 10px; font-weight: 700; text-anchor: middle; pointer-events: none; font-variant-numeric: tabular-nums; }
 .cat-person { --c: var(--person); } .cat-place { --c: var(--place); } .cat-event { --c: var(--event); }
 .cat-group { --c: var(--group); } .cat-thing { --c: var(--thing); } .cat-narrative { --c: var(--narrative); } .cat-other { --c: var(--other); }
 .r0 { --c: var(--r0); } .r1 { --c: var(--r1); } .r2 { --c: var(--r2); } .r3 { --c: var(--r3); }

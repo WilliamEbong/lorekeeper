@@ -899,7 +899,7 @@ function chart(box, width, gutter = 0) {
     }
   }, {passive: false});
   svg.addEventListener('pointerdown', event => {
-    if (event.target.closest('.item') || event.button !== 0 || event.pointerType === 'touch') return;
+    if (event.target.closest('.item, .cluster') || event.button !== 0 || event.pointerType === 'touch') return;
     const start = event.clientX, initial = [...range];
     dragging = true; svg.setPointerCapture(event.pointerId);
     const cleanup = () => { dragging = false; svg.removeEventListener('pointerup', finish); svg.removeEventListener('pointercancel', cleanup); };
@@ -1134,7 +1134,7 @@ function peopleFilter(view, hint) {
   return bar;
 }
 function subway(view) {
-  const bar = peopleFilter(view, 'Each line is a person; stops are the events they take part in.');
+  const bar = peopleFilter(view, 'Each line is a person; stops are the events they take part in. A numbered stop is several events close together: click it to zoom in.');
   bar.prepend(zoomControls());
   view.append(bar);
   const q = ui.people.toLowerCase(), ranked = rankedPeople().filter(r => r.n > 0);
@@ -1158,20 +1158,55 @@ function subway(view) {
       if (b > a) c.svg.append(svgEl('line', {x1: a, x2: b, y1: y, y2: y, class: `rail ${cls}`}));
     }
   });
+  // Events at the same moment can't be pulled apart by zooming: they are listed under the chart instead.
+  const perLane = lanes.map(() => []), picks = el('div', null, {class: 'cluster-picks', 'aria-live': 'polite'});
+  view.append(picks);
   for (const event of events()) {
     const stops = lanes.map((p, i) => takesPart(p, event) ? i : -1).filter(i => i >= 0), x = c.x(event.lo);
     if (!stops.length || x < c.left || x > c.right) continue;
     if (stops.length > 1) c.svg.append(svgEl('line', {x1: x, x2: x, y1: TOP + stops[0] * LANE, y2: TOP + stops.at(-1) * LANE, class: 'connector'}));
-    for (const lane of stops) {
-      const g = svgEl('g', {class: `item r${lane % 8}`, role: 'button', tabindex: '-1', 'data-path': event.path,
-        'aria-label': `${event.name}, with ${lanes[lane].name}, ${whenText(event)}`,
-        id: `subway-${encodeURIComponent(`${event.path}\0${lanes[lane].path}`)}`});
-      g.append(svgEl('circle', {cx: x, cy: TOP + lane * LANE, r: 11, class: 'hit'}),
-        svgEl('circle', {cx: x, cy: TOP + lane * LANE, r: 5, class: 'stop'}),
-        svgEl('title', {}, `${event.name} · ${whenText(event)}`));
+    for (const lane of stops) perLane[lane].push({event, x});
+  }
+  // Stops closer than a stop's width merge into one numbered stop, which zooms in to that stretch of time.
+  perLane.forEach((stops, lane) => {
+    const groups = [], y = TOP + lane * LANE;
+    for (const stop of stops.sort((a, b) => a.x - b.x)) {
+      if (groups.length && stop.x - groups.at(-1).at(-1).x < 20) groups.at(-1).push(stop); else groups.push([stop]);
+    }
+    for (const group of groups) {
+      if (group.length === 1) {
+        const {event, x} = group[0];
+        const g = svgEl('g', {class: `item r${lane % 8}`, role: 'button', tabindex: '-1', 'data-path': event.path,
+          'aria-label': `${event.name}, with ${lanes[lane].name}, ${whenText(event)}`,
+          id: `subway-${encodeURIComponent(`${event.path}\0${lanes[lane].path}`)}`});
+        g.append(svgEl('circle', {cx: x, cy: y, r: 11, class: 'hit'}), svgEl('circle', {cx: x, cy: y, r: 5, class: 'stop'}),
+          svgEl('title', {}, `${event.name} · ${whenText(event)}`));
+        c.svg.append(g);
+        continue;
+      }
+      const x = group.reduce((sum, s) => sum + s.x, 0) / group.length, first = group[0].event, last = group.at(-1).event;
+      const lo = group[0].event.lo, hi = group.at(-1).event.lo, oneDay = hi === lo;
+      const g = svgEl('g', {class: `cluster r${lane % 8}`, role: 'button', tabindex: '0',
+        'aria-label': oneDay ? `${group.length} events with ${lanes[lane].name}, ${whenText(first)}. Show them.`
+          : `${group.length} events with ${lanes[lane].name}, ${whenText(first)} to ${whenText(last)}. Zoom in to see them.`});
+      g.append(svgEl('circle', {cx: x, cy: y, r: 13, class: 'hit'}), svgEl('circle', {cx: x, cy: y, r: 9, class: 'stop'}),
+        svgEl('text', {x, y: y + 3.5, class: 'cluster-count'}, String(group.length)),
+        svgEl('title', {}, group.map(s => `${s.event.name} · ${whenText(s.event)}`).join('\n')));
+      const zoomIn = () => {
+        if (oneDay) {
+          picks.replaceChildren(el('span', `With ${lanes[lane].name}, ${whenText(first)}:`, {class: 'hint'}),
+            ...group.map(s => button(s.event.name, () => selectItem(s.event.path, {show: true}), {class: 'link'})));
+          return;
+        }
+        const pad = Math.max((hi - lo) * .25, 30);
+        range = [lo - pad, hi + pad];
+        scheduleRender();
+      };
+      g.addEventListener('click', zoomIn);
+      g.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); zoomIn(); } });
       c.svg.append(g);
     }
-  }
+  });
   c.grid(TOP + lanes.length * LANE);
   wireItems(c.svg);
   if (!q && ranked.length > lanes.length) view.append(el('p', `Showing the ${lanes.length} people with the most events. Filter to find the other ${ranked.length - lanes.length}.`, {class: 'hint'}));
