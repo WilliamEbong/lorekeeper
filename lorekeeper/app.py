@@ -369,24 +369,38 @@ class App:
         key = os.path.normcase(folder)
         with self.lock:
             running = self.sagas.get(key)
-            if running and running[0].poll() is None:
-                return running[1]
-            port = free_port()
-            process = subprocess.Popen(saga_command(port), cwd=folder, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                       stderr=subprocess.DEVNULL, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-            url = f"http://127.0.0.1:{port}/"
-            for _ in range(200):   # up to 20 s while the saga loads its world
-                if process.poll() is not None:
-                    raise AppError("The saga's editor stopped while starting. Try the saga's own launcher.", 500)
-                try:
-                    socket.create_connection(("127.0.0.1", port), timeout=0.2).close()
-                    break
-                except OSError:
-                    time.sleep(0.1)
-            else:
-                process.terminate()
-                raise AppError("The saga's editor took too long to start. Try again, or use the saga's own launcher.", 500)
-            self.sagas[key] = (process, url)
+            starting = not (running and running[0].poll() is None)
+            if starting:
+                port = free_port()
+                process = subprocess.Popen(saga_command(port), cwd=folder, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                           stderr=subprocess.DEVNULL, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                running = self.sagas[key] = (process, f"http://127.0.0.1:{port}/", threading.Event())
+        # Wait outside the lock: other worlds and sagas open meanwhile; a second open of this saga waits for it.
+        process, url, ready = running
+        if not starting:
+            ready.wait(25)
+        else:
+            try:
+                for _ in range(200):   # up to 20 s while the saga loads its world
+                    if process.poll() is not None:
+                        raise AppError("The saga's editor stopped while starting. Try the saga's own launcher.", 500)
+                    try:
+                        socket.create_connection(("127.0.0.1", int(urlsplit(url).port)), timeout=0.2).close()
+                        break
+                    except OSError:
+                        time.sleep(0.1)
+                else:
+                    process.terminate()
+                    raise AppError("The saga's editor took too long to start. Try again, or use the saga's own launcher.", 500)
+            except BaseException:
+                with self.lock:
+                    if self.sagas.get(key) is running:
+                        del self.sagas[key]
+                raise
+            finally:
+                ready.set()
+        if process.poll() is not None:
+            raise AppError("The saga's editor stopped while starting. Try the saga's own launcher.", 500)
         remember(folder, os.path.basename(folder), "saga")
         return url
 
@@ -523,7 +537,7 @@ def stop_all(server):
         for world, _ in state.worlds.values():
             world.shutdown()
             world.server_close()
-        for process, _ in state.sagas.values():
+        for process, *_ in state.sagas.values():
             if process.poll() is None:
                 process.terminate()
         state.worlds.clear()
