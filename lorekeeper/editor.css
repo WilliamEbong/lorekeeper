@@ -223,6 +223,7 @@ tbody tr.selected { background: var(--soft); }
 .age.adult { background: var(--soft); }
 .age.young { background: var(--warn-soft); color: var(--warn); font-weight: 600; }
 .age.bad { background: var(--danger-soft); color: var(--danger); font-weight: 600; }
+.age-card:has(.age-note) .age.bad { background: none; color: var(--muted); font-weight: 400; box-shadow: inset 0 0 0 1px var(--hair); }
 .age-note { margin: 0; padding: 6px 10px; border-radius: 6px; background: var(--danger-soft); color: var(--danger); font-size: 13px; }
 .age[aria-busy]::after { content: "…"; color: var(--muted); }
 .ages-key { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0 0 8px; font-size: 13px; }
@@ -263,7 +264,9 @@ tbody tr.selected { background: var(--soft); }
 .flag.fail { background: var(--danger-soft); color: var(--danger); }
 .flag.muted { background: var(--sunken); color: var(--muted); }
 .findings > li { grid-template-columns: 1fr; border-left: 3px solid var(--warn); border-radius: 2px 8px 8px 2px; }
-.findings { max-width: 84ch; }
+.findings { max-width: none; grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr)); align-items: start; }
+.finding-events { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 2px; font-size: 14px; }
+.findings details summary { cursor: pointer; color: var(--accent); font-size: 14px; }
 .findings > li.fail { border-left-color: color-mix(in srgb, var(--danger) 55%, transparent); }
 .section-title + .findings { margin-top: 8px; }
 .findings .detail { color: var(--ink); font-size: 14px; max-width: 75ch; line-height: 1.55; }

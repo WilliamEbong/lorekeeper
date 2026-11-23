@@ -194,6 +194,13 @@ function lagWords(lag) {
   return parts.length && parts.every(Boolean) ? `${parts.join(' ')} ${text.startsWith('-') ? 'earlier' : 'later'}` : text;
 }
 // A continuity finding's detail, with connection and field labels, names instead of link syntax and dates in words.
+// Problems that all come from one person's birth or death date are said once, at that source.
+const SOURCE_KINDS = {'after death': 'after they died', 'after death and before rebirth': 'after they died, before rebirth',
+  'before birth': 'before they were born', 'exceeds maximum age': 'past the age limit'};
+function findingSource(f) {
+  const m = /^(.+) \(([^()]*)\): (.+); (.+) \(([^()]*)\)$/.exec(f.detail || '');
+  return m && SOURCE_KINDS[m[3]] ? {person: m[4], kind: m[3], when: m[5]} : null;
+}
 function findingText(f) {
   let m;
   if (f.code === 'BROKEN_LINK' && (m = /^(\w+) -> \[\[(.+?)\]\] matches no item$/.exec(f.detail)))
@@ -1655,8 +1662,33 @@ function continuity(view) {
     if (!found.length) continue;
     box.append(el('h3', `${title} · ${found.length}`, {class: 'section-title'}));
     const list = el('ol', null, {class: 'cards findings'});
-    const LIMIT = 150;
-    for (const f of ui.allFindings ? found : found.slice(0, LIMIT)) {
+    const LIMIT = 150, groups = new Map();
+    for (const f of found) {
+      const source = findingSource(f), key = source ? `${source.person}\0${source.kind}` : Symbol();
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(f);
+    }
+    for (const group of [...groups.values()].slice(0, ui.allFindings ? Infinity : LIMIT)) {
+      const f = group[0], source = findingSource(f);
+      if (group.length > 1) {
+        const row = el('li', null, {class: severity === 'FAIL' ? 'fail' : 'warn'}), who = graph.items.find(i => i.name === source.person);
+        const born = source.kind === 'before birth' || source.kind === 'exceeds maximum age';
+        const more = el('details'), names = el('ul', null, {class: 'finding-events'});
+        more.append(el('summary', `Show the ${group.length} events`), names);
+        for (const g of group) {
+          const event = byPath.get(g.path);
+          const li = el('li');
+          li.append(event ? button(event.name, () => selectItem(event.path, {reveal: true, focus: 'title'}), {class: 'link'}) : el('span', g.path), ' ', el('span', event ? whenText(event) : '', {class: 'hint'}));
+          names.append(li);
+        }
+        const where = el('div', null, {class: 'where'});
+        if (who) where.append(button(`Open ${who.name}`, () => selectItem(who.path, {reveal: true, focus: 'title'}), {class: 'link'}));
+        row.append(el('strong', `${source.person}: ${group.length} events ${SOURCE_KINDS[source.kind]}`),
+          el('span', `${source.person} ${born ? 'was born' : 'died'} ${shownDate(source.when)}. If that date is right, these events need changing; if not, changing it fixes all ${group.length}.`, {class: 'detail'}),
+          more, where);
+        list.append(row);
+        continue;
+      }
       const row = el('li', null, f.path && byPath.has(f.path) ? {'data-path': f.path} : {});
       const item = byPath.get(f.path), where = el('div', null, {class: 'where'});
       const file = `${f.path}${f.line ? `, line ${f.line}` : ''}`;
@@ -1667,7 +1699,7 @@ function continuity(view) {
       list.append(row);
     }
     box.append(list);
-    if (!ui.allFindings && found.length > LIMIT) box.append(button(`Show all ${found.length}`, () => { ui.allFindings = true; renderView(); }, {class: 'quiet'}));
+    if (!ui.allFindings && groups.size > LIMIT) box.append(button(`Show all ${found.length}`, () => { ui.allFindings = true; renderView(); }, {class: 'quiet'}));
   }
   view.append(box);
 }
