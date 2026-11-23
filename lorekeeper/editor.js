@@ -1185,7 +1185,8 @@ function subway(view) {
         continue;
       }
       const x = group.reduce((sum, s) => sum + s.x, 0) / group.length, first = group[0].event, last = group.at(-1).event;
-      const lo = group[0].event.lo, hi = group.at(-1).event.lo, oneDay = hi === lo;
+      const lo = group[0].event.lo, hi = group.at(-1).event.lo, pad = Math.max((hi - lo) * .25, 30);
+      const oneDay = (hi - lo) / (hi - lo + 2 * pad) * (c.right - c.left) < 20;   // zooming in would leave them merged
       const g = svgEl('g', {class: `cluster r${lane % 8}`, role: 'button', tabindex: '0',
         'aria-label': oneDay ? `${group.length} events with ${lanes[lane].name}, ${whenText(first)}. Show them.`
           : `${group.length} events with ${lanes[lane].name}, ${whenText(first)} to ${whenText(last)}. Zoom in to see them.`});
@@ -1198,7 +1199,6 @@ function subway(view) {
             ...group.map(s => button(s.event.name, () => selectItem(s.event.path, {show: true}), {class: 'link'})));
           return;
         }
-        const pad = Math.max((hi - lo) * .25, 30);
         range = [lo - pad, hi + pad];
         scheduleRender();
       };
@@ -1226,28 +1226,31 @@ function agesView(view) {
       : emptyState('No ages to show yet', 'Connect people to dated events with the Participants connection to see how old they are at each one.'));
     return;
   }
-  const box = scrollBox('pad'), grid = el('div', null, {class: 'age-cards'}), jobs = [];
+  const box = scrollBox('pad'), grid = el('div', null, {class: 'age-cards'}), jobs = [], dated = events(), ROWS = 100;
   for (const p of shown) {
     const card = el('article', null, {class: 'age-card', 'data-path': p.path}), list = el('ol', null, {class: 'age-list'});
     const head = el('header');
     head.append(button(p.name, () => selectItem(p.path, {show: true}), {class: 'link', id: `person-${encodeURIComponent(p.path)}`}),
       el('span', (p.start ? `born ${shownDate(p.start.text)}` : 'no birth date') + (hasEnd(p) && p.end ? `, died ${shownDate(p.end.text)}` : ''), {class: 'hint'}));
-    for (const e of events().filter(e => takesPart(p, e))) {
+    card.append(head, list);
+    const theirs = dated.filter(e => takesPart(p, e));
+    for (const e of theirs.slice(0, ROWS)) {
       const row = el('li', null, {'data-path': e.path}), age = el('span', null, {class: 'age'});
+      const paint = (result) => paintAge(age, result, card, e.start.text === p.start?.text);
       row.append(button(e.name, () => selectItem(e.path, {show: true}), {class: 'link'}), el('span', shownDate(e.start.text), {class: 'when'}), age);
       const cacheKey = `${p.path}|${p.version}|${e.path}|${e.version}`;
       if (p.lo == null) age.textContent = '—';
-      else if (ages.has(cacheKey)) paintAge(age, ages.get(cacheKey));
+      else if (ages.has(cacheKey)) paint(ages.get(cacheKey));
       else {
         age.setAttribute('aria-busy', 'true');
         jobs.push(async () => {
-          try { ages.set(cacheKey, await api('age', {item: ref(p), at: ref(e)})); age.removeAttribute('aria-busy'); paintAge(age, ages.get(cacheKey)); }
+          try { ages.set(cacheKey, await api('age', {item: ref(p), at: ref(e)})); age.removeAttribute('aria-busy'); paint(ages.get(cacheKey)); }
           catch { age.removeAttribute('aria-busy'); age.textContent = 'unknown'; age.title = 'This age can’t be worked out from the dates given.'; }
         });
       }
       list.append(row);
     }
-    card.append(head, list);
+    if (theirs.length > ROWS) card.append(el('p', `And ${theirs.length - ROWS} later events.`, {class: 'hint'}));
     grid.append(card);
   }
   box.append(grid);
@@ -1256,14 +1259,13 @@ function agesView(view) {
   // A small worker pool avoids flooding a large world's local server with age requests.
   for (let n = 0; n < Math.min(4, jobs.length); n++) (async () => { while (jobs.length && grid.isConnected) await jobs.shift()(); })();
 }
-function paintAge(cell, age) {
-  cell.textContent = age.status === 'alive' && /^0 [a-z]+$/.test(age.text) ? 'newborn' : age.text;
+function paintAge(cell, age, card, atBirth) {
+  cell.textContent = atBirth && age.status === 'alive' ? 'newborn' : age.text;
   cell.classList.toggle('bad', age.status !== 'alive');
   cell.classList.toggle('young', age.status === 'alive' && age.years?.[1] < 18);
   cell.classList.toggle('adult', age.status === 'alive' && age.years?.[0] >= 18);
   // One plain line on the person's card says why the red ages are there, instead of a wall of alarms.
-  const card = cell.closest('.age-card');
-  if (age.status !== 'alive' && card && !card.querySelector('.age-note')) {
+  if (age.status !== 'alive' && !card.querySelector('.age-note')) {
     const person = card.querySelector('header button');
     card.querySelector('header').after(el('p', `Some of these events fall before ${person.textContent} was born or after they died. Check their dates.`, {class: 'age-note'}));
   }
@@ -1502,7 +1504,7 @@ function chapterBox(item) {
   input.addEventListener('keydown', event => { if (event.key === 'Escape') { input.value = item.fields.chapter ?? ''; input.blur(); } });
   input.addEventListener('change', async () => {
     const value = input.value.trim();
-    if (value && !/^\d+$/.test(value)) { input.value = item.fields.chapter ?? ''; return; }
+    if (input.validity.badInput || value && !/^[1-9]\d*$/.test(value)) { input.value = item.fields.chapter ?? ''; return; }
     input.blur();   // a focused box would hold off the redraw that moves the part into place
     status('Saving…', 'busy');
     try {
@@ -1575,7 +1577,7 @@ function updateBadge() {
   badge.className = `badge ${result.fail ? 'fail' : 'warn'}`;
   tabNode.setAttribute('aria-label', `Continuity: ${plural(result.fail, 'definite problem')}, ${plural(result.warn, 'possible problem')}`);
   const option = $('view-menu').querySelector('option[value="Continuity"]');
-  option.textContent = result.fail || result.warn ? `Continuity (${plural(result.fail || result.warn, 'problem')})` : 'Continuity';
+  option.textContent = result.fail || result.warn ? `Continuity (${plural(result.fail + result.warn, 'problem')})` : 'Continuity';
 }
 function continuity(view) {
   const bar = el('div', null, {class: 'toolbar'});
