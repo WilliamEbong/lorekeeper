@@ -230,14 +230,14 @@ tbody tr.selected { background: var(--soft); }
 .ages-key { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0 0 8px; font-size: 13px; }
 
 /* Relationships */
-.relations { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; align-content: start; }
-.relation { background: var(--panel); border: 1px solid var(--hair); border-radius: 8px; padding: 12px 14px; display: grid; gap: 8px; align-content: start; }
+.relations { columns: 260px; column-gap: 10px; }
+.relation { break-inside: avoid; margin-bottom: 10px; background: var(--panel); border: 1px solid var(--hair); border-radius: 8px; padding: 12px 14px; display: grid; gap: 8px; align-content: start; }
 .relation.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .relation header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .relation header button.link { font: 600 17px/1.3 var(--serif); color: var(--ink); text-decoration: none; }
 .relation header button.link:hover { text-decoration: underline; }
 .relation header .kind { display: none; }
-.relation dd button.link { text-decoration: none; }
+.relation dd button.link { text-decoration: underline; text-decoration-color: var(--hair); text-underline-offset: 3px; }
 .relation dd button.link:hover, .relation dd button.link:focus-visible { text-decoration: underline; }
 .relation dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-size: 14px; }
 .relation dt { color: var(--muted); font-weight: 600; font-size: 13px; }
