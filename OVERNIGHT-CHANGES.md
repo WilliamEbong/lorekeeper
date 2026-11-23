@@ -1,5 +1,28 @@
 # Overnight changes (2026-11-22 to 23)
 
+## What changed for you, in plain words
+
+**Nothing is merged yet.** Everything is on one branch, waiting for you. Your sagas have not been touched. The upgrade was rehearsed on throwaway copies of them (see "Merge and upgrade" below).
+
+**In the editor you will notice:**
+- It is calmer to read. Section headings are small Georgia titles instead of grey capitals, wiki and notes text keeps a comfortable line length, chart labels are a little larger and no longer crossed by gridlines, and dark mode shows its card edges.
+- It tells you more plainly what is going on. The top bar says "All changes saved" or "Unsaved changes in Heathcliff". If you save a date Lorekeeper can't read, it says the item is left off the Timeline until the date can be read. A selected item is outlined in ink, not an orange that looked like an error.
+- Continuity problems read as sentences: "Hareton Earnshaw died June 1778, but takes part here (1 January 1803)."
+- The inspector no longer says "No connections yet" for someone that others link to, and "Linked from" comes before the form for adding a connection.
+- On a phone, Continuity and its count are visible, and "Open" takes you straight to the item.
+
+**Behind the scenes:**
+- Export never overwrites one of your own files: it writes a new file, or replaces only a file it wrote itself that nobody has changed since.
+- AI assistants (through MCP) and the editor can only import and export inside the world's folder.
+- Importing from Aeon or CSV keeps more: no stray end dates or empty tags, Aeon's decade and century dates, Aeon "Narrative Folder" types, and a warning when a CSV has columns your world doesn't know (before, those links were silently lost).
+- Answers an AI gets are more trustworthy. "Where was she in 1780?" now says it isn't sure when she moved that year, and a misspelled connection kind gets a warning.
+- `Open Lorekeeper.bat` checks your Python version instead of failing silently.
+- The repository is about 3,800 lines lighter: an old copy of the program that was committed by mistake is gone.
+- There is a map of the code in `graphify-out/` that AI tools can search.
+
+**What you might decide:** three of the choices above were yours to make, and each is one commit you can undo: the export rule, keeping AI tools inside the world folder, and the import round-trip rules (see Round 2). Then merge, and upgrade the sagas if you want the new editor there.
+
+
 This was a maintenance pass on branch `claude/overnight-fixes-77b916`, taken from main at `bec45dd`. Nothing was pushed or merged, and the sagas were not touched.
 
 The pass fixed defects and added no features. Each fix began with a test that failed and passed once the fix was in. The full suite passed before every commit. Three read-only Opus agents audited the codebase in parallel; every lead they raised was confirmed in the code before it was acted on. Codex then reviewed the branch diff twice. Its confirmed findings are fixed below; the rest are listed under "Found, not changed".
@@ -8,7 +31,7 @@ The pass fixed defects and added no features. Each fix began with a test that fa
 
 - **Before:** `python -m unittest discover -s tests` gave 376 OK (1 skipped, POSIX-only).
 - **After round 1:** 383 OK (1 skipped).
-- **Now:** 395 OK (1 skipped).
+- **Now:** 397 OK (1 skipped).
 - **No lint or typecheck:** the project has no lint or typecheck configuration, so neither was run.
 
 ## Changes
@@ -79,7 +102,7 @@ Screenshots: `C:\Users\Owner\lk-scratch\r4-design\shots\before\` and `...\after\
 | `ea902b2` | The ops table points at `wiki.fact_end`, `wiki.fact_remove`, `planning.impact` and `planning.change` directly; four pass-through wrappers and the unused `app.cli_command` are gone. | −23 lines. |
 | `d93b509`, `d622d20` | graphify knowledge graph in `graphify-out/` (1,608 nodes, 3,516 edges, 95 communities). Built from code and Markdown structure with `graphify update .`: no LLM, no cost. Cache and dated backups are git-ignored; `.graphifyignore` leaves out `.claude/`, `.specify/` and the test fixture worlds. | |
 
-**Codex review of rounds 2, design and 3** (branch diff against `fc3055f`): 9 findings. Fixed 4 that real use reaches (next commit): the save message said "left off the Timeline" when only an end date was unreadable; a `1990s` date narrowed by `date_min` was sent to Aeon as a whole decade; the check speed test timed a warm cache after the best-of-three change, which hid what a first check costs (the test now times a fresh project each run); export hashed any existing file even when its record ruled it out. Not changed, as nobody meets them: an edit landing during the milliseconds of an export, a `.lore` folder that is a symlink, two exports at the same instant, `.lore/exports.json` itself as an export target, and a client that declares a large body and then stalls.
+**Codex review of rounds 2, design and 3** (branch diff against `fc3055f`): 9 findings. Fixed 4 that real use reaches (`49885a5`): the save message said "left off the Timeline" when only an end date was unreadable; a `1990s` date narrowed by `date_min` was sent to Aeon as a whole decade; the check speed test timed a warm cache after the best-of-three change, which hid what a first check costs (the test now times a fresh project each run); export hashed any existing file even when its record ruled it out. Not changed, as nobody meets them: an edit landing during the milliseconds of an export, a `.lore` folder that is a symlink, two exports at the same instant, `.lore/exports.json` itself as an export target, and a client that declares a large body and then stalls.
 
 Net since round 1: lorekeeper and tests +351 / −82 lines; whole repo −3,779 lines (excluding the graph).
 
@@ -89,18 +112,60 @@ Left on the audit's list: the retired continuity-kit hook script `tools/build-ho
 
 **graphify:** open `graphify-out/graph.html` in a browser, read `graphify-out/GRAPH_REPORT.md`, or ask `graphify query "how does export decide what it may overwrite"`, `graphify path "op_export" "atomic_write"`, `graphify explain "item_dates"`. Refresh after code changes with `graphify update .`. Semantic extraction of the docs (concepts across specs) was skipped; it would take subagent time for little gain over the structural graph.
 
+## Round 4: independent acceptance, upgrade rehearsal, design cycle 2
+
+**Acceptance.** Three fresh Opus agents used Lorekeeper end to end from the documentation alone, each on copies in `C:\Users\Owner\lk-scratch\r8-accept-*`: a novelist on the command line, an AI assistant over MCP, and a novelist in the editor and start screen. Fixed what they hit in real use:
+
+| Commit | Who notices, and what changed |
+|---|---|
+| `3545a41` | An AI assistant. `where` at a year in which the person moves said "certain"; it now flags uncertainty, and asked at an event the person attends it is sure. `link` with a misspelled role warns. A stale-version CONFLICT says what to do. `show` no longer lists backlinks under "null". The agent guide explains chapter marks and that `mcp --saga` has no `request`. |
+| `56fe4cd` | A novelist on the command line. A CSV import lost 103 of 259 links silently; it now warns which columns were skipped. The user guide gains a working custom-calendar example (checked by running it). `lore age` says when dates allow a range. |
+| `d1de0d8` | A novelist in the editor. On a phone, Continuity's "Open" left the screen where it was; a merge message suggested someone else had edited the file. (Clearing a stale error on the next success was reverted after Codex showed it could hide an unrelated failed save.) |
+
+Not changed, as nobody meets them in normal use or they are new features: a "who is at this place" query, a browser Back history in the editor, connection kinds filtered by item type, undo for spreadsheet cells (the README no longer promises it), the start screen's folder picker behaviour (could not be judged in a hidden test browser).
+
+**Codex review of round 4** (branch diff against `2313013`): 5 findings, 4 fixed in the next commit: `where` treated a matching month as the event itself; the CSV warning advised re-importing, which skips existing items (it now says to import into a new world with the schema in place); `age` printed a negative lower bound ("-1 to 1"); and the error auto-clear was reverted. Not changed: the typo warning on a repeated identical `link` call.
+
+**Design cycle 2** (`e092c7e`, `931036c`). Two fresh reviewers scored nine screens out of 10 for clarity, craft and reading comfort; after the changes a third scored them again.
+
+| Screen | Before (lowest of two) | After |
+|---|---|---|
+| Start screen | 6–8 | 9 |
+| Timeline | 7–8 | 8, then labels clear of gridlines (`931036c`) |
+| Inspector | 7.5 | 9 |
+| Wiki card | 7–7.5 | 9 |
+| Continuity | 7–8 | 8, then text in ink (`931036c`) |
+| Spreadsheet | 7–7.5 | 8.5, then a green "Open" (`931036c`) |
+| Relationships | 8 | 9 |
+| Phone | 7 | 8 |
+| Dark | 8 | 9 |
+
+Screenshots: `C:\Users\Owner\lk-scratch\r4-design\shots\c2-before\` and `...\c2-after\`.
+
+**Merge and upgrade rehearsal.** The branch still fast-forwards `main` (`bec45dd`). In throwaway copies under `C:\Users\Owner\lk-scratch\r8-clones` and `r8-probe` (the real sagas were only read), the engine was re-vendored by the run-7 method and each saga checked before and after:
+- **Saga suites:** Realm 312, Space 309 and Zombies 304 tests, all OK before and after.
+- **Outputs:** `saga.py health` and every chapter's `status` and `validate` output (13 chapters) are byte-identical before and after.
+- **Engine:** the full comparison ran on `931036c`; the last code commit, `c8c3e40` (four small Codex fixes), was then re-vendored into the same copies and the three suites and `health` rerun: all OK (312, 309, 304) and `health` identical. Upgrade all three sagas together: each saga's own parity test checks that the three vendored engines match, so a saga upgraded alone fails it until the others follow.
+- **Scripts:** `C:\Users\Owner\lk-scratch\snap\r8_rehearse.sh` and `r8_final.sh`; logs `r8-rehearse.log` and `r8-final.log` beside them.
+
 ## Other branches
 
 `feat/008-editor-ux`, `feat/009-editor-followups`, `feat/010-progressive-wiki`, `feat/011-planning-wiki`, `fix/lives-flashbacks-overflow` and `fix/mcp-cache-hints` are all fully merged into main (0 commits ahead). They hold no unmerged work.
 
 ## How to merge and re-vendor
 
-1. From the main checkout, run `git merge --ff-only claude/overnight-fixes-77b916`. main has not moved since `bec45dd`, so this fast-forwards.
-2. Run `python -m unittest discover -s tests`. Expect 395 OK, 1 skipped.
+**Merge** (from the main checkout, `C:\Users\Owner\OneDrive\Documents\Lorekeeper`):
+1. `git merge --ff-only claude/overnight-fixes-77b916` (main has not moved since `bec45dd`, so this fast-forwards).
+2. `python -m unittest discover -s tests`: expect 397 OK, 1 skipped.
 3. Push to the private repo, if you approve.
-4. Re-vendoring into the sagas follows the run-7 method in `docs/build/SESSION-LOG.md`:
-   1. Copy every tracked file of `lorekeeper/` into each saga's `_system/vendor/lorekeeper/` in a clone, and set `VERSION`.
-   2. Run each saga's own suite (`python -m unittest discover -s _system/tests`) and replay its status and validate outputs.
-   3. Land by fast-forward.
 
-   Changes that affect sagas: `lore mcp --saga` documentation now names `planning-fact`; a CLI export creates `<saga>/.lore/exports.json`; MCP import and export stay inside the saga folder; the editor design changes appear in `saga.py timeline`.
+Rollback for the merge: `git reset --hard bec45dd` on main, before pushing. After pushing, revert instead of resetting.
+
+**Upgrade the sagas** (optional; rehearsed above). For each of Realm Saga, Space saga and Zombies saga, in a clone, as in run 7:
+1. Replace the files in `_system/vendor/lorekeeper/` with every tracked file of `lorekeeper/` from the merged main, and write the main commit's short hash into `_system/vendor/lorekeeper/VERSION`.
+2. `python -m unittest discover -s _system/tests` (expect 312, 309 and 304 OK), `python _system/scripts/saga.py health`, and `status`/`validate` for the chapters in progress: the outputs should match the ones from before.
+3. Commit as `system: vendor Lorekeeper <hash>` and land by fast-forward.
+
+Rollback for a saga: `git revert <that system commit>` in the saga (it touches only `_system/vendor/lorekeeper/`). The engine they run today is `456bfe9`.
+
+What the sagas will notice: the editor (`saga.py timeline`) gets the design changes; `lore mcp --saga` import and export stay inside the saga folder; a command-line export records itself in `<saga>/.lore/exports.json`; `where`, `link` and CSV import messages are clearer. Their own saga tooling output is unchanged (byte-identical in the rehearsal).
