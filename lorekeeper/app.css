@@ -17,7 +17,6 @@ body.app { display: block; height: auto; min-height: 100%; }
 .world-card.missing h2 { color: var(--muted); }
 .open-badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--soft); color: var(--accent); }
 .warning { color: var(--warn); font-size: 13px; }
-.world-card .path { font-size: 12px; }
 .ai-note { margin-top: 6px; border-top: 1px solid var(--hair); padding-top: 10px; }
 .ai-note summary { cursor: pointer; color: var(--muted); font-size: 14px; width: fit-content; }
 .ai-note summary:hover { color: var(--ink); }

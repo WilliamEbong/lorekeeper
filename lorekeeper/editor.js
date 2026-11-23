@@ -209,7 +209,7 @@ function findingText(f) {
     };
     if (people[m[3]]) return people[m[3]];
     const places = /^(.+) in different places: (.+) and (.+)$/.exec(m[3]);
-    if (places) return `${places[1]} is at ${places[2]} for ${m[1]} (${here}) and at ${places[3]} for ${m[4]} (${there}).`;
+    if (places) return `${places[1]} is at ${places[2]} for “${m[1]}” (${here}) and at ${places[3]} for “${m[4]}” (${there}).`;
     const what = timing ? [label(key).toLowerCase(), ...(rest.length ? [lagWords(rest.join(' '))] : [])].join(', ') : m[3];
     return `${m[1]} (${here}): ${what}; ${m[4]} (${there})`;
   }
@@ -857,7 +857,7 @@ function scaleControls() {
 function legend() {
   const box = el('div', null, {class: 'legend', 'aria-hidden': 'true'});
   for (const [kind, text] of [['', 'Exact'], ['fuzzy', 'Approximate'], ['life', graph.items.some(i => i.reborn) ? 'Alive (or reborn)' : 'Alive']]) {
-    const sample = svgEl('svg', {viewBox: '0 0 26 14'}), g = svgEl('g', {class: `cat-event ${kind === 'life' ? '' : kind}`});
+    const sample = svgEl('svg', {viewBox: '0 0 26 14'}), g = svgEl('g', {class: kind === 'life' ? '' : kind});
     g.append(kind === 'life' ? svgEl('rect', {x: 1, y: 5, width: 24, height: 4, rx: 2, class: 'life'})
       : svgEl('rect', {x: 1, y: 2, width: 24, height: 10, rx: 3, class: 'mark'}));
     sample.append(g);
@@ -1026,7 +1026,7 @@ function timeline(view) {
   wireItems(c.svg);
   const undated = graph.items.length - all.length, note = el('p', null, {class: 'hint'});
   if (capped) note.append('This world spans too many years to draw at that scale, so the chart is as wide as it can be. ');
-  note.append(saga ? 'Select an item to propose a change. ' : 'Select an item to open it. Drag an exactly dated item sideways to move it, '
+  note.append(saga ? 'Select an item to propose a change. ' : 'Drag an exactly dated item sideways to move it, '
     + 'or drag either end of a bar to change just its start or end. ');
   if (undated) note.append(`${plural(undated, 'item')} without a date ${undated === 1 ? 'is' : 'are'} not shown; `,
     button('see them in the Spreadsheet', () => activateTab($('tab-spreadsheet')), {class: 'link'}), '.');
@@ -1146,7 +1146,7 @@ function subway(view) {
   }
   const box = scrollBox('chart');
   view.append(box);
-  const width = Math.max(300, box.clientWidth), gutter = width < 600 ? 104 : 150, c = chart(box, width, gutter), LANE = 46, TOP = 26;
+  const width = Math.max(300, box.clientWidth), gutter = width < 600 ? 124 : 150, c = chart(box, width, gutter), LANE = 46, TOP = 26;
   c.svg.setAttribute('aria-label', 'Subway. Use the arrow keys to move between stops.');
   lanes.forEach((p, i) => {
     const y = TOP + i * LANE, cls = `r${i % 8}`, room = Math.floor((gutter - 20) / 7), name = p.name.length > room ? p.name.slice(0, room - 1) + '…' : p.name;
@@ -1167,7 +1167,7 @@ function subway(view) {
         'aria-label': `${event.name}, with ${lanes[lane].name}, ${whenText(event)}`,
         id: `subway-${encodeURIComponent(`${event.path}\0${lanes[lane].path}`)}`});
       g.append(svgEl('circle', {cx: x, cy: TOP + lane * LANE, r: 11, class: 'hit'}),
-        svgEl('circle', {cx: x, cy: TOP + lane * LANE, r: 6, class: 'stop'}),
+        svgEl('circle', {cx: x, cy: TOP + lane * LANE, r: 5, class: 'stop'}),
         svgEl('title', {}, `${event.name} · ${whenText(event)}`));
       c.svg.append(g);
     }
@@ -1177,7 +1177,7 @@ function subway(view) {
   if (!q && ranked.length > lanes.length) view.append(el('p', `Showing the ${lanes.length} people with the most events. Filter to find the other ${ranked.length - lanes.length}.`, {class: 'hint'}));
 }
 function agesView(view) {
-  view.append(peopleFilter(view, 'Ages at the events each person takes part in; a blank cell means that person was not there. Yellow: under 18. Red: before birth or after death. Who is related to whom is under Relationships.'));
+  view.append(peopleFilter(view, 'Ages at the events each person takes part in (shaded cells; blank means not there). Yellow: under 18. Red: before birth or after death. Who is related to whom is under Relationships.'));
   const q = ui.people.toLowerCase();
   const ranked = rankedPeople().filter(r => r.n > 0 && (!q || r.p.name.toLowerCase().includes(q))), ROWS = q ? 200 : 40;
   const shown = ranked.slice(0, ROWS).map(r => r.p).sort(byName);
@@ -1267,10 +1267,12 @@ function relationships(view) {
     const card = el('article', null, {class: 'relation', 'data-path': item.path}), head = el('header'), list = el('dl');
     head.append(button(item.name, () => selectItem(item.path, {show: true}), {class: 'link', id: `related-${encodeURIComponent(item.path)}`}),
       el('span', typeLabel(item.type), {class: `kind cat-${category(item)}`}));
-    for (const [kind, others] of [...cards.get(item.path)].sort((a, b) => a[0].localeCompare(b[0]))) {
+    const rank = (k) => [/parent|mother|father/i, /sibling|brother|sister/i, /husband|wife|spouse|partner/i, /child|son|daughter/i]
+      .findIndex(r => r.test(k)) >>> 0;   // family order; anything else after, alphabetically
+    for (const [kind, others] of [...cards.get(item.path)].sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]))) {
       const names = el('dd');
       for (const other of [...others.values()].sort(byName)) names.append(button(other.name, () => selectItem(other.path, {show: true}), {class: 'link'}));
-      list.append(el('dt', kind), names);
+      list.append(el('dt', others.size > 1 && /^(Parent|Sibling|Child|Friend|Ally|Enemy|Rival)$/.test(kind) ? kind + 's' : kind), names);
     }
     card.append(head, list);
     grid.append(card);
@@ -1445,14 +1447,15 @@ function sheetLocation(item, places) {
 function narrative(view) {
   // Hosts' cards use chapter/order/number; natural name order is the fallback.
   const order = (i) => Number(i.fields.chapter ?? i.fields.order ?? i.fields.number ?? i.name.match(/\d+/)?.[0] ?? Infinity);
-  const chapters = graph.items.filter(i => category(i) === 'narrative' || i.type === 'card')
-    .sort((a, b) => order(a) - order(b) || byName(a, b));
-  const unmapped = graph.items.filter(i => /narrative|chapter|scene|book|part/i.test(i.type));
-  if (!chapters.length && unmapped.length) {
-    const kinds = [...new Set(unmapped.map(i => typeLabel(i.type)))].join(', ');
-    view.append(emptyState('Story parts aren’t set up as chapters yet', `This world has ${plural(unmapped.length, 'item')} of the kind ${kinds}, `
-      + 'but that kind isn’t marked as a story part, so this view can’t order them. In the world’s settings (lore.json), give that type "category": "narrative".'));
-    return;
+  const sort = (list) => list.sort((a, b) => order(a) - order(b) || byName(a, b));
+  let chapters = sort(graph.items.filter(i => category(i) === 'narrative' || i.type === 'card')), fallback = false;
+  if (!chapters.length) {   // an import's story parts can arrive under a type not marked as one (Aeon's Narrative Folder)
+    const parts = sort(graph.items.filter(i => /narrative|chapter|scene|book|part/i.test(i.type)));
+    if (parts.length) {
+      const kinds = [...new Set(parts.map(i => typeLabel(i.type)))].join(', ');
+      chapters = parts;
+      fallback = `This world’s ${kinds} items, in name order: they have no chapter number yet.`;
+    }
   }
   if (!chapters.length) {
     view.append(emptyState('No chapters yet', 'Chapters and other story parts appear here in reading order, with a flag wherever the story steps back in time.',
@@ -1466,14 +1469,14 @@ function narrative(view) {
     main.append(button(item.name, () => selectItem(item.path, {show: true}), {class: 'link', id: `narrative-${encodeURIComponent(item.path)}`}),
       el('div', `${kinds ? typeLabel(item.type) + (item.start ? ' · ' : '') : ''}${item.start ? whenText(item) : ''}`, {class: 'when'}));
     const back = latest != null && item.lo != null && item.lo < latest;
-    row.append(el('span', String(index + 1), {class: 'num'}), main,
+    row.append(fallback ? el('span') : el('span', String(index + 1), {class: 'num'}), main,
       back ? el('span', 'Earlier than the part before', {class: 'flag warn', title: 'The story steps back in time here. A flashback may be intentional.'})
-        : item.lo == null ? el('span', 'Undated', {class: 'flag muted'}) : el('span'));
+        : item.lo == null && !fallback ? el('span', 'Undated', {class: 'flag muted'}) : el('span'));
     if (item.lo != null) latest = Math.max(latest ?? item.lo, item.lo);
     list.append(row);
   });
   box.append(list);
-  view.append(el('p', 'Story parts in reading order, by their chapter, order or number field.', {class: 'hint'}), box);
+  view.append(el('p', fallback || 'Story parts in reading order, by their chapter, order or number field.', {class: 'hint'}), box);
 }
 async function runCheck() {
   if (ui.checking) { ui.recheck = true; return; }
@@ -1684,7 +1687,8 @@ function wikiCard() {
     setCardChapter(next === undefined ? (delta > 0 ? null : wiki.cardAsOf) : next);
   };
   const cardPicker = el('label', 'This card as of ');   // the toolbar has its own picker: say which this one is
-  cardPicker.append(chapterSelect('card-as-of', wiki.cardAsOf, setCardChapter, 'Show this card as of'));
+  if (wiki.cardAsOf === wiki.asOf) cardPicker.append(el('span', wiki.cardAsOf == null ? 'All chapters' : `Chapter ${wiki.cardAsOf}`, {class: 'card-at'}));
+  else cardPicker.append(chapterSelect('card-as-of', wiki.cardAsOf, setCardChapter, 'Show this card as of'));
   toggle.append(button([icon('left')], () => step(-1), {class: 'quiet icon-only', 'aria-label': 'Previous chapter', id: 'card-prev', disabled: at === 0 ? '' : null}),
     cardPicker,
     button([icon('right')], () => step(1), {class: 'quiet icon-only', 'aria-label': 'Next chapter', id: 'card-next', disabled: wiki.cardAsOf == null ? '' : null}));
@@ -1724,7 +1728,8 @@ function wikiCard() {
       () => { wiki.form = 'other'; renderView(); requestAnimationFrame(() => $('wiki-form-section')?.focus()); }, {class: 'quiet small', id: 'wiki-add-other'}));
   }
   if (card.fields) {
-    const fields = Object.entries(card.fields).filter(([k]) => !['id', 'type', 'canonical_name', 'name', 'page'].includes(k));
+    const shown = card.appears != null ? ['first_appearance'] : [];   // the header already says "Appears in chapter N"
+    const fields = Object.entries(card.fields).filter(([k]) => ![...shown, 'id', 'type', 'canonical_name', 'name', 'page'].includes(k));
     if (fields.length) {
       const facts = add(box, el('section', null, {class: 'wiki-section'})), dl = el('dl', null, {class: 'wiki-fields'});
       facts.append(el('h3', 'Details'), dl);
