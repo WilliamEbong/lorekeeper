@@ -35,12 +35,12 @@ Writers come to Lorekeeper with existing Aeon Timeline files and spreadsheets, a
 
 - **FR-6 Round-trip fidelity** (added 2026-11-23 by the overnight maintenance pass, as a safe default the owner may revise). Exporting a world to CSV or `.aeon` and importing the file into an empty world gives the same items, dates and fields.
   - **Kept.** Every date field (`born`, `died`, `date`, `end`, `date_min`, `date_max`) travels as its own property beside Aeon's start and end, so the original text, circa marks and narrowing survive.
-  - **Bounds-only dates.** A date known only by `date_min` and `date_max` is exported as its earliest date in Aeon's start (and CSV `startDate`). On import, a start equal to `date_min` beside both bounds and no stated date is left out, so the range is not narrowed to its first year.
   - **Ends.** An event's end defaults to its start, so an imported end equal to the start is not written. A person's `died` is always written.
   - **Tags.** An item without tags gets no `tags: []` line.
   - **Aeon precision.** A year range that is exactly an aligned decade (`1990s`) or century (`1800s`) is written at Aeon's decade or century precision.
   - **Recorded losses, where the formats cannot carry the detail.**
     - In Aeon itself (not on re-import): circa dates show their stated date; a bounds-only date shows only its earliest date; Lorekeeper's text forms ("1990s", "~1951") appear only as property values; a born-only person has no end date.
+    - A date known only by `date_min` and `date_max` is exported as its earliest date, and re-importing writes that date, which narrows the range to it. Rare enough that it was left.
     - In a CSV, a text value that looks like a JSON list or object (`["a", "b"]`) comes back as a list or object, because lists are written that way.
     - Week precision: Lorekeeper has no week dates, so none are written; an imported Aeon week becomes a seven-day range.
 

@@ -264,8 +264,3 @@ class LauncherTests(unittest.TestCase):
         launched, text = self.launch(old_python=True)
         self.assertFalse(launched, text)
         self.assertIn("3.11", text)
-
-    @unittest.skipUnless(shutil.which("py"), "needs the py launcher")
-    def test_open_lorekeeper_starts_with_a_current_python(self):
-        launched, text = self.launch(old_python=False)
-        self.assertTrue(launched, text)

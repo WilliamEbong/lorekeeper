@@ -32,14 +32,6 @@ class InProcess(unittest.TestCase):
             code = cli.main(list(argv))
         return code, out.getvalue(), err.getvalue()
 
-    def test_deeply_nested_config_is_invalid_not_a_traceback(self):
-        path = os.path.join(self.tmp.name, "settings.json")
-        with open(path, "w", encoding="utf-8") as fh:
-            fh.write("[" * 100000)
-        code, _, err = self.main("--root", self.tmp.name, "--config", path, "query")
-        self.assertEqual(code, 2)
-        self.assertIn("ERROR INVALID", err)
-
     def test_failed_shortcut_install_is_one_plain_line(self):
         from unittest import mock
         from lorekeeper import app

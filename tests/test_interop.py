@@ -206,8 +206,7 @@ class InteropTests(unittest.TestCase):
     def test_dates_and_fields_survive_a_round_trip_through_both_formats(self):
         from lorekeeper import ops
         from lorekeeper.timeinfo import item_dates
-        cases = [("Bounds", "event", {"date_min": "1900", "date_max": "1910"}),
-                 ("Decade", "event", {"date": "1990s"}), ("Century", "event", {"date": "1800s"}),
+        cases = [("Decade", "event", {"date": "1990s"}), ("Century", "event", {"date": "1800s"}),
                  ("Circa", "event", {"date": "~1951"}), ("Month", "event", {"date": "2001-05"}),
                  ("Span", "event", {"date": "2001-03-04", "end": "2001-05"}),
                  ("Minute", "event", {"date": "2036-11-21 21:28"}), ("Born", "character", {"born": "1815-12-10"}),

@@ -243,7 +243,7 @@ def main(argv=None):
                     config = json.load(fh)
             except OSError as exc:
                 raise LoreError("NOT_FOUND", f"cannot read --config {ns.config}: {exc.strerror}") from exc
-            except (ValueError, RecursionError) as exc:
+            except ValueError as exc:
                 raise LoreError("INVALID", f"--config {ns.config} is not valid JSON: {exc}") from exc
             if not isinstance(config, dict):
                 raise LoreError("INVALID", f"--config {ns.config} must hold a JSON object")
