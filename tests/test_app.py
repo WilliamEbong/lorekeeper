@@ -186,13 +186,19 @@ class ServerTests(AppTestCase):
     def test_quit_stops_worlds_and_the_start_screen(self):
         _, created = self.call("/api/create", {"name": "Brief", "template": None, "parent": str(self.tmp)})
         self.assertEqual(self.call("/api/quit", {}), (200, {"closed": True}))
-        for url in (created["url"], self.url):
-            # quit replies first and stops the servers on a thread, so allow it a moment
+        # quit replies first and stops the servers on a thread, so allow it a moment. Each URL is one its
+        # server answers while running; any HTTP reply, even an error status, means it is still up.
+        for url in (created["url"] + "api/stamp", self.url + "api/hello"):
             deadline = time.monotonic() + 5
-            with self.assertRaises((URLError, ConnectionError, OSError)):
-                while time.monotonic() < deadline:
-                    urlopen(url + "api/stamp", timeout=3).close()
-                    time.sleep(0.05)
+            while True:
+                try:
+                    urlopen(url, timeout=3).close()
+                except HTTPError:
+                    pass
+                except (URLError, ConnectionError, OSError):
+                    break
+                self.assertLess(time.monotonic(), deadline, f"{url} still answers after quit")
+                time.sleep(0.05)
 
 
 class LaunchTests(AppTestCase):
