@@ -89,6 +89,7 @@ details > summary::-webkit-details-marker { display: none; }
 #create-form .row { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
 
 /* Tabs */
+.view-menu { display: none; }
 .tabs { display: flex; align-items: end; justify-content: space-between; gap: 12px; padding: 0 20px; background: var(--panel); border-bottom: 1px solid var(--hair); }
 [role="tablist"] { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
 [role="tab"] { border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: none; padding: 10px 14px 9px; color: var(--muted); white-space: nowrap; }
@@ -311,14 +312,15 @@ tbody tr.selected { background: var(--soft); }
   .brand { width: 100%; }
   .find { flex: 1 1 200px; }
   .status { min-width: 0; }
-  .tabs { padding: 0 8px; }
-  [role="tablist"] { flex-wrap: wrap; }
-  [role="tab"] { padding: 8px 7px 7px; font-size: 14px; }
+  .tabs { padding: 8px 16px; }
+  [role="tablist"] { display: none; }
+  .view-menu { display: flex; align-items: center; gap: 8px; width: 100%; font-weight: 600; }
+  .view-menu select { flex: 1; }
   .shortcuts { display: none; }
   main { display: block; }
   #view { padding: 12px 16px 16px; }
-  .scroll { flex: none; max-height: 60vh; overscroll-behavior: auto; }
-  .scroll.pad { max-height: none; }
+  .scroll { flex: none; max-height: none; overscroll-behavior: auto; }
+  .scroll.chart { max-height: 60vh; }
   .inspector:has(.welcome) { display: none; }
   .inspector { border-left: 0; border-top: 1px solid var(--hair); padding: 16px; scroll-margin-top: 8px; }
   .back-to-view { display: inline-flex; }
@@ -391,6 +393,5 @@ button.cite.missing:disabled { opacity: 1; }
 label.check { display: flex; gap: 8px; align-items: center; font-size: 14px; }
 @media (max-width: 900px) {
   .wiki { display: grid; grid-template-columns: minmax(0, 1fr); }
-  .wiki-index.scroll { max-height: 40vh; }
   .wiki-card { padding: 16px; }
 }

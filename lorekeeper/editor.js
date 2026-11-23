@@ -1492,6 +1492,8 @@ function updateBadge() {
   badge.textContent = String(result.fail || result.warn);
   badge.className = `badge ${result.fail ? 'fail' : 'warn'}`;
   tabNode.setAttribute('aria-label', `Continuity: ${plural(result.fail, 'definite problem')}, ${plural(result.warn, 'possible problem')}`);
+  const option = $('view-menu').querySelector('option[value="Continuity"]');
+  option.textContent = result.fail || result.warn ? `Continuity (${plural(result.fail || result.warn, 'problem')})` : 'Continuity';
 }
 function continuity(view) {
   const bar = el('div', null, {class: 'toolbar'});
@@ -2103,9 +2105,12 @@ function activateTab(node) {
   tab = node.dataset.view;
   tabs.forEach(t => { t.setAttribute('aria-selected', String(t === node)); t.tabIndex = t === node ? 0 : -1; });
   $('view').setAttribute('aria-labelledby', node.id);
+  $('view-menu').value = tab;
   renderView();
   if (tab === 'Continuity' && !ui.checking) runCheck();
 }
+for (const node of tabs) $('view-menu').append(el('option', node.dataset.view, {value: node.dataset.view}));
+$('view-menu').addEventListener('change', event => activateTab(tabs.find(t => t.dataset.view === event.target.value)));
 tabs.forEach((node, index) => {
   node.addEventListener('click', () => activateTab(node));
   node.addEventListener('keydown', event => {
