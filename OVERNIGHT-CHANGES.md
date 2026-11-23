@@ -10,6 +10,12 @@
 - Continuity problems read as sentences: "Hareton Earnshaw died June 1778, but takes part here (1 January 1803)."
 - The inspector no longer says "No connections yet" for someone that others link to, and "Linked from" comes before the form for adding a connection.
 - On a phone, Continuity and its count are visible, and "Open" takes you straight to the item.
+- Ages shows one card per person, listing only the events they are in. A birth reads "newborn", and a card with impossible ages says so in one line.
+- Narrative lists story parts the same way in every world. In an imported world you click the dash beside a part to give it a chapter number, and parts without one sit under "Not placed yet".
+- Dates read in words ("July 1764") in the Spreadsheet and the Inspector until you click into the field to change them.
+- On the Subway, stops crowded into one year merge into a numbered circle. Click it to zoom in; events on the very same day are listed under the chart.
+- File names and line numbers are out of sight: hover over "Open Hindley Earnshaw" or the item's kind to see them.
+- On a phone, one View menu replaces the two rows of tabs, the Spreadsheet shows names and dates, and long Subway names wrap.
 
 **Behind the scenes:**
 - Export never overwrites one of your own files: it writes a new file, or replaces only a file it wrote itself that nobody has changed since.
@@ -194,6 +200,42 @@ S1 is before this cycle; S2 is affected by a capture fault (the wiki card wasn't
 - **All screens:** the Inspector column is always reserved, and several views scroll inside the page. Changing either is a layout redesign, not a fix.
 
 Screenshots for every round: `C:\Users\Owner\lk-scratch\r4-design\shots\s1` to `s6`.
+
+## Design pass 3: acting on the reviewers' list
+
+The reviewers' reasons said what a 9 would need, so this pass made those changes, including small features and layout changes where they asked for one. Lowest screens first. One commit per item, each tested in the browser, the full suite green at each commit.
+
+**Round A (from the S6 list):**
+- Ages: one card per person instead of a mostly blank grid (`7f0619d`).
+- Phone: one View menu in place of two rows of tabs, and no scroll areas inside the scrolling page except the charts (`e1ccde0`).
+- Narrative: a chapter number can be set in place (`90b0d09`).
+- Spreadsheet: dates read in words until a cell is edited (`45b3d90`).
+- Subway: crowded stops merge into numbered stops that zoom in (`a5fe0eb`).
+
+**S7 scores** (three fresh Opus reviewers; median of each reviewer's lowest axis): Start 7.5, Timeline 7.5, Subway 7, Relationships 8, Ages 7, Spreadsheet 7.5, Narrative 6.5, Wiki card 7.5, Planning card 7.5, Continuity 7.5, Inspector 7, New item 7.5, Phone 6.5, Dark 7.5. These reviewers were stricter than S6's: they marked down things S6 had passed. All three named the same next changes, which Round B makes.
+
+**Round B (what all three S7 reviewers named):**
+- Ages: "newborn", not "0 minutes"; the death date beside the birth date; one plain line on a card with impossible ages (`832a247`).
+- Narrative: one list design in both worlds, with unnumbered parts under "Not placed yet" (`e2ab100`).
+- Codex review of rounds A and B: seven findings, all confirmed and fixed (`c081bc8`).
+- File paths and line numbers moved into tooltips (`b03b13e`).
+- Inspector: date fields read in words until focused, and Save always looks like a button (`0bc931f`).
+- Subway: names wrap on a phone, with quieter connector lines and a plainer key (`7022c74`).
+- Phone Spreadsheet: the name and dates are in view, with the name held in place (`390f52a`).
+- Dark mode: the main button is deep green instead of a glaring pale mint (`95af289`).
+
+**Not done, and why:**
+- The header says "imp2" while the start screen says "Wuthering Heights (imported)". This comes from my test copy: its settings file names it imp2, and I gave it a different name in the test list of worlds.
+- "Narrative Folder" shows as a type name in the imported world. That is the import's own type name, part of the data, so renaming it is your decision about your world.
+- Raised but not attempted:
+  - Relationships cards of equal height;
+  - Wiki chapter stepper wording;
+  - a planning world opening on Wiki when nothing is dated;
+  - grouping repeated Continuity problems.
+
+**S8 scores:** pending (fresh reviewers scoring the screens after Round B).
+
+Screenshots: `.playwright-mcp\design\s7` and `s8` in the worktree; reviewer tables in `C:\Users\Owner\lk-scratch\r4-design\s7-*.md` and `s8-*.md`.
 
 ## Other branches
 
