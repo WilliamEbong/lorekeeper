@@ -500,3 +500,9 @@ The saga's `AUTHORITY.md` ranking still decides which document wins a conflict.
 - **Limits:** a card that only says "the vampire captain" is missed unless that phrase is one of her names. Names that are ordinary words need an exclusion list.
 
 **Undecided material (owner, 2026-10-19):** plot ideas, opportunities portfolios and unapproved-decisions reports are shown in the planning wiki, clearly labelled as ideas. They are kept visibly apart from decided facts, and are never used as decided canon (for chapter cards, impact reviews or link lists).
+
+## Overnight maintenance pass (2026-11-22)
+Goal: find and fix high-confidence defects; no features, no redesign. Record: `OVERNIGHT-CHANGES.md` at the repo root.
+Acceptance checks: each fix has a test that failed before and passes after; full suite green (`python -m unittest discover -s tests`, baseline 376 OK, 1 skip); Codex review of the branch diff with confirmed findings fixed; no push, merge or saga change.
+Steps: 1 baseline (done) · 2 audit with three read-only agents · 3 confirm and fix one at a time · 4 Codex review · 5 OVERNIGHT-CHANGES.md and handoff.
+Later: anything below the confidence bar goes to "Found, not changed" in OVERNIGHT-CHANGES.md.
