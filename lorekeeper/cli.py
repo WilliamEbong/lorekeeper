@@ -56,7 +56,7 @@ def build_parser():
                             help="make Lorekeeper shortcuts on the Desktop and in the Start menu (Windows), then start it")
         else:
             sp.add_argument("--saga", action="store_true",
-                            help="offer only reading and the story-wiki fact tools (Wiki pages stay with the pipeline)")
+                            help="offer only reading, the story-wiki fact tools and planning-fact (Wiki pages stay with the pipeline)")
     return ap
 
 
