@@ -172,6 +172,8 @@ def _check_shapes(result):
             targets = spec.get("types", {})
             if not isinstance(targets, (dict, list)) or not all(isinstance(t, str) for t in targets):
                 _invalid(f"Aeon {section} definition has unreadable target types")
+            if not isinstance(spec.get("category"), (str, type(None))):
+                _invalid(f"Aeon {section} definition has an unreadable category")
     for item in result["items"]:
         if not isinstance(item["type"], str) or not isinstance(item["summary"], (str, type(None))):
             _invalid(f"Aeon item {item['id']!r} has an unreadable type or summary")

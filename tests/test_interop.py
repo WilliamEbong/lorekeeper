@@ -119,6 +119,7 @@ class InteropTests(unittest.TestCase):
         mutations = [
             lambda d, _: d["types"].update(byId=[]),
             lambda d, _: d["types"]["byId"].update(ev="x"),
+            lambda d, _: d["types"]["byId"]["ev"].update(category=[]),
             lambda d, _: d["properties"].update(byId={"p": "str"}),
             lambda d, _: d["references"].update(byId={"r": {"label": "R", "types": 5}}),
             lambda _, data: data["itemsById"]["a"].update(type=["ev"]),
