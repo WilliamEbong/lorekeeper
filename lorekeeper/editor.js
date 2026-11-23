@@ -1405,8 +1405,15 @@ function editableCell(input, item, key, {shown, toValue}) {
 }
 function sheetCell(item, key) {
   const cell = el('td'), input = el('input', null, {'aria-label': `${item.name}: ${label(key)}`, autocomplete: 'off'});
-  cell.append(editableCell(input, item, key, {shown: () => display(latestOf(item).fields[key]),
-    toValue: (d) => valueOf(d.value, d.base.fields[key], key)}));
+  const raw = () => display(latestOf(item).fields[key]);
+  cell.append(editableCell(input, item, key, {shown: raw, toValue: (d) => valueOf(d.value, d.base.fields[key], key)}));
+  if (isDateKey(key)) {
+    // Dates read in words, like everywhere else; the cell turns back to the written form while it is being edited.
+    const words = () => { if (!cells.get(input.id) && document.activeElement !== input) input.value = shownDate(raw()); };
+    words();
+    input.addEventListener('focus', () => { if (!cells.get(input.id)) input.value = raw(); });
+    input.addEventListener('blur', () => setTimeout(words));
+  }
   return cell;
 }
 function sheetType(item) {
