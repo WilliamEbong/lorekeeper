@@ -99,6 +99,24 @@ const whenText = (item) => {
   return to === from ? from : `${from} to ${to}`;
 };
 const narrow = () => matchMedia('(max-width: 900px)').matches;
+// A phone is too narrow for a readable time axis: the Timeline and Subway become lists there (World Anvil's list mode).
+const phone = () => matchMedia('(max-width: 600px)').matches;
+const yearOf = (item) => shownDate(item.start.text).match(/\d+( BC)?$/)?.[0] ?? 'Undated';
+function phoneList(view, groups) {
+  const box = el('div', null, {class: 'age-cards phone-list'});
+  for (const [title, items, note] of groups) {
+    const card = el('article', null, {class: 'age-card'}), head = el('header'), list = el('ol', null, {class: 'age-list'});
+    head.append(el('h3', title), el('span', note ?? plural(items.length, 'item'), {class: 'hint'}));
+    for (const item of items) {
+      const row = el('li', null, {'data-path': item.path});
+      row.append(button(item.name, () => selectItem(item.path, {show: true}), {class: 'link'}), el('span', whenText(item), {class: 'when'}));
+      list.append(row);
+    }
+    card.append(head, list);
+    box.append(card);
+  }
+  view.append(box);
+}
 const typing = (node) => Boolean(node?.closest?.('input, textarea, select, [contenteditable="true"]'));
 // ponytail: label width from the character count; measure text if long names collide in practice.
 const labelWidth = (text) => text.length * 7 + 6;
@@ -954,13 +972,19 @@ function typeChips(types, items) {
 }
 function timeline(view) {
   const all = dated(), types = [...new Set(all.map(i => i.type))].sort(typeOrder);
-  const bar = el('div', null, {class: 'toolbar'});
-  bar.append(zoomControls(), ...scaleControls(), el('span', null, {class: 'spacer'}), legend());
-  view.append(bar);
   if (!all.length) {
     view.append(emptyState('Nothing is dated yet', 'Give an item a date, or a person a birth date, in the inspector and it appears here.'));
     return;
   }
+  if (phone()) {
+    if (types.length > 1) view.append(typeChips(types, all));
+    const byYear = groupBy(all.filter(i => !ui.hidden.has(i.type)), yearOf);
+    phoneList(view, [...byYear].map(([year, items]) => [year, items]));
+    return;
+  }
+  const bar = el('div', null, {class: 'toolbar'});
+  bar.append(zoomControls(), ...scaleControls(), el('span', null, {class: 'spacer'}), legend());
+  view.append(bar);
   if (types.length > 1) view.append(typeChips(types, all));
   const box = scrollBox('chart');
   view.append(box);
@@ -1157,6 +1181,11 @@ function subway(view) {
   if (!lanes.length) {
     view.append(q ? emptyState('No one matches', `No person whose name contains “${ui.people}” takes part in a dated event.`)
       : emptyState('No journeys yet', 'Connect people to dated events with the Participants connection, and their lines appear here.'));
+    return;
+  }
+  if (phone()) {
+    bar.querySelector('.subway-key')?.remove(); bar.querySelector('[role="group"]')?.remove(); bar.querySelector('.hint').textContent = 'Each person’s events, in time order.';
+    phoneList(view, lanes.map(p => [p.name, events().filter(e => takesPart(p, e)), p.start ? `born ${shownDate(p.start.text)}` : null]));
     return;
   }
   const box = scrollBox('chart');
