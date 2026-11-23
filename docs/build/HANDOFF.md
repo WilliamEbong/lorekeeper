@@ -117,3 +117,7 @@ Lorekeeper (command `lore`) is a standalone, stdlib-only story-world engine.
   - add `planning-source "World Bible" --section 82.2` to read a cited section.
 - In each saga, `python -m unittest discover -s _system/tests` passes with parity.
 - MCP: `python C:\Users\Owner\lk-scratch\snap\handshake5.py "<saga folder>"`.
+
+## Overnight maintenance pass (2026-11-22/23)
+
+Branch `claude/overnight-fixes-77b916` (worktree `.claude/worktrees/overnight-fixes-77b916`), 16 commits on main `bec45dd`, local only. Read `OVERNIGHT-CHANGES.md` at the repo root: every fix with its evidence and undo, the "Found, not changed" list, and how to merge and re-vendor. Suite 383 OK (1 skip). Not merged, not pushed, sagas untouched.
