@@ -314,3 +314,25 @@ Rollback for a saga: `git revert <that system commit>` in the saga (it touches o
 7. Skills: `_system/skills/story_wiki_update.md` and `planning_wiki_change.md` name Lorekeeper tools. Check those tool names still appear in the tool list the MCP server reports (step 6). This release renames no tools.
 
 What the sagas will notice: the editor (`saga.py timeline`) gets the design changes; `lore mcp --saga` import and export stay inside the saga folder; a command-line export records itself in `<saga>/.lore/exports.json`; `where`, `link` and CSV import messages are clearer. Their own saga tooling output is unchanged (byte-identical in the rehearsal).
+
+## Saga upgrade (2026-11-23, landing)
+
+**Merged and pushed:** `main` fast-forwarded `bec45dd` → `99b13f1` and pushed to the private repo. Suite: 397 OK (1 skipped).
+
+**Live sagas not upgraded, on purpose.** Each saga repo has uncommitted work that is not the engine's, and the landing rule is to leave such a saga alone:
+- Realm Saga and Zombies saga: `_system/logs/saga.log` has one uncommitted line each ("CH004 runtime scratch removed", 31 Oct).
+- Space saga: untracked `Chapters/CH005/` (chapter, READY_FOR_HUMAN, 30 Oct) and `_system/state/CH005.json`, `_system/state/provenance/CH005.json`.
+
+Because each saga's parity test needs all three engines to match, upgrading only some of them is not an option. All three still run `456bfe9`; no remote is configured on any of them, so there is nothing to push.
+
+**Dry run on merged main (throwaway probes `C:\Users\Owner\lk-scratch\r8-probe`, script `snap/r9_main.sh`, log `snap/r9-main.log`):** every tracked file of `lorekeeper/` at `99b13f1` copied in and `VERSION` set, by the run-7 method.
+
+| Saga | Engine before → after | Tests before / after | `lore check` before / after | `saga.py health` | MCP handshake (`handshake5.py`) |
+|---|---|---|---|---|---|
+| Realm | `c8c3e40` → `99b13f1` | 312 OK / 312 OK | 0 FAIL, 0 WARN / same | identical | OK / OK |
+| Space | `c8c3e40` → `99b13f1` | 309 OK / 309 OK | 0 FAIL, 0 WARN / same | identical | OK / OK |
+| Zombies | `c8c3e40` → `99b13f1` | 304 OK / 304 OK | 0 FAIL, 0 WARN / same | identical | OK / OK |
+
+Vendored files byte-identical to `main`. Between `c8c3e40` and `99b13f1` only editor files changed (`app.css`, `app.js`, `editor.css`, `editor.html`, `editor.js`).
+
+**To land later**, once the uncommitted work above is committed or set aside: re-vendor all three back to back by "How to merge and re-vendor", commit `system: vendor Lorekeeper 99b13f1` in each, then the version, tests, health, `lore check`, launcher and MCP checks listed there.
