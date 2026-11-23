@@ -44,7 +44,7 @@ button.link { border: 0; background: none; padding: 0; color: var(--accent); tex
 button.link:hover { background: none; text-decoration-thickness: 2px; }
 button:disabled { cursor: default; opacity: .55; }
 button:disabled:hover { background: var(--panel); }
-button.primary:disabled, button.primary:disabled:hover { background: var(--panel); color: var(--muted); border-color: var(--hair); opacity: 1; filter: none; }
+button.primary:disabled, button.primary:disabled:hover { background: var(--panel); color: var(--muted); border-color: transparent; font-weight: 400; opacity: 1; filter: none; }
 input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 input[readonly] { background: var(--sunken); }
 textarea { resize: vertical; min-height: 64px; }
@@ -204,7 +204,6 @@ tbody tr.selected { background: var(--soft); }
 .ages td.bad { background: var(--danger-soft); color: var(--danger); font-weight: 600; }
 .ages tr.selected th[scope="row"] { background: var(--soft); }
 .ages td.on:not(.young):not(.bad) { background: var(--soft); }
-.ages td.on { box-shadow: inset 3px 0 var(--accent); }
 .ages td[aria-busy]::after { content: "working out…"; color: var(--muted); font-size: 12px; }
 
 /* Relationships */
@@ -225,9 +224,12 @@ tbody tr.selected { background: var(--soft); }
 .cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .cards > li { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 14px; align-items: baseline; padding: 12px 14px; background: var(--panel); border: 1px solid var(--hair); border-radius: 8px; }
 .cards > li.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.scroll.pad > ol.cards:not(.findings) { max-width: 80ch; }
+.scroll.pad > ol.cards:not(.findings) { max-width: 80ch; gap: 0; }
+.scroll.pad > ol.cards:not(.findings) > li { border-radius: 0; border-top-width: 0; padding: 9px 14px; }
+.scroll.pad > ol.cards:not(.findings) > li:first-child { border-top-width: 1px; border-radius: 8px 8px 0 0; }
+.scroll.pad > ol.cards:not(.findings) > li:last-child { border-radius: 0 0 8px 8px; }
 .cards > li > div > button.link { text-decoration: none; }
-.cards > li > div > button.link:hover, .cards > li > div > button.link:focus-visible { text-decoration: underline; }
+.cards > li > div > button.link:hover, .cards > li > div > button.link:focus-visible, .findings button.link { text-decoration: underline; }
 .cards .num { font: 600 18px/1 var(--serif); color: var(--muted); font-variant-numeric: tabular-nums; min-width: 2ch; }
 .cards .when { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
 .flag { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }

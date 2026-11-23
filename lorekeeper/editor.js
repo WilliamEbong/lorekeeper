@@ -1177,7 +1177,7 @@ function subway(view) {
   if (!q && ranked.length > lanes.length) view.append(el('p', `Showing the ${lanes.length} people with the most events. Filter to find the other ${ranked.length - lanes.length}.`, {class: 'hint'}));
 }
 function agesView(view) {
-  view.append(peopleFilter(view, 'Ages at the events each person takes part in (shaded cells; blank means not there). Yellow: under 18. Red: before birth or after death. Who is related to whom is under Relationships.'));
+  view.append(peopleFilter(view, 'Ages at the events each person takes part in. Shaded: they were there (green: adult, yellow: under 18, red: before birth or after death). Blank: not there. Who is related to whom is under Relationships.'));
   const q = ui.people.toLowerCase();
   const ranked = rankedPeople().filter(r => r.n > 0 && (!q || r.p.name.toLowerCase().includes(q))), ROWS = q ? 200 : 40;
   const shown = ranked.slice(0, ROWS).map(r => r.p).sort(byName);
@@ -1454,7 +1454,7 @@ function narrative(view) {
     if (parts.length) {
       const kinds = [...new Set(parts.map(i => typeLabel(i.type)))].join(', ');
       chapters = parts;
-      fallback = `This world’s ${kinds} items, in name order: they have no chapter number yet.`;
+      fallback = `Your story parts (${kinds}), in name order. Give each a chapter number to put them in reading order.`;
     }
   }
   if (!chapters.length) {
@@ -1686,7 +1686,7 @@ function wikiCard() {
     const next = chapters[at + delta];
     setCardChapter(next === undefined ? (delta > 0 ? null : wiki.cardAsOf) : next);
   };
-  const cardPicker = el('label', 'This card as of ');   // the toolbar has its own picker: say which this one is
+  const cardPicker = el('label', 'Showing ');   // the toolbar has its own picker: say which this one is
   if (wiki.cardAsOf === wiki.asOf) cardPicker.append(el('span', wiki.cardAsOf == null ? 'All chapters' : `Chapter ${wiki.cardAsOf}`, {class: 'card-at'}));
   else cardPicker.append(chapterSelect('card-as-of', wiki.cardAsOf, setCardChapter, 'Show this card as of'));
   toggle.append(button([icon('left')], () => step(-1), {class: 'quiet icon-only', 'aria-label': 'Previous chapter', id: 'card-prev', disabled: at === 0 ? '' : null}),
@@ -1891,7 +1891,7 @@ function citeBox(id) {
 }
 function chips(parent, sources, owner) {
   sources.forEach((s, i) => {
-    const id = `${owner}|${i}`, label = (s.source ? `${s.source} §${s.section}` : s.ref).replace(/`/g, '') + (s.found ? '' : ' · not found');
+    const id = `${owner}|${i}`, label = (s.source ? `${s.source} §${s.section}` : s.ref).replace(/`/g, '') + (s.found ? '' : ' (can’t find it)');
     parent.append(button(label, () => s.source && s.found ? openCite(id, s.source, s.section) : null,
       {class: `cite${s.found ? '' : ' missing'}`, id: `cite-${owner}-${i}`.replace(/[^\w-]/g, '-'),
        'aria-expanded': s.found ? String(wiki.cite === id) : null, disabled: s.found ? null : '',
@@ -1970,7 +1970,7 @@ function planSection(card, section, index) {
 }
 function planLinks(card) {
   const box = el('section', null, {class: 'wiki-section links', 'aria-labelledby': 'links-title'}), links = card.links;
-  box.append(el('h3', 'Links', {id: 'links-title'}), el('p', 'Worked out by Lorekeeper from tags, the dialogue documents and the chapter cards.', {class: 'hint'}));
+  box.append(el('h3', 'Links', {id: 'links-title'}), el('p', 'Found for you from tags, dialogues and chapters.', {class: 'hint'}));
   const dl = add(box, el('dl', null, {class: 'wiki-fields'}));
   const row = (label, fill) => { if (/ · 0$/.test(label)) return; dl.append(el('dt', label)); fill(add(dl, el('dd'))); };
   row(`Notable members · ${links.members.length}`, dd => links.members.length
