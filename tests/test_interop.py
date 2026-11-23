@@ -94,6 +94,47 @@ class InteropTests(unittest.TestCase):
         shutil.copytree(FIXTURE, self.world)
         self.project = store.Project(self.world)
 
+    def test_hostile_numbers_and_nesting_are_invalid_not_crashes(self):
+        doc = sample()
+        doc["core"]["data"]["itemDatesById"]["a"]["startDate"]["year"] = float("inf")   # json reads Infinity
+        with self.assertRaises(store.LoreError) as caught:
+            self.read_document(doc)
+        self.assertEqual(caught.exception.code, "INVALID")
+        deep = b"[" * 200000 + b"]" * 200000 + b"\n"
+        path = self.root / "deep.aeon"
+        path.write_bytes(archive([("", "attachments", archive([])),
+                                  ("", "timeline", archive([("timeline3.json", "", deep)]))], root=True))
+        self.assert_invalid(path)
+        csv_path = self.root / "deep.csv"
+        cell = "[" * 50000 + "]" * 50000
+        csv_path.write_text(f"label,type,tags,note\nA,event,{cell},{cell}\n", encoding="utf-8")
+        row = interop.read_csv(csv_path)["items"][0]   # an unreadable cell is kept as its text
+        self.assertEqual((row["tags"], row["fields"]["note"]), ([cell], cell))
+
+    def test_wrongly_shaped_aeon_records_are_invalid_and_write_nothing(self):
+        def mutate(change):
+            doc = sample()
+            change(doc["core"]["definitions"], doc["core"]["data"])
+            return doc
+        mutations = [
+            lambda d, _: d["types"].update(byId=[]),
+            lambda d, _: d["types"]["byId"].update(ev="x"),
+            lambda d, _: d["properties"].update(byId={"p": "str"}),
+            lambda d, _: d["references"].update(byId={"r": {"label": "R", "types": 5}}),
+            lambda _, data: data["itemsById"]["a"].update(type=["ev"]),
+            lambda _, data: data["itemsById"]["a"].update(summary={"x": 1}),
+            lambda _, data: data["relationshipsById"].update(r={"subject": "a", "reference": ["x"], "object": "b"}),
+            lambda _, data: data["dependenciesById"].update(d={"subject": "a", "dependencyType": ["FS"], "object": "b"}),
+        ]
+        for n, change in enumerate(mutations):
+            with self.subTest(n):
+                project = self.empty(f"shape{n}")
+                before = (Path(project.root) / "lore.json").read_bytes()
+                with self.assertRaises(store.LoreError) as caught:
+                    interop.import_into(project, self.read_document(mutate(change)))
+                self.assertEqual(caught.exception.code, "INVALID")
+                self.assertEqual((Path(project.root) / "lore.json").read_bytes(), before)
+
     def test_export_never_overwrites_the_projects_own_files(self):
         from lorekeeper import ops
         item = self.project.items[0].path

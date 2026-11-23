@@ -162,6 +162,24 @@ def _option(prop, value):
     return option.get("label", value) if isinstance(option, dict) else value
 
 
+def _check_shapes(result):
+    """import_into uses these values as dict keys and lookups: refuse a file whose records have other shapes."""
+    for section in ("types", "roles", "properties"):
+        specs = result[section]
+        if not isinstance(specs, dict) or not all(isinstance(spec, dict) for spec in specs.values()):
+            _invalid(f"Aeon {section} definitions are not objects")
+        for spec in specs.values():
+            targets = spec.get("types", {})
+            if not isinstance(targets, (dict, list)) or not all(isinstance(t, str) for t in targets):
+                _invalid(f"Aeon {section} definition has unreadable target types")
+    for item in result["items"]:
+        if not isinstance(item["type"], str) or not isinstance(item["summary"], (str, type(None))):
+            _invalid(f"Aeon item {item['id']!r} has an unreadable type or summary")
+    for link, role in [(r, "role") for r in result["relationships"]] + [(d, "kind") for d in result["dependencies"]]:
+        if not all(isinstance(link[key], str) for key in ("subject", "object", role)):
+            _invalid("Aeon relationship or dependency has unreadable ids")
+
+
 def read_aeon(path):
     """Read either container version and normalize v14/v27 core records."""
     try:
@@ -215,10 +233,13 @@ def read_aeon(path):
                                    for r in data.get("relationshipsById", {}).values()]
         result["dependencies"] = [{"subject": r["subject"], "object": r["object"], "kind": r["dependencyType"]}
                                   for r in data.get("dependenciesById", {}).values()]
+        _check_shapes(result)
         return result
     except OSError as exc:
         raise LoreError("IO_ERROR", str(exc)) from exc
-    except (ValueError, KeyError, TypeError, AttributeError, IndexError, struct.error) as exc:
+    # OverflowError: a year of Infinity; RecursionError: very deeply nested JSON
+    except (ValueError, KeyError, TypeError, AttributeError, IndexError, OverflowError, RecursionError,
+            struct.error) as exc:
         raise LoreError("INVALID", f"invalid Aeon file: {exc}") from exc
 
 
@@ -707,13 +728,13 @@ def read_csv(path):
                         continue
                     try:
                         decoded = json.loads(value)
-                    except ValueError:
+                    except (ValueError, RecursionError):   # not JSON (or nested too deep): keep the text
                         decoded = value
                     fields[key] = decoded if isinstance(decoded, list) else value
                 tags = row.get("tags", "")
                 try:
                     tags = json.loads(tags)
-                except ValueError:
+                except (ValueError, RecursionError):
                     tags = [t.strip() for t in tags.split(",") if t.strip()]
                 if not isinstance(tags, list):
                     tags = [str(tags)]
