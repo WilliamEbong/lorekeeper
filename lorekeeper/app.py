@@ -82,7 +82,7 @@ def load_worlds():
     try:
         with open(worlds_file(), encoding="utf-8") as fh:
             worlds = json.load(fh)
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         return []
     if not isinstance(worlds, list):
         return []
@@ -133,7 +133,7 @@ def world_settings(folder):
     try:
         with open(os.path.join(folder, store.CONFIG), encoding="utf-8") as fh:
             settings = json.load(fh)
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         return {}
     return settings if isinstance(settings, dict) else {}
 
@@ -272,7 +272,7 @@ def write_ai_files(root):
         try:
             with open(path, encoding="utf-8") as fh:
                 settings = json.load(fh)
-        except (OSError, ValueError):
+        except (OSError, ValueError, RecursionError):
             return   # a person's own file that Lorekeeper cannot read: leave it alone
         if not isinstance(settings, dict) or not isinstance(settings.get("mcpServers", {}), dict):
             return
@@ -535,7 +535,7 @@ def running(port):
     try:
         with urlopen(f"http://127.0.0.1:{port}/api/hello", timeout=1) as response:
             return json.loads(response.read().decode("utf-8")).get("app") == "lorekeeper"
-    except (OSError, ValueError, AttributeError):
+    except (OSError, ValueError, AttributeError, RecursionError):
         return False
 
 

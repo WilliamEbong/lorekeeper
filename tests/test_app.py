@@ -96,6 +96,20 @@ class CreateAndAIFileTests(AppTestCase):
         app.write_ai_files(str(root))
         self.assertEqual(json.loads((root / ".mcp.json").read_text(encoding="utf-8")), own)
 
+    def test_deeply_nested_json_files_are_unreadable_not_a_crash(self):
+        root = Path(app.create_world("Deep", None, str(self.tmp / "Deep")))
+        deep = "[" * 100000
+        (root / ".mcp.json").write_text(deep, encoding="utf-8")
+        app.write_ai_files(str(root))   # a person's own file it cannot read stays as it is
+        self.assertEqual((root / ".mcp.json").read_text(encoding="utf-8"), deep)
+        (root / "lore.json").write_text(deep, encoding="utf-8")
+        self.assertEqual(app.world_settings(str(root)), {})
+        Path(app.worlds_file()).parent.mkdir(parents=True, exist_ok=True)
+        Path(app.worlds_file()).write_text(deep, encoding="utf-8")
+        self.assertEqual(app.load_worlds(), [])
+        from lorekeeper import mcp
+        self.assertEqual(mcp.settings(str(root), None), {})
+
     def test_a_new_world_never_goes_into_a_saga(self):
         saga = self.tmp / "Saga"
         (saga / "_system" / "scripts").mkdir(parents=True)

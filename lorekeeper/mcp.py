@@ -27,7 +27,7 @@ def settings(root, config):
         try:
             with open(os.path.join(root, "lore.json"), encoding="utf-8") as fh:
                 config = json.load(fh)
-        except (OSError, ValueError):
+        except (OSError, ValueError, RecursionError):
             config = {}
     return config if isinstance(config, dict) else {}
 
