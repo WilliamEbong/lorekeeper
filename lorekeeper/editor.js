@@ -1194,7 +1194,8 @@ function subway(view) {
       }
       const x = group.reduce((sum, s) => sum + s.x, 0) / group.length, first = group[0].event, last = group.at(-1).event;
       const lo = group[0].event.lo, hi = group.at(-1).event.lo, pad = Math.max((hi - lo) * .25, 30);
-      const oneDay = (hi - lo) / (hi - lo + 2 * pad) * (c.right - c.left) < 20;   // zooming in would leave them merged
+      const widest = Math.max(0, ...group.slice(1).map((s, n) => s.event.lo - group[n].event.lo));
+      const oneDay = widest / (hi - lo + 2 * pad) * (c.right - c.left) < 20;   // zooming in would split no pair apart
       const g = svgEl('g', {class: `cluster r${lane % 8}`, role: 'button', tabindex: '0',
         'aria-label': oneDay ? `${group.length} events with ${lanes[lane].name}, ${whenText(first)}. Show them.`
           : `${group.length} events with ${lanes[lane].name}, ${whenText(first)} to ${whenText(last)}. Zoom in to see them.`});
@@ -1244,7 +1245,7 @@ function agesView(view) {
     const theirs = dated.filter(e => takesPart(p, e));
     for (const e of theirs.slice(0, ROWS)) {
       const row = el('li', null, {'data-path': e.path}), age = el('span', null, {class: 'age'});
-      const paint = (result) => paintAge(age, result, card, e.start.text === p.start?.text);
+      const paint = (result) => paintAge(age, result, card, e.start.text === p.start?.text && p.start.precision === 'day' && exact(p.start));
       row.append(button(e.name, () => selectItem(e.path, {show: true}), {class: 'link'}), el('span', shownDate(e.start.text), {class: 'when'}), age);
       const cacheKey = `${p.path}|${p.version}|${e.path}|${e.version}`;
       if (p.lo == null) age.textContent = '—';
@@ -1507,12 +1508,12 @@ function chapterNumber(item, shown) {
   return number;
 }
 function chapterBox(item) {
-  const input = el('input', null, {type: 'number', min: '1', step: '1', class: 'chapter-box', inputmode: 'numeric',
+  const input = el('input', null, {type: 'number', min: '0', step: '1', class: 'chapter-box', inputmode: 'numeric',
     'aria-label': `Chapter number for ${item.name}`, value: item.fields.chapter ?? ''});
   input.addEventListener('keydown', event => { if (event.key === 'Escape') { input.value = item.fields.chapter ?? ''; input.blur(); } });
   input.addEventListener('change', async () => {
     const value = input.value.trim();
-    if (input.validity.badInput || value && !/^[1-9]\d*$/.test(value)) { input.value = item.fields.chapter ?? ''; return; }
+    if (input.validity.badInput || value && !/^\d+$/.test(value)) { input.value = item.fields.chapter ?? ''; return; }
     input.blur();   // a focused box would hold off the redraw that moves the part into place
     status('Saving…', 'busy');
     try {
@@ -1538,6 +1539,10 @@ function narrative(view) {
         : 'Your story parts, in chapter order. Click the dash beside a part to give it a chapter number, or a number to change it.';
     }
   }
+  // Story parts with no number at all (a fresh import) are numbered in place, as in the fallback list.
+  if (!fallback && chapters.some(i => i.type !== 'card' && order(i) === Infinity))
+    fallback = saga ? 'Your story parts, in reading order where they have a chapter number.'
+      : 'Your story parts, in chapter order. Click the dash beside a part to give it a chapter number, or a number to change it.';
   if (!chapters.length) {
     view.append(emptyState('No chapters yet', 'Chapters and other story parts appear here in reading order, with a flag wherever the story steps back in time.',
       saga || !graph.types.chapter ? null : ['Create a chapter', () => openCreate('chapter')]));
