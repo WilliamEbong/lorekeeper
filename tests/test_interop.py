@@ -230,6 +230,50 @@ class InteropTests(unittest.TestCase):
             run(copy)   # changed since: no longer only the export's
         self.assertTrue(copy.read_text(encoding="utf-8-sig").endswith("my edit\n"))
 
+    def test_dates_and_fields_survive_a_round_trip_through_both_formats(self):
+        from lorekeeper import ops
+        from lorekeeper.timeinfo import item_dates
+        cases = [("Bounds", "event", {"date_min": "1900", "date_max": "1910"}),
+                 ("Decade", "event", {"date": "1990s"}), ("Century", "event", {"date": "1800s"}),
+                 ("Circa", "event", {"date": "~1951"}), ("Month", "event", {"date": "2001-05"}),
+                 ("Span", "event", {"date": "2001-03-04", "end": "2001-05"}),
+                 ("Minute", "event", {"date": "2036-11-21 21:28"}), ("Born", "character", {"born": "1815-12-10"}),
+                 ("Life", "character", {"born": "1815", "died": "1852-11-27"}),
+                 ("Narrowed", "event", {"date": "1990s", "date_min": "1994"}),
+                 ("Tagged", "location", {"tags": ["north"]}), ("Plain", "location", {})]
+        source = self.empty("roundtrip-src")
+        for name, type_, fields in cases:
+            ops.run("create", {"type": type_, "name": name, "field": fields}, root=source.root)
+        source = store.Project(source.root)
+
+        def state(project):
+            out = {}
+            for item in project.items:
+                start, end, bad = item_dates(project, item)
+                spans = [(w.lo, w.hi, w.precision, w.circa) if w else None for w in (start, end)]
+                fields = {k: v for k, v in item.fields.items() if k not in ("id", "type", "canonical_name")}
+                out[item.name] = (spans, bad, fields)
+            return out
+        expected = state(source)
+        for fmt in ("csv", "aeon"):
+            with self.subTest(fmt=fmt):
+                out = self.root / f"roundtrip.{fmt}"
+                ops.run("export", {"format": fmt, "out": str(out)}, root=source.root)
+                target = self.empty(f"roundtrip-{fmt}")
+                ops.run("import", {"file": str(out)}, root=target.root)
+                self.assertEqual(state(store.Project(target.root)), expected)
+
+    def test_aeon_export_keeps_decade_and_century_precision(self):
+        from lorekeeper import ops
+        source = self.empty("precision")
+        for name, date in (("Decade", "1990s"), ("Century", "1800s"), ("Year", "1994")):
+            ops.run("create", {"type": "event", "name": name, "field": {"date": date}}, root=source.root)
+        out = self.root / "precision.aeon"
+        ops.run("export", {"format": "aeon", "out": str(out)}, root=source.root)
+        data = interop.read_aeon(out)
+        starts = {item["name"]: item["start"] for item in data["items"]}
+        self.assertEqual(starts, {"Decade": "1990..1999", "Century": "1800..1899", "Year": "1994"})
+
     def empty(self, name="empty", config=None):
         root = self.root / name
         root.mkdir()

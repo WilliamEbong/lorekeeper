@@ -14,7 +14,7 @@ import time
 
 from . import dates, fm, store
 from .store import LoreError
-from .timeinfo import calendar_of, item_dates
+from .timeinfo import START_KEYS, calendar_of, item_dates
 
 # Aeon's dependency subject is the predecessor, so the successor (Aeon's object) carries
 # the role: FS imports as `after: [[predecessor]]`. SS/FF mean "starts/ends no earlier
@@ -276,6 +276,12 @@ def _aeon_date(when):
     precision = {"year": 2, "month": 3, "day": 5, "hour": 6, "minute": 7}[when.precision]
     if when.precision == "minute" and when.hi - when.lo == 60:
         precision = 6
+    if when.precision == "year" and year > 0:   # "1990s", "1800s": Aeon's decade and century precision
+        last = GREGORIAN.from_axis(when.hi - 1)
+        for width, code in ((100, 0), (10, 1)):
+            if year % width == 0 and last["year"] == year + width - 1 and last["month"] == 12 and last["day"] == 31:
+                precision = code
+                break
     return {**parts, "year": year if year > 0 else 1 - year, "era": 1 if year > 0 else 0,
             "second": 0, "timestamp": when.lo * 60 + (86400 if year <= 0 else 0),
             "weekday": (when.lo // 1440 + 1) % 7, "precision": precision}
@@ -616,10 +622,20 @@ def import_into(project, data, into=None):
             if csv_source and mapped not in schema["properties"] and mapped not in schema["roles"]:
                 continue
             fields[mapped] = _field(value)
-        fields["tags"] = record.get("tags") or []
+        if record.get("tags"):
+            fields["tags"] = record["tags"]
         person = schema["types"][type_].get("category") == "person"
-        for key, value in (("born" if person else "date", record.get("start")),
-                           ("died" if person else "end", record.get("end"))):
+        start, end = record.get("start"), record.get("end")
+        # A date known only by date_min/date_max is exported as its earliest date beside those two fields;
+        # writing that date back would narrow the range to it.
+        low = fields.get("date_min")
+        if (start and low and fields.get("date_max") and not any(fields.get(k) for k in START_KEYS)
+                and getattr(dates.parse(start, project.calendars), "lo", None)
+                == getattr(dates.parse(str(low), project.calendars), "lo", 0)):
+            start = end = None
+        if end == start and not person:   # an event's end defaults to its start: an equal end adds nothing
+            end = None
+        for key, value in (("born" if person else "date", start), ("died" if person else "end", end)):
             if value and key not in fields:
                 fields[key] = value
         pending.append((ident, type_, name, fields, record.get("summary") or ""))
