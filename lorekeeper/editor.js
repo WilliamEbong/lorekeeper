@@ -197,8 +197,17 @@ function findingText(f) {
     const when = (d) => d === 'undated' ? 'no date' : shownDate(d);
     const [key, ...rest] = m[3].split(' ');
     const timing = graph.roles[key] && (!rest.length || /^[+-]?\s*\d/.test(rest.join(' ')));   // "after 2d", not "parent too young"
+    const here = when(m[2]), there = when(m[5]);
+    const people = {
+      'after death': `${m[4]} died ${there}, but takes part here (${here}).`,
+      'after death and before rebirth': `${m[4]} died ${there} and is not yet reborn, but takes part here (${here}).`,
+      'before birth': `${m[4]} isn’t born until ${there}, but takes part here (${here}).`,
+      'exceeds maximum age': `${m[4]}, born ${there}, would be older than the age limit here (${here}).`,
+      'parent too young': `${m[4]} (born ${there}) is too young to be ${m[1]}’s parent (born ${here}).`,
+    };
+    if (people[m[3]]) return people[m[3]];
     const what = timing ? [label(key).toLowerCase(), ...(rest.length ? [lagWords(rest.join(' '))] : [])].join(', ') : m[3];
-    return `${m[1]} (${when(m[2])}): ${what}; ${m[4]} (${when(m[5])})`;
+    return `${m[1]} (${here}): ${what}; ${m[4]} (${there})`;
   }
   return plainText(f.detail);
 }
@@ -665,7 +674,9 @@ function renderLinks(panel, item) {
   const section = el('section', null, {'aria-labelledby': 'links-title'});
   section.append(el('h3', 'Connections', {id: 'links-title'}));
   const outgoing = graph.links.filter(l => l.from_path === item.path);
-  if (!outgoing.length) section.append(el('p', saga ? 'No connections.' : 'No connections yet.', {class: 'hint'}));
+  const incoming = graph.links.filter(l => l.to_path === item.path && l.resolved);
+  if (!outgoing.length) section.append(el('p', incoming.length ? 'None set on this item. Others link to it, below.'
+    : saga ? 'No connections.' : 'No connections yet.', {class: 'hint'}));
   for (const [role, links] of groupBy(outgoing, l => l.role)) {
     section.append(el('h4', label(role), {class: 'role-name'}));
     const list = el('ul', null, {class: 'links'});
@@ -683,10 +694,6 @@ function renderLinks(panel, item) {
     section.append(list);
   }
   panel.append(section);
-  if (saga) panel.append(el('p', 'To propose a connection, type the name in double square brackets in its field above, for example [[Anna]], or describe it in the change note.', {class: 'hint'}));
-  else panel.append(addLinkForm(item));
-
-  const incoming = graph.links.filter(l => l.to_path === item.path && l.resolved);
   const back = el('section', null, {'aria-labelledby': 'backlinks-title'});
   back.append(el('h3', 'Linked from', {id: 'backlinks-title'}));
   if (!incoming.length) back.append(el('p', 'Nothing links here yet.', {class: 'hint'}));
@@ -702,6 +709,8 @@ function renderLinks(panel, item) {
     back.append(group);
   }
   panel.append(back);
+  if (saga) panel.append(el('p', 'To propose a connection, type the name in double square brackets in its field above, for example [[Anna]], or describe it in the change note.', {class: 'hint'}));
+  else panel.append(addLinkForm(item));
 }
 function addLinkForm(item) {
   const box = el('section', null, {class: 'add-link', 'aria-labelledby': 'add-link-title'});
@@ -1669,7 +1678,7 @@ function wikiCard() {
   box.append(head);
   if (wiki.cardError) {
     box.append(el('p', wiki.cardAsOf == null ? `There is no entry named ${wiki.openName} any more.`
-      : `The reader does not know ${wiki.openName} by that name at chapter ${wiki.cardAsOf}. Choose a later chapter or Complete.`, {class: 'hint'}));
+      : `The reader does not know ${wiki.openName} by that name at chapter ${wiki.cardAsOf}. Choose a later chapter or All chapters.`, {class: 'hint'}));
     return box;
   }
   if (!card) { box.append(el('p', 'Opening…', {class: 'hint'})); return box; }

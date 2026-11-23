@@ -69,7 +69,7 @@ button.icon-only { padding: 6px; }
 .find input { width: 100%; padding-right: 34px; }
 .find-key { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); pointer-events: none; }
 .find input:focus + .find-key { display: none; }
-.status { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 7px; min-width: 9.5em; }
+.status { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 7px; width: 17em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--line); flex: none; }
 .status[data-kind="ok"]::before { background: var(--accent); }
 .status[data-kind="dirty"]::before { background: var(--warn); }
@@ -178,7 +178,7 @@ tbody tr.selected { background: var(--soft); }
 .sheet td:first-child { padding-left: 8px; }
 .sheet td:first-child input { min-width: 250px; }
 .sheet td:nth-child(2) select { min-width: 17ch; }
-.sheet input, .sheet select { width: 100%; min-width: 120px; border-color: transparent; background: transparent; border-radius: 4px; padding: 5px 6px; }
+.sheet input, .sheet select { width: 100%; min-width: 120px; text-overflow: ellipsis; border-color: transparent; background: transparent; border-radius: 4px; padding: 5px 6px; }
 .sheet input:hover, .sheet select:hover { border-color: var(--hair); background: var(--panel); }
 .sheet input:focus, .sheet select:focus { border-color: var(--line); background: var(--panel); }
 .sheet .saved { border-color: var(--accent); box-shadow: 0 0 0 2px var(--soft); }
