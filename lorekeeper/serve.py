@@ -87,6 +87,11 @@ class LocalHandler(BaseHTTPRequestHandler):
         hosts = self.headers.get_all("Host", [])
         if len(hosts) != 1 or hosts[0] not in {f"127.0.0.1:{self.server.server_port}",
                                              f"localhost:{self.server.server_port}"}:
+            try:
+                length = int(self.headers.get("Content-Length", "0") or 0)
+            except ValueError:
+                length = 0
+            read_body(self.rfile, length, 0)   # drop any body first, or Windows may reset instead of replying
             self.fail(LoreError("FORBIDDEN", "Host must be this local editor's address"))
             return False
         return True

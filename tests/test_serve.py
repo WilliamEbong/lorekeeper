@@ -101,6 +101,12 @@ class ServeTests(unittest.TestCase):
             self.assertEqual(status, 403)
             self.assertEqual(result["error"]["code"], "FORBIDDEN")
 
+    def test_bad_host_with_a_large_body_still_gets_the_403(self):
+        status, result, _ = self.request("/api/query", raw=b'{"text":"' + b"x" * (4 * 1024 * 1024) + b'"}',
+                                         headers={"Host": "evil.example:80"})
+        self.assertEqual(status, 403)
+        self.assertEqual(result["error"]["code"], "FORBIDDEN")
+
     def test_localhost_host_is_allowed(self):
         self.assertEqual(self.request("/", headers={"Host": f"localhost:{self.server.server_port}"})[0], 200)
         self.assertEqual(self.server.server_address[0], "127.0.0.1")
