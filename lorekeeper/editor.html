@@ -29,11 +29,13 @@
     </div>
     <details id="new-item" class="new-item">
       <summary class="button primary">New item</summary>
-      <form id="create-form" class="popover">
+      <form id="create-form" class="popover" aria-labelledby="create-title">
+        <h2 id="create-title">New item</h2>
         <label for="create-name">Name</label>
         <input id="create-name" required autocomplete="off" placeholder="For example, Anna Morrow">
         <label for="create-type">Type</label>
         <select id="create-type"></select>
+        <p class="hint">It opens in the inspector, where you can add dates and connections.</p>
         <div class="row"><button type="submit" class="primary">Create</button> <button type="button" id="create-cancel" class="quiet">Cancel</button></div>
       </form>
     </details>

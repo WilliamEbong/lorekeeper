@@ -90,6 +90,8 @@ details > summary::-webkit-details-marker { display: none; }
 .popover { position: absolute; right: 0; top: calc(100% + 8px); z-index: 20; background: var(--panel); border: 1px solid var(--hair); border-radius: 8px; box-shadow: var(--shadow); padding: 14px; }
 #create-form { width: 300px; display: grid; gap: 6px; }
 #create-form label { font-size: 13px; font-weight: 600; }
+#create-form h2 { margin: 0 0 4px; font: 600 17px/1.3 var(--serif); }
+#create-form .hint { margin: 2px 0 0; }
 #create-form .row { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
 
 /* Tabs */
