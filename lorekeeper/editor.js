@@ -556,6 +556,11 @@ function fieldRow(draft, key, sync) {
     let timer;
     input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => updateReadback(echo, input.value), 350); });
     updateReadback(echo, input.value);
+    const editing = () => key in draft.values || document.activeElement === input;
+    const words = () => { wrap.classList.toggle('at-rest', !editing()); if (!editing() && input.value) input.value = shownDate(current); };
+    input.addEventListener('focus', () => { wrap.classList.remove('at-rest'); if (!(key in draft.values)) input.value = current; });
+    input.addEventListener('blur', () => setTimeout(words));
+    words();
   }
   return wrap;
 }
@@ -680,7 +685,7 @@ function renderLinks(panel, item) {
   section.append(el('h3', 'Connections', {id: 'links-title'}));
   const outgoing = graph.links.filter(l => l.from_path === item.path);
   const incoming = graph.links.filter(l => l.to_path === item.path && l.resolved);
-  if (!outgoing.length && !incoming.length) section.append(el('p', saga ? 'No connections.' : 'No connections yet.', {class: 'hint'}));
+  if (!outgoing.length) section.append(el('p', saga ? 'No connections.' : 'None yet. Add one under Add a connection, further down.', {class: 'hint'}));
   for (const [role, links] of groupBy(outgoing, l => l.role)) {
     section.append(el('h4', label(role), {class: 'role-name'}));
     const list = el('ul', null, {class: 'links'});
