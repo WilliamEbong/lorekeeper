@@ -315,6 +315,14 @@ class McpTests(unittest.TestCase):
             message = {"jsonrpc": "2.0", "id": 0, "method": "ping", "params": params}
             self.assertEqual(mcp.handle(message, FIXTURE)["error"]["code"], -32602)
 
+    def test_deeply_nested_line_is_a_parse_error_not_a_crash(self):
+        out = io.BytesIO()
+        inp = io.BytesIO(b"[" * 200000 + b'\n{"jsonrpc":"2.0","id":1,"method":"ping"}\n')
+        self.assertEqual(mcp.serve(FIXTURE, inp, out), 0)
+        responses = [json.loads(line) for line in out.getvalue().splitlines()]
+        self.assertEqual(responses[0]["error"]["code"], -32700)
+        self.assertEqual(responses[1]["id"], 1)   # the stream keeps going
+
     def test_handle_preserves_request(self):
         message = {"jsonrpc": "2.0", "id": "request", "method": "tools/call", "params": {
             "name": "query", "arguments": {"type": "character"}, "_meta": meta(VERSIONS[0])}}

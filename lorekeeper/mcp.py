@@ -156,7 +156,7 @@ def serve(root, inp=None, out=None, config=None, saga=False) -> int:
             continue
         try:
             message = json.loads(line.decode("utf-8"))
-        except (ValueError, UnicodeDecodeError):
+        except (ValueError, UnicodeDecodeError, RecursionError):   # RecursionError: very deeply nested JSON
             response = _error(None, -32700, "Parse error")
         else:
             response = handle(message, root, config, saga)
