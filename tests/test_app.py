@@ -151,6 +151,11 @@ class ServerTests(AppTestCase):
         self.assertEqual(self.call("/api/forget", {"folder": "x"}, token=False)[0], 403)
         self.assertEqual(self.call("/api/hello", host="evil.example")[0], 403)
 
+    def test_an_oversized_body_gets_a_readable_error_not_a_reset(self):
+        status, reply = self.call("/api/open", {"folder": "x" * (2 * 1024 * 1024)})
+        self.assertEqual(status, 400)
+        self.assertIn("didn't understand", reply["error"])
+
     def test_create_open_reopen_offer_and_forget(self):
         place = str(self.tmp / "Orchard")
         status, created = self.call("/api/create", {"name": "Orchard", "template": "novel", "parent": str(self.tmp)})

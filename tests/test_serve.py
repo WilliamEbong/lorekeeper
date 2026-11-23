@@ -141,6 +141,12 @@ class ServeTests(unittest.TestCase):
                 self.assertEqual(result["error"]["code"], "INVALID")
         self.assertEqual(self.request("/api/graph", {})[0], 200)
 
+    def test_an_oversized_body_gets_a_readable_error_not_a_reset(self):
+        # Answering without reading the body made Windows reset the connection: no error reached the editor.
+        status, result, _ = self.request("/api/query", raw=b'{"text":"' + b"x" * (2 * 1024 * 1024) + b'"}')
+        self.assertEqual(status, 400)
+        self.assertEqual(result["error"]["code"], "INVALID")
+
     def test_path_operations_target_the_selected_item_despite_id_name_collision(self):
         first = ops.run("create", {"type": "event", "name": "Identity A"}, root=self.root)
         second = ops.run("create", {"type": "event", "name": first["id"]}, root=self.root)

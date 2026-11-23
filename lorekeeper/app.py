@@ -485,7 +485,7 @@ class Handler(serve.LocalHandler):
             length = int(self.headers.get("Content-Length", "0") or 0)
         except ValueError:
             length = -1
-        body = self.rfile.read(length) if 0 < length <= 64 * 1024 else b""
+        body = serve.read_body(self.rfile, length, 64 * 1024)
         if not secrets.compare_digest(self.headers.get("X-Lore-Token", ""), self.server.app.token):
             return self.reply(403, {"error": "This page is out of date. Reload it and try again."})
         action = ACTIONS.get(urlsplit(self.path).path.removeprefix("/api/"))

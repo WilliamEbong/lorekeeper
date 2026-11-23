@@ -107,6 +107,23 @@ class LocalHandler(BaseHTTPRequestHandler):
         self.send(status or STATUSES.get(error.code, 500), ops.to_json(error.as_dict()))
 
 
+def read_body(rfile, length, limit):
+    """The request body when it is 1 byte to `limit`; otherwise b"", after reading and dropping it.
+
+    Replying and closing with the body unread makes Windows reset the connection, so the client
+    never sees the error. Draining stops at 16 MiB; a larger body still gets the reset.
+    """
+    if 0 < length <= limit:
+        return rfile.read(length)
+    left = min(length, 16 * 1024 * 1024)
+    while left > 0:
+        chunk = rfile.read(min(left, 64 * 1024))
+        if not chunk:
+            break
+        left -= len(chunk)
+    return b""
+
+
 ASSETS = {"/": "text/html", "/editor.js": "text/javascript", "/editor.css": "text/css",
           "/favicon.svg": "image/svg+xml"}
 
@@ -162,7 +179,7 @@ def make_server(root, port=0, saga=False, config=None, factory=None, config_path
                     length = int(self.headers.get("Content-Length", "0") or 0)
                 except ValueError:
                     length = -1
-                body = self.rfile.read(length) if 0 < length <= 1024 * 1024 else b""
+                body = read_body(self.rfile, length, 1024 * 1024)
                 # Require the token for every POST, including reads: one consistent client contract.
                 if not secrets.compare_digest(self.headers.get("X-Lore-Token", ""), token):
                     raise LoreError("FORBIDDEN", "Missing or invalid editor token")
