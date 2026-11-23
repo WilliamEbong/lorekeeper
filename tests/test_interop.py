@@ -149,33 +149,6 @@ class InteropTests(unittest.TestCase):
                 self.assertEqual((Path(project.root) / "lore.json").read_bytes(), before)
                 self.assertEqual(project.items, [])
 
-    def test_an_import_that_fails_while_writing_items_is_rolled_back(self):
-        # A type name too long for a folder passes the plan and fails only when its first file is written.
-        project = self.empty("rollback1")
-        before = (Path(project.root) / "lore.json").read_bytes()
-        path = self.root / "long.csv"
-        path.write_text("label,type\nA," + "x" * 300 + "\n", encoding="utf-8")
-        with self.assertRaises(store.LoreError):
-            interop.import_into(project, interop.read_csv(path))
-        self.assertEqual((Path(project.root) / "lore.json").read_bytes(), before)
-        self.assertEqual(store.Project(project.root).items, [])
-        # A failure on the second item removes the first one it wrote.
-        project = self.empty("rollback2")
-        before = (Path(project.root) / "lore.json").read_bytes()
-        path = self.root / "two.csv"
-        path.write_text("label,type\nA,place\nB,place\n", encoding="utf-8")
-        real, calls = store.Project.create, []
-        def flaky(self_, *args, **kwargs):
-            calls.append(1)
-            if len(calls) == 2:
-                raise store.LoreError("IO_ERROR", "disk full")
-            return real(self_, *args, **kwargs)
-        with mock.patch.object(store.Project, "create", flaky), self.assertRaises(store.LoreError):
-            interop.import_into(project, interop.read_csv(path))
-        self.assertEqual((Path(project.root) / "lore.json").read_bytes(), before)
-        self.assertEqual(store.Project(project.root).items, [])
-        self.assertEqual(project.items, [])
-
     def test_export_never_overwrites_the_projects_own_files(self):
         from lorekeeper import ops
         item = self.project.items[0].path

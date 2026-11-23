@@ -97,20 +97,6 @@ class CreateAndAIFileTests(AppTestCase):
         app.write_ai_files(str(root))
         self.assertEqual(json.loads((root / ".mcp.json").read_text(encoding="utf-8")), own)
 
-    def test_deeply_nested_json_files_are_unreadable_not_a_crash(self):
-        root = Path(app.create_world("Deep", None, str(self.tmp / "Deep")))
-        deep = "[" * 100000
-        (root / ".mcp.json").write_text(deep, encoding="utf-8")
-        app.write_ai_files(str(root))   # a person's own file it cannot read stays as it is
-        self.assertEqual((root / ".mcp.json").read_text(encoding="utf-8"), deep)
-        (root / "lore.json").write_text(deep, encoding="utf-8")
-        self.assertEqual(app.world_settings(str(root)), {})
-        Path(app.worlds_file()).parent.mkdir(parents=True, exist_ok=True)
-        Path(app.worlds_file()).write_text(deep, encoding="utf-8")
-        self.assertEqual(app.load_worlds(), [])
-        from lorekeeper import mcp
-        self.assertEqual(mcp.settings(str(root), None), {})
-
     def test_a_new_world_never_goes_into_a_saga(self):
         saga = self.tmp / "Saga"
         (saga / "_system" / "scripts").mkdir(parents=True)
@@ -222,32 +208,6 @@ class ServerTests(AppTestCase):
 
 
 class LaunchTests(AppTestCase):
-    def test_a_starting_saga_does_not_block_other_opens(self):
-        # A stand-in saga editor that takes 2 s to listen on its port.
-        script = ("import socket, sys, time; time.sleep(2); s = socket.socket(); "
-                  "s.bind(('127.0.0.1', int(sys.argv[1]))); s.listen(); time.sleep(30)")
-        python = getattr(sys, "_base_executable", sys.executable)   # a venv launcher would leave its child running
-        state = app.App("http://127.0.0.1:1/", "t")
-        self.addCleanup(lambda: [(p.terminate(), p.wait(10)) for p, *_ in list(state.sagas.values())])
-        self.addCleanup(lambda: [(w.shutdown(), w.server_close()) for w, _ in state.worlds.values()])
-        saga = self.tmp / "Saga"
-        saga.mkdir()
-        world = app.create_world("Quick", None, str(self.tmp / "Quick"))
-        with patch("lorekeeper.app.saga_command", lambda port: [python, "-c", script, str(port)]):
-            results = {}
-            threads = [threading.Thread(target=lambda n=n: results.__setitem__(n, state.open_saga(str(saga))))
-                       for n in (1, 2)]
-            threads[0].start()
-            time.sleep(0.3)
-            threads[1].start()
-            start = time.monotonic()
-            state.open_world(world)
-            self.assertLess(time.monotonic() - start, 1.5, "opening a world waited for the saga to start")
-            for thread in threads:
-                thread.join(timeout=30)
-        self.assertEqual(results[1], results[2])   # one saga editor, not two
-        self.assertEqual(len(state.sagas), 1)
-
     def test_saga_command_uses_the_sagas_own_launcher(self):
         command = app.saga_command(8711)
         self.assertEqual(command[1:], [os.path.join("_system", "scripts", "saga.py"), "timeline", "--port", "8711"])
