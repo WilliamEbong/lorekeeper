@@ -860,7 +860,7 @@ function scaleControls() {
 }
 function legend() {
   const box = el('div', null, {class: 'legend', 'aria-hidden': 'true'});
-  for (const [kind, text] of [['', 'Exact'], ['fuzzy', 'Approximate'], ['life', graph.items.some(i => i.reborn) ? 'Alive (or reborn)' : 'Alive']]) {
+  for (const [kind, text] of [['', 'Exact date'], ['fuzzy', 'Approximate date'], ['life', graph.items.some(i => i.reborn) ? 'Lifetime (or rebirth)' : 'Lifetime']]) {
     const sample = svgEl('svg', {viewBox: '0 0 26 14'}), g = svgEl('g', {class: kind === 'life' ? '' : kind});
     g.append(kind === 'life' ? svgEl('rect', {x: 1, y: 5, width: 24, height: 4, rx: 2, class: 'life'})
       : svgEl('rect', {x: 1, y: 2, width: 24, height: 10, rx: 3, class: 'mark'}));
@@ -1138,7 +1138,18 @@ function peopleFilter(view, hint) {
   return bar;
 }
 function subway(view) {
-  const bar = peopleFilter(view, 'Each line is a person and each circle an event they are in. A numbered circle holds several events: click it to zoom in.');
+  const bar = peopleFilter(view, 'Each line is a person.');
+  const key = el('div', null, {class: 'legend subway-key', 'aria-hidden': 'true'});
+  for (const [mark, text] of [['one', 'One event'], ['many', 'Several events close together: click to zoom in']]) {
+    const sample = svgEl('svg', {viewBox: '0 0 22 22', width: 22, height: 22}), g = svgEl('g', {class: mark === 'one' ? 'item r0' : 'cluster r0'});
+    g.append(svgEl('circle', {cx: 11, cy: 11, r: mark === 'one' ? 5 : 9, class: 'stop'}));
+    if (mark === 'many') g.append(svgEl('text', {x: 11, y: 14.5, class: 'cluster-count'}, '3'));
+    sample.append(g);
+    const entry = el('span');
+    entry.append(sample, ` ${text}`);
+    key.append(entry);
+  }
+  bar.append(key);
   bar.prepend(zoomControls());
   view.append(bar);
   const q = ui.people.toLowerCase(), ranked = rankedPeople().filter(r => r.n > 0);
@@ -1499,12 +1510,12 @@ function sheetLocation(item, places) {
 // A story part's chapter number, set in place: the Narrative list sorts by it.
 function chapterNumber(item, shown) {
   const label = shown == null ? `Give ${item.name} a chapter number` : `Change the chapter number of ${item.name}`;
-  const number = button(shown == null ? '–' : String(shown), () => {
+  const number = button(shown == null ? 'Set chapter' : String(shown), () => {
     const input = chapterBox(item);
     number.replaceWith(input);
     input.focus();
     input.addEventListener('blur', () => { if (input.isConnected && input.value === String(item.fields.chapter ?? '')) input.replaceWith(number); });
-  }, {class: 'num set-num', title: label, 'aria-label': label});
+  }, {class: shown == null ? 'num set-num unset' : 'num set-num', title: label, 'aria-label': label});
   return number;
 }
 function chapterBox(item) {
@@ -1536,13 +1547,13 @@ function narrative(view) {
       const kinds = [...new Set(parts.map(i => typeLabel(i.type)))].join(', ');
       chapters = parts;
       fallback = saga ? `Your story parts (${kinds}), in name order.`
-        : 'Your story parts, in chapter order. Click the dash beside a part to give it a chapter number, or a number to change it.';
+        : 'Your story parts, in chapter order. Use Set chapter to give a part its number, or click a number to change it.';
     }
   }
   // Story parts with no number at all (a fresh import) are numbered in place, as in the fallback list.
   if (!fallback && chapters.some(i => i.type !== 'card' && order(i) === Infinity))
     fallback = saga ? 'Your story parts, in reading order where they have a chapter number.'
-      : 'Your story parts, in chapter order. Click the dash beside a part to give it a chapter number, or a number to change it.';
+      : 'Your story parts, in chapter order. Use Set chapter to give a part its number, or click a number to change it.';
   if (!chapters.length) {
     view.append(emptyState('No chapters yet', 'Chapters and other story parts appear here in reading order, with a flag wherever the story steps back in time.',
       saga || !graph.types.chapter ? null : ['Create a chapter', () => openCreate('chapter')]));
@@ -1732,7 +1743,7 @@ function wikiView(view) {
     renderView();
   }, 'Show the wiki as of', true);
   const label = el('label', null, {for: 'wiki-as-of'});
-  label.append(wiki.hasPlan ? 'Wiki ' : 'Wiki as of ', picker);
+  label.append('Wiki as of ', picker);
   bar.append(label, filter, el('span', planMode() ? 'The author’s plan: everything designed, spoilers included. Never shown to readers.'
     : wiki.asOf == null ? 'Everything written so far, for the author.' : `Only what a reader knows after chapter ${wiki.asOf}.`, {class: 'hint'}));
   view.append(bar);
@@ -1774,18 +1785,9 @@ function wikiCard() {
   const head = el('header', null, {class: 'wiki-head'}), title = el('div');
   title.append(el('h2', card?.name || wiki.openName, {id: 'wiki-title', tabindex: '-1'}));
   const toggle = el('div', null, {class: 'card-toggle', role: 'group', 'aria-label': 'Chapter for this card'});
-  const chapters = (wiki.index.chapters || []).map(c => c.n), at = chapters.indexOf(wiki.cardAsOf);
-  const step = (delta) => {
-    if (wiki.cardAsOf == null) return setCardChapter(delta < 0 ? chapters.at(-1) ?? null : null);
-    const next = chapters[at + delta];
-    setCardChapter(next === undefined ? (delta > 0 ? null : wiki.cardAsOf) : next);
-  };
-  const cardPicker = el('label', 'Showing ');   // the toolbar has its own picker: say which this one is
-  if (wiki.cardAsOf === wiki.asOf) cardPicker.append(el('span', wiki.cardAsOf == null ? 'All chapters' : `Chapter ${wiki.cardAsOf}`, {class: 'card-at'}));
-  else cardPicker.append(chapterSelect('card-as-of', wiki.cardAsOf, setCardChapter, 'Show this card as of'));
-  toggle.append(button([icon('left')], () => step(-1), {class: 'quiet icon-only', 'aria-label': 'Previous chapter', id: 'card-prev', disabled: at === 0 ? '' : null}),
-    cardPicker,
-    button([icon('right')], () => step(1), {class: 'quiet icon-only', 'aria-label': 'Next chapter', id: 'card-next', disabled: wiki.cardAsOf == null ? '' : null}));
+  const cardPicker = el('label', 'This card as of ');   // the toolbar has its own picker: say which this one is
+  cardPicker.append(chapterSelect('card-as-of', wiki.cardAsOf, setCardChapter, 'Show this card as of'));
+  toggle.append(cardPicker);
   head.append(title, toggle);
   box.append(head);
   if (wiki.cardError) {
