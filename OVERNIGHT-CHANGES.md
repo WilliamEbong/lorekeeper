@@ -313,6 +313,33 @@ William asked what actually keeps the screens under 9, and for those causes to b
 9. **A titled form anchored to its button.** Source: MOTION.md §10; impeccable operate.
 10. **Instructions at reading size.** Helper text at 14 px in the muted token at 4.5:1 or better. Sources: COPY.md §5; impeccable craft-floor.
 
+**Fixed, one commit per cause**, each tested in a clean browser context, with the full suite green (397 OK) at every commit. Branch `claude/design-root-cause`.
+- **Cause 4, counts** (`e764713`):
+  - The phone menu says "Continuity (24 definite, 2 possible)", as the Continuity screen does.
+  - The Timeline's chips say "14 dated".
+- **Cause 1, words on controls** (`67697de`):
+  - "Set chapter" replaces the dash.
+  - The Subway has a key that draws its marks.
+  - The wiki card has a "This card as of" menu, and the toolbar says "Wiki as of" in every world.
+  - The Timeline legend reads "Exact date / Approximate date / Lifetime".
+- **Causes 2 and 8, phone and empty states** (`37d72cc`):
+  - Below 600 px the Timeline is a list of cards by year, and the Subway is a card per person with their events in order.
+  - No scrollbar gutter is reserved on the phone page.
+  - A world with nothing dated shows its message without chart controls.
+- **Causes 3 and 7, said once; records use the width** (`064bfee`):
+  - Continuity groups problems that come from one person's date ("Cathy Linton: 13 events after they died"), with the events folded underneath. The imported world's 24 cards become 7.
+  - The cards lay out in a grid.
+  - The Ages row pills go quiet once the card has said why.
+- **Cause 5, inspector** (`633030f`):
+  - One 340 px width, selected or not.
+  - Only sections with something in them are shown.
+- **Causes 6 and 10, names and reading size** (`7d62ccc`):
+  - No "Folder: big"; "Kept in" is a folder trail with the full path on hover.
+  - The wiki card says "Notes", and its tags read as words.
+  - Helper text is 14 px.
+- **Cause 9, New item** (`657d048`): a "New item" heading, and a line on what happens next.
+- **Cause 7, Relationships** (`41760c3`): the cards flow in columns with no ragged gaps, and the names look like links.
+
 **Not design causes** (so not fixed here):
 - "imp2" in the header comes from the test copy's settings file.
 - Cathy Linton dying on her birth day, and the "Narrative Folder" type name, are the imported data.
