@@ -86,7 +86,7 @@ def op_show(p, item):
     links = {role: [o.name if o else t for t, o, _ in ls] for role, ls in p.links(it).items()}
     back = {}
     for role, src in p.backlinks(it).items():   # roles may share an inverse label
-        back.setdefault(roles.get(role, {}).get("inverse", f"{role} (from)"), []).extend(i.name for i in src)
+        back.setdefault(roles.get(role, {}).get("inverse") or f"{role} (from)", []).extend(i.name for i in src)
     return {**it.summary(), "version": it.version, "fields": it.fields, "links": links,
             "backlinks": back, "body": it.body}
 
@@ -141,7 +141,11 @@ def op_link(p, item, role, target, version=None):
     version, merged = p.update(it, {role: value}, (), None,
                               version if version is not None else it.version,
                               None if version is not None else {role: it.fields.get(role)})
-    return {"path": it.path, "version": version, "merged": merged}
+    out = {"path": it.path, "version": version, "merged": merged}
+    if role not in p.schema["roles"]:   # allowed (spec 001), but a typo such as "partisipants" would go unnoticed
+        out["warning"] = (f"{role!r} is not one of this world's roles ({', '.join(sorted(p.schema['roles']))}); "
+                          "the link was saved under that name. Unlink it if that was a typo.")
+    return out
 
 
 def op_unlink(p, item, role, target, version=None):
@@ -228,13 +232,17 @@ def _events_of(p, person):
 
 def op_where(p, item, at):
     who, when = p.find(item), parse_at(p, at)
-    placed = [(s, it, place) for s, it in _events_of(p, who) if s.lo <= when.lo
-              for place in [next((o for _, o, _ in p.links(it).get("location", []) if o), None)] if place]
+    located = [(s, it, place) for s, it in _events_of(p, who)
+               for place in [next((o for _, o, _ in p.links(it).get("location", []) if o), None)] if place]
+    placed = [row for row in located if row[0].lo <= when.lo]
     if not placed:
         return {"item": who.name, "at": show_when(p, when), "location": None, "event": None}
     start, event, place = placed[-1]
-    # uncertain when the event may fall after the date, or any earlier event may in fact be later
-    uncertain = start.hi - 1 > when.lo or any(s.hi - 1 > start.lo for s, _, _ in placed[:-1])
+    # uncertain when the event may fall after the date, an earlier event may in fact be later, or the
+    # person moves during the asked period ("1780" holds a move in August); asked at an event itself, it is sure
+    itself = (start.lo, start.hi) == (when.lo, when.hi)
+    uncertain = (start.hi - 1 > when.lo and not itself) or any(s.hi - 1 > start.lo for s, _, _ in placed[:-1]) \
+        or any(when.lo < s.lo < when.hi for s, _, _ in located)
     return {"item": who.name, "at": show_when(p, when), "location": place.name,
             "event": event.name, "since": show_when(p, start), "uncertain": uncertain}
 
@@ -595,7 +603,7 @@ def run(name, args=None, root=None, config=None, project=None, confine=False):
     for p in op.params:   # JSON callers (MCP, HTTP) can send any type
         value = args.get(p.name)
         if value is not None and type(value) is not KINDS[p.kind]:
-            raise LoreError("INVALID", f"{p.name} must be {p.kind}")
+            raise LoreError("INVALID", f"{p.name} must be {'a list of strings' if p.kind == L else p.kind}")
         if p.kind == L and value is not None and not all(isinstance(v, str) for v in value):
             raise LoreError("INVALID", f"{p.name} must be a list of strings")
     try:

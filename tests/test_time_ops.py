@@ -53,6 +53,20 @@ class TimeOps(unittest.TestCase):
         self.assertEqual((where["location"], where["event"]), ("Harrow Pass", "Crossing Harrow Pass"))
         self.assertEqual(run("where", item="Mara Quell", at="2019-11-02 22:00")["location"], "Saltmarsh")
         self.assertIsNone(run("where", item="Mara Quell", at="2000")["location"])
+        # A year that holds a move is not a sure answer, and an event the person attends is.
+        year = run("where", item="Mara Quell", at="2020")
+        self.assertEqual((year["location"], year["uncertain"]), ("Saltmarsh", True))
+        there = run("where", item="Mara Quell", at="Crossing Harrow Pass")
+        self.assertEqual((there["location"], there["uncertain"]), ("Harrow Pass", False))
+
+    def test_link_under_an_undeclared_role_warns(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = os.path.join(tmp, "w")
+            shutil.copytree(FIXTURE, root)
+            out = ops.run("link", {"item": "Crossing Harrow Pass", "role": "partisipants", "target": "Mara Quell"}, root=root)
+            self.assertIn("partisipants", out["warning"])
+            self.assertNotIn("warning", ops.run("link", {"item": "Crossing Harrow Pass", "role": "participants",
+                                                         "target": "Tess Varga"}, root=root))
         self.assertEqual([k["item"] for k in run("knows", item="Tess Varga", at="2021")["knows"]], ["Ivo Brandt"])
         self.assertEqual(run("knows", item="Tess Varga", at="2019")["knows"], [])
 

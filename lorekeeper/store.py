@@ -488,7 +488,8 @@ class Project:
             keys = list(set) + unset + (["body"] if body is not None else [])
             stale = [k for k in keys if k not in expect or blank(current.get(k)) != blank(expect[k])]
             if stale:
-                raise LoreError("CONFLICT", f"{item.path} changed since it was read: {', '.join(stale)}",
+                raise LoreError("CONFLICT", f"{item.path} changed since it was read. Read it again and retry, or "
+                                f"pass expect with the values you read for: {', '.join(stale)}",
                                 {"version": current_version, "path": item.path,
                                  "current": {k: current.get(k) for k in stale}})
             merged = True
