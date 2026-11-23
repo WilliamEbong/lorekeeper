@@ -1,16 +1,16 @@
 # Graph Report - overnight-fixes-77b916  (2026-11-23)
 
 ## Corpus Check
-- 90 files · ~128,251 words
+- 90 files · ~129,085 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1608 nodes · 3516 edges · 95 communities (76 shown, 19 thin omitted)
+- 1610 nodes · 3518 edges · 79 communities (69 shown, 10 thin omitted)
 - Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 183 edges (avg confidence: 0.62)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `ea902b2c`
+- Built from commit: `49885a51`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -25,7 +25,6 @@
 - InteropTests
 - GregorianTests
 - Your story in Lorekeeper
-- item_dates
 - interop.py
 - timeline
 - ServeTests
@@ -36,40 +35,25 @@
 - McpTests
 - Feature 011: Planning wiki
 - enableRedate
-- Tasks: [FEATURE NAME]
 - SKILL.md
 - SKILL.md
 - spreadsheet
-- Project
-- ops.py
 - atomic_write
 - LoreError
 - lore
 - Aeon Timeline 3 file format and behaviour: clean-room notes for Lorekeeper interop
 - Calendar
-- Item
 - app.js
 - Execution Steps
-- Execution Steps
-- common.ps1
 - Feature 010: Progressive story wiki
-- store.py
 - mcp.py
 - Writing
 - cli.py
-- dates.py
 - Feature 012: The Lorekeeper app
-- inside
-- Loading
-- Core Principles
-- Feature Specification: [FEATURE NAME]
 - Design
-- AuditFixes
-- Core Principles
 - Contracts
 - Feature 001: Core model, storage, operations, CLI and MCP
 - LocalHandler
-- Implementation Plan: [FEATURE]
 - TimeOps
 - SKILL.md
 - relationships
@@ -131,33 +115,33 @@
   tests/test_mcp.py → lorekeeper/store.py
 - `ChangeTests` --uses--> `LoreError`  [INFERRED]
   tests/test_planning.py → lorekeeper/store.py
-- `CliTests` --uses--> `LoreError`  [INFERRED]
+- `CitationTests` --uses--> `LoreError`  [INFERRED]
   tests/test_planning.py → lorekeeper/store.py
 
 ## Import Cycles
 - None detected.
 
-## Communities (95 total, 19 thin omitted)
+## Communities (79 total, 10 thin omitted)
 
 ### Community 0 - "planning.py"
-Cohesion: 0.07
-Nodes (40): op_planning_fact(), _amend(), change(), _check_refs(), _check_text(), cite(), _counts(), _done() (+32 more)
+Cohesion: 0.06
+Nodes (43): op_planning_fact(), _amend(), change(), _check_refs(), _check_text(), cite(), _counts(), _done() (+35 more)
 
 ### Community 1 - "run"
-Cohesion: 0.12
-Nodes (8): FactOpTests, facts(), names(), SC-2, run on both layouts., read(), run(), StoryFolderTests, WikiWorldTests
+Cohesion: 0.06
+Nodes (23): build(), CliTests, CreateTests, FactOpTests, facts(), names(), Feature 010: chapter stamps, story pages and the progressive wiki., SC-2, run on both layouts. (+15 more)
 
 ### Community 2 - "wiki.py"
 Cohesion: 0.06
-Nodes (49): op_fact_add(), append_fact(), chapter(), _check_section(), _check_span(), _check_text(), companion_name(), companion_path() (+41 more)
+Nodes (47): op_fact_add(), chapter(), _check_section(), _check_span(), _check_text(), companion_name(), companion_path(), covers() (+39 more)
 
 ### Community 3 - "app.py"
 Cohesion: 0.06
-Nodes (54): act_create(), act_forget(), act_open(), act_pick(), act_show(), ai_guide(), App, AppError (+46 more)
+Nodes (55): act_create(), act_forget(), act_open(), act_pick(), act_show(), ai_guide(), App, AppError (+47 more)
 
 ### Community 4 - "run"
-Cohesion: 0.11
-Nodes (11): ChangeTests, CliTests, copy_fixture(), ImpactTests, Feature 011: the planning wiki (source reader, citations, link lists, ideas, imp, A writable copy of the fixture; with crlf, every text file uses CRLF line ending, Fixes from the run-5 review (each failed before its fix)., read_bytes() (+3 more)
+Cohesion: 0.06
+Nodes (18): ChangeTests, CitationTests, CliTests, copy_fixture(), FactTests, ImpactTests, LeakTests, Feature 011: the planning wiki (source reader, citations, link lists, ideas, imp (+10 more)
 
 ### Community 5 - "editor.js"
 Cohesion: 0.05
@@ -179,13 +163,9 @@ Nodes (6): ArithmeticTests, CivilTests, CustomCalendarTests, Decades, GregorianT
 Cohesion: 0.05
 Nodes (35): Lorekeeper agent skill, Create, connect and revise, Dates and uncertainty, Files you can keep, Import and export, Open Lorekeeper, Read a continuity report, Start a world from a terminal (+27 more)
 
-### Community 10 - "item_dates"
-Cohesion: 0.18
-Nodes (17): compare_eq(), compare_ge(), _compare_shifted_eq(), _date_key(), flashback(), order_check(), possible(), Read-only, uncertainty-aware continuity checks over stored or in-memory items. (+9 more)
-
 ### Community 11 - "interop.py"
-Cohesion: 0.11
-Nodes (34): _aeon_date(), _ancestors(), _archive(), _calendar(), _check_shapes(), _collection(), _date_text(), _field() (+26 more)
+Cohesion: 0.10
+Nodes (37): _aeon_date(), _ancestors(), _archive(), _calendar(), _check_shapes(), _collection(), _csv_date(), _csv_value() (+29 more)
 
 ### Community 12 - "timeline"
 Cohesion: 0.13
@@ -196,8 +176,8 @@ Cohesion: 0.08
 Nodes (8): AppTestCase, CreateAndAIFileTests, LauncherTests, LaunchTests, The Lorekeeper app: world list, folder kinds, AI files and the start-screen serv, Run Open Lorekeeper.bat with a stand-in pyw/pythonw that records a launch instea, ServerTests, WorldListTests
 
 ### Community 15 - "Checks"
-Cohesion: 0.17
-Nodes (6): Checks, Comparisons, findings(), item(), project(), Certainty vectors for the public checks API; synthetic worlds stay in memory.
+Cohesion: 0.09
+Nodes (16): Item, AgelessPeople, Checks, Comparisons, findings(), item(), OrderCheck, project() (+8 more)
 
 ### Community 16 - "guard.py"
 Cohesion: 0.13
@@ -208,8 +188,8 @@ Cohesion: 0.23
 Nodes (31): add(), addForm(), button(), chapterName(), chapterSelect(), chips(), chText(), citeBox() (+23 more)
 
 ### Community 18 - "McpTests"
-Cohesion: 0.10
-Nodes (7): McpTests, meta(), Protocol coverage and golden parity with the real CLI., 2026-07-28 clients reject a tools/list result without ttlMs and cacheScope (0 to, The fact tools write the same bytes and return the same data through MCP and the, The planning tools return the same data through MCP and the CLI (reads on the fi, lore mcp --saga: planning-change is refused; planning-fact needs a planning fold
+Cohesion: 0.11
+Nodes (6): McpTests, meta(), 2026-07-28 clients reject a tools/list result without ttlMs and cacheScope (0 to, The fact tools write the same bytes and return the same data through MCP and the, The planning tools return the same data through MCP and the CLI (reads on the fi, lore mcp --saga: planning-change is refused; planning-fact needs a planning fold
 
 ### Community 19 - "Feature 011: Planning wiki"
 Cohesion: 0.07
@@ -219,37 +199,29 @@ Nodes (27): Design, Files, Plan: Feature 011, planning wiki, Risks, Saga integra
 Cohesion: 0.21
 Nodes (28): addFieldRow(), addLinkForm(), anyDirty(), api(), conflictActions(), convert(), dirty(), enableRedate() (+20 more)
 
-### Community 21 - "Tasks: [FEATURE NAME]"
-Cohesion: 0.09
-Nodes (11): op_planning_source(), op_set(), op_wiki(), LoreError, Exception, CitationTests, LeakTests, Planning facts never reach the story wiki, item views, export or check (FR-15). (+3 more)
-
 ### Community 22 - "SKILL.md"
 Cohesion: 0.08
 Nodes (25): 1. Initialize Analysis Context, 2. Load Artifacts (Progressive Disclosure), 3. Build Semantic Models, 4. Detection Passes (Token-Efficient Analysis), 5. Severity Assignment, 6. Produce Compact Analysis Report, 7. Provide Next Actions, 8. Offer Remediation (+17 more)
 
 ### Community 23 - "SKILL.md"
-Cohesion: 0.16
-Nodes (20): parse_duration(), _events_of(), op_age(), op_check(), op_graph(), op_knows(), op_timeline(), op_when() (+12 more)
+Cohesion: 0.07
+Nodes (51): compare_eq(), compare_ge(), _compare_shifted_eq(), _date_key(), flashback(), order_check(), possible(), Read-only, uncertainty-aware continuity checks over stored or in-memory items. (+43 more)
 
 ### Community 24 - "spreadsheet"
 Cohesion: 0.14
 Nodes (26): cellId(), changes(), display(), editableCell(), endKey(), fieldRow(), fieldsFor(), isDateKey() (+18 more)
 
-### Community 25 - "Project"
-Cohesion: 0.23
-Nodes (4): Project, The stripped name, if it suits a wikilink and no other item answers to it., The user's three saga Wikis are Lorekeeper projects as they stand (skipped where, SagaWikis
-
-### Community 26 - "ops.py"
-Cohesion: 0.16
-Nodes (11): Lorekeeper: a plain-text story-world engine (CLI `lore`, MCP server, local edito, _check_link_version(), op_link(), op_requests(), op_unlink(), The one operations table. The CLI, MCP server and HTTP API are generated from OP, requests_dir(), _role_values() (+3 more)
-
 ### Community 27 - "atomic_write"
-Cohesion: 0.14
-Nodes (14): op_export(), op_request(), Queue a change request instead of editing (saga mode): the pipeline applies it l, Write the project as .aeon (Aeon Timeline), CSV (Aeon column ids) or one Markdow, blank(), clean_fields(), file_sha(), merged_schema() (+6 more)
+Cohesion: 0.07
+Nodes (25): op_export(), op_init(), op_request(), Queue a change request instead of editing (saga mode): the pipeline applies it l, Write the project as .aeon (Aeon Timeline), CSV (Aeon column ids) or one Markdow, blank(), clean_fields(), file_sha() (+17 more)
+
+### Community 28 - "LoreError"
+Cohesion: 0.16
+Nodes (4): LoreError, Exception, Regression checks for the feature-001 adversarial review findings., Review
 
 ### Community 29 - "lore"
-Cohesion: 0.18
-Nodes (5): Small starter worlds as Python data, so vendoring needs no template directory., CliFlows, lore(), Execute the published quickstart in a fresh, empty story folder., Starter worlds, init compatibility, and packaging declarations.
+Cohesion: 0.11
+Nodes (8): Small starter worlds as Python data, so vendoring needs no template directory., CliFlows, InProcess, lore(), cli.main called directly, as the app and other Python callers do., Execute the published quickstart in a fresh, empty story folder., Readme, Starter worlds, init compatibility, and packaging declarations.
 
 ### Community 30 - "Aeon Timeline 3 file format and behaviour: clean-room notes for Lorekeeper interop"
 Cohesion: 0.10
@@ -259,10 +231,6 @@ Nodes (20): 1.1 Header (40 bytes), 1.2 Root archive, 1.3 Leaf archives (`attachm
 Cohesion: 0.10
 Nodes (18): add(), age(), Calendar, calendars(), civil_from_days(), days_from_civil(), Integer-minute dates, configured calendars, and uncertainty intervals., Hinnant's Gregorian day number, with 1970-01-01 at zero. (+10 more)
 
-### Community 32 - "Item"
-Cohesion: 0.12
-Nodes (11): Item, AgelessPeople, OrderCheck, No recorded death, yet older than anyone could be by the latest date in the stor, card(), codes(), DayOverflow, Flashbacks (+3 more)
-
 ### Community 33 - "app.js"
 Cohesion: 0.28
 Nodes (16): aiNote(), ask(), busy(), button(), el(), folderName(), load(), opened() (+8 more)
@@ -271,37 +239,25 @@ Nodes (16): aiNote(), ask(), busy(), button(), el(), folderName(), load(), opene
 Cohesion: 0.12
 Nodes (15): 1. Initialize Convergence Context, 2. Load Artifacts (Progressive Disclosure), 3. Build the Intent Inventory, 4. Assess the Codebase and Classify Findings, 5. Assign Severity, 6. Present the In-Session Findings Summary, 7. Append Convergence Tasks (or report converged), 8. Provide Next Actions (Handoff) (+7 more)
 
-### Community 35 - "Execution Steps"
-Cohesion: 0.19
-Nodes (5): build(), Findings of the run-4 code review, each pinned by the scenario that showed it., layout 'pages': stamps in the pages. 'story': stamps in a story-wiki folder besi, ReviewFixTests, write()
-
-### Community 36 - "common.ps1"
-Cohesion: 0.11
-Nodes (10): CliTests, CreateTests, Feature 010: chapter stamps, story pages and the progressive wiki., The reveal written as a '## Revealed to be' section, as fact-add writes it in a, A saga keeps its settings in another file and runs the engine from a vendored fo, RevealSectionTests, SectionTests, SpeedTests (+2 more)
-
 ### Community 37 - "Feature 010: Progressive story wiki"
 Cohesion: 0.12
 Nodes (15): Checks, Clarifications, Editor, Feature 010: Progressive story wiki, Functional requirements, Later (not in this feature), Overview, Reading (+7 more)
 
 ### Community 39 - "mcp.py"
-Cohesion: 0.26
+Cohesion: 0.23
 Nodes (12): _error(), handle(), offered(), Small, stateless MCP adapter over the operations table (JSON lines on stdio)., Serve UTF-8 JSON lines on binary streams until EOF., In a saga, Wiki pages and authority documents change only through the saga's own, Return a response without transport I/O; tools delegate their effects to ops., serve() (+4 more)
 
-### Community 41 - "cli.py"
-Cohesion: 0.24
-Nodes (13): build_parser(), chapters(), human(), interval(), key_value(), main(), planning_text(), `lore` command line, generated from the operations table. (+5 more)
+### Community 40 - "Writing"
+Cohesion: 0.07
+Nodes (5): A project over given items, without scanning files., AuditFixes, Loading, WorldCase, Writing
 
-### Community 42 - "dates.py"
-Cohesion: 0.40
-Nodes (5): parse(), _csv_date(), _csv_value(), write_csv(), op_convert()
+### Community 41 - "cli.py"
+Cohesion: 0.11
+Nodes (23): build_parser(), chapters(), human(), interval(), key_value(), main(), planning_text(), `lore` command line, generated from the operations table. (+15 more)
 
 ### Community 43 - "Feature 012: The Lorekeeper app"
 Cohesion: 0.14
 Nodes (13): AI instructions, Clarifications, Editor, Feature 012: The Lorekeeper app, Functional requirements, Out of scope, Overview, Safety (+5 more)
-
-### Community 44 - "inside"
-Cohesion: 0.25
-Nodes (6): op_init(), to_json(), Hash metadata in configured roots, plus lore.json; skip excluded folders., stamp(), inside(), The story wiki and planning wiki folders, normcased: their pages are not items.
 
 ### Community 48 - "Design"
 Cohesion: 0.15
@@ -316,8 +272,8 @@ Cohesion: 0.18
 Nodes (10): Defaults chosen (logged), Feature 001: Core model, storage, operations, CLI and MCP, Format, Functional requirements, Operations, Overview, Project, Safe writes (+2 more)
 
 ### Community 53 - "LocalHandler"
-Cohesion: 0.15
-Nodes (11): BaseHTTPRequestHandler, LocalHandler, make_server(), Loopback-only HTTP adapter over OPS and the bundled, build-free editor., The request body when it is 1 byte to `limit`; otherwise b"", after reading and, A loopback-only request handler: Host check, security headers and JSON error rep, read_body(), serve() (+3 more)
+Cohesion: 0.28
+Nodes (5): BaseHTTPRequestHandler, LocalHandler, The request body when it is 1 byte to `limit`; otherwise b"", after reading and, A loopback-only request handler: Host check, security headers and JSON error rep, read_body()
 
 ### Community 57 - "SKILL.md"
 Cohesion: 0.25
@@ -340,16 +296,16 @@ Cohesion: 0.29
 Nodes (6): Completion Report, Done When, Mandatory Post-Execution Hooks, Outline, Pre-Execution Checks, User Input
 
 ### Community 65 - "Overnight changes (2026-11-22 to 23)"
-Cohesion: 0.29
-Nodes (6): Changes, Found, not changed, How to merge and re-vendor, Other branches, Overnight changes (2026-11-22 to 23), Tests
+Cohesion: 0.22
+Nodes (8): Changes, Design pass: the editor, wiki and start screen, How to merge and re-vendor, Other branches, Overnight changes (2026-11-22 to 23), Round 2: the items round 1 found (owner approved), Round 3: tidy and graphify, Tests
 
 ### Community 66 - "Feature 013: A plain-language editor"
 Cohesion: 0.29
 Nodes (6): Clarifications, Feature 013: A plain-language editor, Functional requirements, Overview, Session 2026-10-19, Success criteria
 
 ### Community 69 - "fastest"
-Cohesion: 0.29
-Nodes (7): Run one operation. confine (MCP and the editor): import and export paths are rel, run(), fastest(), Perf, n items: a third characters, a third places, a third events linking both., The best of a few timed runs: a busy machine slows one run, a real regression sl, synthetic()
+Cohesion: 0.25
+Nodes (8): op_check(), Run one operation. confine (MCP and the editor): import and export paths are rel, run(), fastest(), Perf, n items: a third characters, a third places, a third events linking both., The best of a few timed runs: a busy machine slows one run, a real regression sl, synthetic()
 
 ### Community 70 - "selectItem"
 Cohesion: 0.33
@@ -440,24 +396,24 @@ Cohesion: 0.50
 Nodes (3): Feature 007: Templates, onboarding, packaging, Functional requirements, Success criteria
 
 ## Knowledge Gaps
-- **270 isolated node(s):** `state`, `token`, `calendars`, `worldName`, `MONTHS` (+265 more)
+- **272 isolated node(s):** `state`, `token`, `calendars`, `worldName`, `MONTHS` (+267 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **19 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **10 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `LoreError` connect `Tasks: [FEATURE NAME]` to `planning.py`, `run`, `wiki.py`, `app.py`, `run`, `interop.py`, `McpTests`, `SKILL.md`, `Project`, `ops.py`, `atomic_write`, `LoreError`, `Execution Steps`, `common.ps1`, `mcp.py`, `Writing`, `cli.py`, `dates.py`, `inside`, `Loading`, `Feature Specification: [FEATURE NAME]`, `AuditFixes`, `LocalHandler`, `Implementation Plan: [FEATURE]`, `TimeOps`, `fastest`?**
+- **Why does `LoreError` connect `LoreError` to `planning.py`, `run`, `wiki.py`, `app.py`, `run`, `fastest`, `mcp.py`, `Writing`, `cli.py`, `interop.py`, `McpTests`, `LocalHandler`, `SKILL.md`, `TimeOps`, `atomic_write`?**
   _High betweenness centrality (0.155) - this node is a cross-community bridge._
-- **Why does `Project` connect `Project` to `Item`, `app.py`, `fastest`, `store.py`, `Writing`, `inside`, `Loading`, `ServeTests`, `Checks`, `AuditFixes`, `LocalHandler`, `Implementation Plan: [FEATURE]`, `ops.py`, `atomic_write`, `LoreError`?**
+- **Why does `Project` connect `atomic_write` to `app.py`, `fastest`, `Writing`, `cli.py`, `ServeTests`, `Checks`, `SKILL.md`, `LoreError`?**
   _High betweenness centrality (0.058) - this node is a cross-community bridge._
-- **Why does `run()` connect `item_dates` to `Item`, `wiki.py`, `app.py`, `store.py`, `Checks`, `guard.py`, `SKILL.md`, `ops.py`?**
+- **Why does `run()` connect `SKILL.md` to `wiki.py`, `app.py`, `Checks`, `guard.py`, `atomic_write`?**
   _High betweenness centrality (0.032) - this node is a cross-community bridge._
 - **Are the 83 inferred relationships involving `LoreError` (e.g. with `App` and `.open_world()`) actually correct?**
   _`LoreError` has 83 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 15 inferred relationships involving `Project` (e.g. with `AgelessPeople` and `Checks`) actually correct?**
   _`Project` has 15 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `state`, `token`, `calendars` to the rest of the system?**
-  _270 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _272 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `planning.py` be split into smaller, more focused modules?**
-  _Cohesion score 0.06832298136645963 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.06468797564687975 - nodes in this community are weakly interconnected._

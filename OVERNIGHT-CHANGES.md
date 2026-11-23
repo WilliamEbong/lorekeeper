@@ -124,7 +124,7 @@ Left on the audit's list: the retired continuity-kit hook script `tools/build-ho
 
 Not changed, as nobody meets them in normal use or they are new features: a "who is at this place" query, a browser Back history in the editor, connection kinds filtered by item type, undo for spreadsheet cells (the README no longer promises it), the start screen's folder picker behaviour (could not be judged in a hidden test browser).
 
-**Codex review of round 4** (branch diff against `2313013`): 5 findings, 4 fixed in the next commit: `where` treated a matching month as the event itself; the CSV warning advised re-importing, which skips existing items (it now says to import into a new world with the schema in place); `age` printed a negative lower bound ("-1 to 1"); and the error auto-clear was reverted. Not changed: the typo warning on a repeated identical `link` call.
+**Codex review of round 4** (branch diff against `2313013`): 5 findings, 4 fixed in `c8c3e40`: `where` treated a matching month as the event itself; the CSV warning advised re-importing, which skips existing items (it now says to import into a new world with the schema in place); `age` printed a negative lower bound ("-1 to 1"); and the error auto-clear was reverted. Not changed: the typo warning on a repeated identical `link` call.
 
 **Design cycle 2** (`e092c7e`, `931036c`). Two fresh reviewers scored nine screens out of 10 for clarity, craft and reading comfort; after the changes a third scored them again.
 
@@ -183,7 +183,7 @@ S1 is before this cycle; S2 is affected by a capture fault (the wiki card wasn't
   - the phone tabs fit in two rows.
 - **Wording and craft:** listed in each commit message.
 
-**Codex review of the scoring rounds** (branch diff against `8f6a17a`): 6 findings, all fixed in the next commit. A long wiki card overflowed the wiki area. "part" matched "apartment" and "participant" in the Narrative fallback. Ages shaded undetermined cells green. The spreadsheet's Open was invisible on touch screens. A failed age kept "working out…". "Childs" was shown instead of "Children".
+**Codex review of the scoring rounds** (branch diff against `8f6a17a`): 6 findings, all fixed in `3f96750`. A long wiki card overflowed the wiki area. "part" matched "apartment" and "participant" in the Narrative fallback. Ages shaded undetermined cells green. The spreadsheet's Open was invisible on touch screens. A failed age kept "working out…". "Childs" was shown instead of "Children".
 
 **Why the scores stopped at 7 to 8.5, and what a 9 would need.** Scores stopped rising after S3, through four rounds of changes. What the reviewers still name are structural changes that amount to new layouts or features:
 - **Phone (7):** a layout built for a phone rather than the desktop layout squeezed down. That means a tab menu, a per-person list for Ages, stacked rows for the Spreadsheet, and no scroll areas inside the scrolling page.
