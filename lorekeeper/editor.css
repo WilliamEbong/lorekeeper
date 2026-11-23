@@ -232,6 +232,7 @@ tbody tr.selected { background: var(--soft); }
 .cards > li { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 14px; align-items: baseline; padding: 12px 14px; background: var(--panel); border: 1px solid var(--hair); border-radius: 8px; }
 .cards > li.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .scroll.pad > ol.cards:not(.findings) { max-width: 80ch; gap: 0; }
+.chapter-box { width: 4.5em; padding: 3px 6px; text-align: right; font-variant-numeric: tabular-nums; }
 .scroll.pad > ol.cards:not(.findings) > li { border-radius: 0; border-top-width: 0; padding: 9px 14px; }
 .scroll.pad > ol.cards:not(.findings) > li:first-child { border-top-width: 1px; border-radius: 8px 8px 0 0; }
 .scroll.pad > ol.cards:not(.findings) > li:last-child { border-radius: 0 0 8px 8px; }

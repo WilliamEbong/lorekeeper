@@ -1437,6 +1437,23 @@ function sheetLocation(item, places) {
   }}));
   return cell;
 }
+// A story part's chapter number, typed in place: the Narrative list sorts by it.
+function chapterBox(item) {
+  const input = el('input', null, {type: 'number', min: '1', step: '1', class: 'chapter-box', inputmode: 'numeric',
+    'aria-label': `Chapter number for ${item.name}`, value: item.fields.chapter ?? ''});
+  input.addEventListener('change', async () => {
+    const value = input.value.trim();
+    if (value && !/^\d+$/.test(value)) { input.value = item.fields.chapter ?? ''; return; }
+    status('Saving…', 'busy');
+    try {
+      await api('set', {item: ref(item), ...(value ? {field: {chapter: value}} : {unset: ['chapter']}), version: item.version,
+        expect: {chapter: item.fields.chapter ?? null}});
+      await refresh();
+      idle();
+    } catch (error) { report(error); }
+  });
+  return input;
+}
 function narrative(view) {
   // Hosts' cards use chapter/order/number; natural name order is the fallback.
   const order = (i) => Number(i.fields.chapter ?? i.fields.order ?? i.fields.number ?? i.name.match(/\d+/)?.[0] ?? Infinity);
@@ -1447,7 +1464,7 @@ function narrative(view) {
     if (parts.length) {
       const kinds = [...new Set(parts.map(i => typeLabel(i.type)))].join(', ');
       chapters = parts;
-      fallback = `Your story parts (${kinds}), in name order. Give each a chapter number to put them in reading order.`;
+      fallback = `Your story parts (${kinds}). Type a chapter number in the box beside each, and the list follows that order.`;
     }
   }
   if (!chapters.length) {
@@ -1462,7 +1479,7 @@ function narrative(view) {
     main.append(button(item.name, () => selectItem(item.path, {show: true}), {class: 'link', id: `narrative-${encodeURIComponent(item.path)}`}),
       el('div', `${kinds ? typeLabel(item.type) + (item.start ? ' · ' : '') : ''}${item.start ? whenText(item) : ''}`, {class: 'when'}));
     const back = latest != null && item.lo != null && item.lo < latest;
-    row.append(fallback ? el('span') : el('span', String(index + 1), {class: 'num'}), main,
+    row.append(fallback && !saga ? chapterBox(item) : el('span', String(index + 1), {class: 'num'}), main,
       back ? el('span', 'Earlier than the part before', {class: 'flag warn', title: 'The story steps back in time here. A flashback may be intentional.'})
         : item.lo == null && !fallback ? el('span', 'Undated', {class: 'flag muted'}) : el('span'));
     if (item.lo != null) latest = Math.max(latest ?? item.lo, item.lo);
