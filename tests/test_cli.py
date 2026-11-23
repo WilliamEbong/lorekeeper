@@ -134,6 +134,7 @@ class CliFlows(unittest.TestCase):
         self.assertEqual(out[4], "2020-03                               event         Crossing Harrow Pass")
         self.assertEqual(lore("age", "Mara Quell", "Crossing Harrow Pass", cwd=root).stdout,
                          "Mara Quell at Crossing Harrow Pass: 31 years, 10 months\n")
+        self.assertIn("(the dates allow", lore("age", "Ivo Brandt", "The flood at Saltmarsh", cwd=root).stdout)   # born ~1951
         self.assertEqual(lore("when", "Ivo Brandt", cwd=root).stdout,
                          "Ivo Brandt\nstart: ~1951 (1950 to 1952)\nend: 2019-11-03\n")
         self.assertEqual(lore("where", "Mara Quell", "2021", cwd=root).stdout,

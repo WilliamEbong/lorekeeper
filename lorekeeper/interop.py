@@ -563,7 +563,7 @@ def import_into(project, data, into=None):
         # Type folders stay underneath --into, including custom absolute folders.
         local["types"] = {key: {**spec, "folder": _key(key), "plural": _key(key)} for key, spec in schema["types"].items()}
     planner = store.Project.from_items(project.root, local, [])
-    pending, targets, names, planned, listings = [], {}, set(), set(), {}
+    pending, targets, names, planned, listings, dropped = [], {}, set(), set(), {}, set()
     skipped = 0
 
     def taken(path):
@@ -621,6 +621,8 @@ def import_into(project, data, into=None):
             if mapped in store.RESERVED and mapped != "status":
                 continue
             if csv_source and mapped not in schema["properties"] and mapped not in schema["roles"]:
+                if value not in (None, "", []):
+                    dropped.add(mapped)
                 continue
             fields[mapped] = _field(value)
         if record.get("tags"):
@@ -695,6 +697,9 @@ def import_into(project, data, into=None):
         if added:
             store.atomic_write(path, text.rstrip("\r\n") + "\n" + "".join(f"- [[{name}]]\n" for name in added),
                                expect=store.file_sha(path))
+    if dropped:   # a CSV column the world does not declare: say so, or its links are lost without a word
+        warnings.append("WARN columns not imported, because this world has no such role or property: "
+                        + ", ".join(sorted(dropped)) + ". Add them to lore.json (or copy the source world's) and import again.")
     if data.get("attachments"):
         warnings.append("WARN attachments were not imported: " + ", ".join(data["attachments"]))
     return {"created": len(pending), "skipped": skipped, "warnings": warnings}

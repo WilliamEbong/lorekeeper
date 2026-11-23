@@ -187,7 +187,11 @@ def human(op, args, result):
         width = max((len(d) for d, _ in rows), default=0)
         return "\n".join(f"{d:<{width}}  {i['type']:<13} {i['name']}" for d, i in rows) or "(no items)"
     if op == "age":
-        return f"{result['item']} at {at}: {result['text']}"
+        years = result.get("years") or []   # a year-precise birth allows two ages: say so
+        lo, hi = (years + [None, None])[:2]
+        allow = "" if result.get("status") != "alive" or lo == hi or lo is None else \
+            f" (the dates allow {lo} or {hi})" if hi - lo == 1 else f" (the dates allow {lo} to {hi})"
+        return f"{result['item']} at {at}: {result['text']}{allow}"
     if op == "when":
         lines = [result["name"], f"start: {interval(result['start'])}", f"end: {interval(result['end'])}"]
         return "\n".join(lines + [f"unreadable {u['key']}: {u['value']}" for u in result["unparsed"]])

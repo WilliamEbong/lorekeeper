@@ -715,6 +715,12 @@ class InteropTests(unittest.TestCase):
             self.assertEqual(interop.import_into(target, result)["created"], 33)
         self.assertLessEqual(index.call_count, 3)   # not once per created item
 
+    def test_csv_columns_the_world_does_not_declare_are_reported(self):
+        path = self.root / "extra.csv"
+        store.atomic_write(path, "label,type,husband,mood\r\nAda,character,[[Bo]],\r\nBo,character,,\r\n")
+        result = interop.import_into(self.empty("extra"), interop.read_csv(path))
+        self.assertTrue(any("husband" in w and "mood" not in w for w in result["warnings"]), result["warnings"])
+
     def test_csv_types_match_the_schema_case_insensitively(self):
         path = self.root / "case.csv"
         store.atomic_write(path, "label,type,startDate,endDate\r\nAda,Character,1815,1852\r\n")
