@@ -18,3 +18,7 @@ docs/build/AUTO-SNAPSHOT.md
 docs/build/handoff-history/
 docs/build/baselines/**/*.raw
 .playwright-mcp/
+# graphify: the graph is committed; its cache and machine-local pointers are not
+graphify-out/cache/
+graphify-out/.graphify_python
+graphify-out/.graphify_root

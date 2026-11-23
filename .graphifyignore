@@ -1,0 +1,5 @@
+# graphify index scope: the engine, editor, tests, tools, docs and specs.
+# Left out: agent tooling (Spec Kit and Claude skills) and the test fixture worlds (story data, not code).
+.claude/
+.specify/
+tests/fixtures/
