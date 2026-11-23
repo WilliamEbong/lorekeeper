@@ -510,6 +510,9 @@ def import_into(project, data, into=None):
         mapped = mapped or _key(spec.get("label", key))
         mapped_types[key] = mapped
         if mapped not in schema["types"]:
+            # A new type's name becomes its folder: refuse one Windows cannot create, before anything is written.
+            if store.BAD_FILENAME.search(mapped) or store.DEVICE.match(mapped) or mapped != mapped.strip(" ."):
+                _invalid(f"import type {key!r} cannot be used as a folder name; rename it in the file first")
             schema["types"][mapped] = {"label": spec.get("label", mapped), "plural": mapped,
                                        "category": "event" if spec.get("canHaveDate") else "thing",
                                        "id_prefix": mapped.upper()}

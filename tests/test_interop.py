@@ -135,6 +135,19 @@ class InteropTests(unittest.TestCase):
                 self.assertEqual(caught.exception.code, "INVALID")
                 self.assertEqual((Path(project.root) / "lore.json").read_bytes(), before)
 
+    def test_csv_type_that_cannot_be_a_folder_is_refused_before_writing(self):
+        for n, type_ in enumerate(("CON", "x?", "a*", "Lpt1.x")):
+            with self.subTest(type_):
+                project = self.empty(f"folder{n}")
+                before = (Path(project.root) / "lore.json").read_bytes()
+                path = self.root / f"bad{n}.csv"
+                path.write_text(f"label,type\nA,{type_}\n", encoding="utf-8")
+                with self.assertRaises(store.LoreError) as caught:
+                    interop.import_into(project, interop.read_csv(path))
+                self.assertEqual(caught.exception.code, "INVALID")
+                self.assertEqual((Path(project.root) / "lore.json").read_bytes(), before)
+                self.assertEqual(project.items, [])
+
     def test_export_never_overwrites_the_projects_own_files(self):
         from lorekeeper import ops
         item = self.project.items[0].path
