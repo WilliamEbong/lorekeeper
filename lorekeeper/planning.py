@@ -799,6 +799,8 @@ def change(p, item, decision=None, fact=None, text=None, remove=False, section=N
     if fact is None and not (section and text):
         raise LoreError("INVALID", "give fact (its id from the card) with text or remove, or section and text for a "
                                    "new fact")
+    if remove and fact is None:
+        raise LoreError("INVALID", "remove needs fact: the fact's id from the card (lore planning <item>)")
     if fact is not None and not remove and not text:
         raise LoreError("INVALID", "give the new text, or remove")
     pl = plan(p)

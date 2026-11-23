@@ -181,6 +181,15 @@ class ReviewFindingTests(unittest.TestCase):
         self.assertIn("planning-source", cm.exception.message)
         self.assertEqual(read_bytes(os.path.join(docs, "overrides.md")), before)
 
+    def test_change_remove_without_a_fact_is_invalid(self):
+        base, root = copy_fixture()
+        self.addCleanup(shutil.rmtree, base, True)
+        with self.assertRaises(LoreError) as cm:   # an AI naming the fact by section and text, not by its id
+            run("planning-change", {"item": "Edran", "decision": "drop", "remove": True, "section": "Identity",
+                                    "text": "Edran keeps a tower."}, root)
+        self.assertEqual(cm.exception.code, "INVALID")
+        self.assertIn("fact", cm.exception.message)
+
     def test_change_on_an_entry_with_only_a_short_name(self):
         base, root = copy_fixture()
         self.addCleanup(shutil.rmtree, base, True)

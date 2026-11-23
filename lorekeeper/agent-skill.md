@@ -130,8 +130,8 @@ All examples below assume an initialized novel template unless stated otherwise.
 | `wiki` | none | `item`, `as_of` | `lore wiki "Mira Vale" --as-of 1 --json` (leave out the name for the index, `--as-of` for the complete wiki) |
 | `fact-add` | `item`, `section`, `text`, `from` | `to`, `version`, `type` | `lore fact-add "Mira Vale" Beliefs "Believes her sister is alive." --from 1 --version "<version>" --json` |
 | `fact-end` | `item`, `section`, `fact` | `after`, `reopen`, `version` | `lore fact-end "Mira Vale" Beliefs "Believes her sister" --after 2 --json` |
-| `fact-remove` | `item`, `section`, `fact` | `version` | `lore fact-remove "Mira Vale" Wants "To go home" --json` |
-| `planning` | none | `item` | `lore planning "Mira Vale" --json` (leave out the name for the index and its problems) |
+| `fact-remove` | `item`, `section`, `fact` | `version` | `lore fact-remove "Mira Vale" Wants "To find her sister" --json` |
+| `planning` | none | `item` | `lore planning "Mira Vale" --json` (leave out the name for the index and its problems). This and the other `planning*` rows need a world with a planning wiki (`planning_wiki` in the settings); the novel template has none. |
 | `planning-source` | `source` | `section` | `lore planning-source "World Bible" --section 3.1 --json` (leave out `--section` for the outline) |
 | `planning-fact` | `item` | `section`, `text`, `source`, `fact`, `remove`, `type`, `version` | `lore planning-fact "Mira Vale" --type character --section Identity --text "Born in 1990." --source "World Bible §2.1" --json` |
 | `planning-impact` | none | `item`, `terms`, `written`, `limit` | `lore planning-impact "Mira Vale" --terms "the letter" --written 2 --json` |
