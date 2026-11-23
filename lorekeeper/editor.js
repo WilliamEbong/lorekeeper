@@ -206,6 +206,8 @@ function findingText(f) {
       'parent too young': `${m[4]} (born ${there}) is too young to be ${m[1]}’s parent (born ${here}).`,
     };
     if (people[m[3]]) return people[m[3]];
+    const places = /^(.+) in different places: (.+) and (.+)$/.exec(m[3]);
+    if (places) return `${places[1]} is at ${places[2]} for ${m[1]} (${here}) and at ${places[3]} for ${m[4]} (${there}).`;
     const what = timing ? [label(key).toLowerCase(), ...(rest.length ? [lagWords(rest.join(' '))] : [])].join(', ') : m[3];
     return `${m[1]} (${here}): ${what}; ${m[4]} (${there})`;
   }
