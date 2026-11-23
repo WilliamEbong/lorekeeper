@@ -44,8 +44,8 @@ class Perf(unittest.TestCase):
     def test_3000_items_check_under_2s(self):
         with tempfile.TemporaryDirectory() as root:
             synthetic(root)
-            p = Project(root)
-            elapsed, _ = fastest(lambda: ops.run("check", {}, project=p))
+            projects = [Project(root) for _ in range(3)]   # loaded outside the timer, each checked cold once
+            elapsed, _ = fastest(lambda: ops.run("check", {}, project=projects.pop()))
             self.assertLess(elapsed, 2.0, f"check took {elapsed:.2f}s")
 
 

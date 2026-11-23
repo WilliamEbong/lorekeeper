@@ -598,7 +598,8 @@ async function saveInspector(draft) {
     $('change-note')?.focus();
     return;
   }
-  const unreadable = [...$('inspector').querySelectorAll('.readback.warn')].map(n => n.closest('.field')?.querySelector('label')?.textContent).filter(Boolean);
+  const unreadable = [...$('inspector').querySelectorAll('.readback.warn')].map(n => n.closest('.field')).filter(Boolean)
+    .map(f => ({key: f.querySelector('input')?.name, label: f.querySelector('label')?.textContent}));
   const controls = [...$('inspector').querySelectorAll('input, select, textarea, button')];
   const focusId = $('inspector').contains(document.activeElement) ? document.activeElement.id : null;
   draft.saving = true;
@@ -615,7 +616,8 @@ async function saveInspector(draft) {
       drafts.delete(item.path);
       offerUndo(item, before, {...field, ...Object.fromEntries(unset.map(k => [k, null]))}, result,
         (result.merged ? `Saved ${item.name}, merged with other changes made on disk.` : `Saved ${item.name}.`)
-        + (unreadable.length ? ` ${unreadable.join(' and ')} can’t be read as a date, so ${item.name} is left off the Timeline until it can.` : ''));
+        + (!unreadable.length ? '' : ` ${unreadable.map(u => u.label).join(' and ')} can’t be read as a date`
+          + (unreadable.some(u => ['born', 'date', 'start'].includes(u.key)) ? `, so ${item.name} is left off the Timeline until it can.` : '.')));
     }
     await refresh();
     renderInspector();

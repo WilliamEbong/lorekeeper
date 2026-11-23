@@ -240,11 +240,13 @@ class InteropTests(unittest.TestCase):
         source = self.empty("precision")
         for name, date in (("Decade", "1990s"), ("Century", "1800s"), ("Year", "1994")):
             ops.run("create", {"type": "event", "name": name, "field": {"date": date}}, root=source.root)
+        ops.run("create", {"type": "event", "name": "Narrowed", "field": {"date": "1990s", "date_min": "1990-07"}},
+                root=source.root)   # not the whole decade: no decade precision
         out = self.root / "precision.aeon"
         ops.run("export", {"format": "aeon", "out": str(out)}, root=source.root)
         data = interop.read_aeon(out)
         starts = {item["name"]: item["start"] for item in data["items"]}
-        self.assertEqual(starts, {"Decade": "1990..1999", "Century": "1800..1899", "Year": "1994"})
+        self.assertEqual(starts, {"Decade": "1990..1999", "Century": "1800..1899", "Year": "1994", "Narrowed": "1990"})
 
     def empty(self, name="empty", config=None):
         root = self.root / name

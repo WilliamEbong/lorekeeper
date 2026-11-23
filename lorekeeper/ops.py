@@ -340,7 +340,7 @@ def op_export(p, format, out):
     ledger = ledger if isinstance(ledger, dict) else {}
     if (target in {os.path.normcase(os.path.realpath(os.path.join(p.root, f))) for f in own}
             or any(store.inside(layer, out) for layer in p.layers())
-            or os.path.lexists(out) and (os.path.isdir(out) or ledger.get(target) != store.file_sha(out))):
+            or os.path.lexists(out) and (target not in ledger or os.path.isdir(out) or ledger[target] != store.file_sha(out))):
         raise LoreError("INVALID", f"export would replace {out}, which this project's export did not write "
                         "or which has changed since; choose a new file name")
     writer(p, out)

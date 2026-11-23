@@ -278,7 +278,8 @@ def _aeon_date(when):
     if when.precision == "year" and year > 0:   # "1990s", "1800s": Aeon's decade and century precision
         last = GREGORIAN.from_axis(when.hi - 1)
         for width, code in ((100, 0), (10, 1)):
-            if year % width == 0 and last["year"] == year + width - 1 and last["month"] == 12 and last["day"] == 31:
+            whole = (parts["month"], parts["day"], last["month"], last["day"]) == (1, 1, 12, 31)
+            if whole and year % width == 0 and last["year"] == year + width - 1:
                 precision = code
                 break
     return {**parts, "year": year if year > 0 else 1 - year, "era": 1 if year > 0 else 0,
