@@ -1177,58 +1177,49 @@ function subway(view) {
   if (!q && ranked.length > lanes.length) view.append(el('p', `Showing the ${lanes.length} people with the most events. Filter to find the other ${ranked.length - lanes.length}.`, {class: 'hint'}));
 }
 function agesView(view) {
-  view.append(peopleFilter(view, 'Ages at the events each person takes part in. Shaded: they were there (green: adult, yellow: under 18, red: before birth or after death). Blank: not there. Who is related to whom is under Relationships.'));
+  // One card per person listing only the events they are in, in time order: no mostly blank grid to search.
+  view.append(peopleFilter(view, 'How old each person is at the events they take part in.'));
+  const key = el('p', null, {class: 'ages-key'});
+  for (const [cls, text] of [['adult', 'adult'], ['young', 'under 18'], ['bad', 'before birth or after death']])
+    key.append(el('span', text, {class: `age ${cls}`}));
+  view.append(key);
   const q = ui.people.toLowerCase();
-  const ranked = rankedPeople().filter(r => r.n > 0 && (!q || r.p.name.toLowerCase().includes(q))), ROWS = q ? 200 : 40;
-  const shown = ranked.slice(0, ROWS).map(r => r.p).sort(byName);
-  const LIMIT = 150, all = events().filter(e => shown.some(p => takesPart(p, e))), cols = all.slice(0, LIMIT);
+  const ranked = rankedPeople().filter(r => r.n > 0 && (!q || r.p.name.toLowerCase().includes(q))), CARDS = q ? 200 : 40;
+  const shown = ranked.slice(0, CARDS).map(r => r.p).sort(byName);
   if (!shown.length) {
     view.append(q ? emptyState('No one matches', `No person whose name contains “${ui.people}” takes part in a dated event.`)
       : emptyState('No ages to show yet', 'Connect people to dated events with the Participants connection to see how old they are at each one.'));
     return;
   }
-  const box = scrollBox('table'), table = el('table', null, {class: 'ages'}), head = el('tr'), body = el('tbody');
-  table.append(el('caption', 'Age of each person at the events they take part in', {class: 'sr-only'}));
-  head.append(el('th', 'Person', {scope: 'col'}));
-  for (const e of cols) {
-    const th = el('th', null, {scope: 'col', 'data-path': e.path, title: `${e.name} · ${whenText(e)}`});
-    const name = button(e.name, () => selectItem(e.path, {show: true}), {class: 'link ev-name'});
-    th.append(name, el('span', shownDate(e.start.text), {class: 'ev-date'}));
-    head.append(th);
-  }
-  add(table, el('thead')).append(head);
-  table.append(body);
-  const jobs = [];
+  const box = scrollBox('pad'), grid = el('div', null, {class: 'age-cards'}), jobs = [];
   for (const p of shown) {
-    const row = el('tr', null, {'data-path': p.path}), th = el('th', null, {scope: 'row'});
-    th.append(button(p.name, () => selectItem(p.path, {show: true}), {class: 'link', id: `person-${encodeURIComponent(p.path)}`}));
-    row.append(th);
-    for (const e of cols) {
-      const cell = el('td');
-      if (takesPart(p, e)) {
-        cell.classList.add('on');
-        const key = `${p.path}|${p.version}|${e.path}|${e.version}`;
-        if (p.lo == null) cell.textContent = 'No birth date';
-        else if (ages.has(key)) paintAge(cell, ages.get(key));
-        else {
-          cell.setAttribute('aria-busy', 'true');
-          jobs.push(async () => {
-            try { ages.set(key, await api('age', {item: ref(p), at: ref(e)})); cell.removeAttribute('aria-busy'); paintAge(cell, ages.get(key)); }
-            catch { cell.removeAttribute('aria-busy'); cell.textContent = 'Unknown'; cell.title = 'This age can’t be worked out from the dates given.'; }
-          });
-        }
+    const card = el('article', null, {class: 'age-card', 'data-path': p.path}), list = el('ol', null, {class: 'age-list'});
+    const head = el('header');
+    head.append(button(p.name, () => selectItem(p.path, {show: true}), {class: 'link', id: `person-${encodeURIComponent(p.path)}`}),
+      el('span', p.start ? `born ${shownDate(p.start.text)}` : 'no birth date', {class: 'hint'}));
+    for (const e of events().filter(e => takesPart(p, e))) {
+      const row = el('li', null, {'data-path': e.path}), age = el('span', null, {class: 'age'});
+      row.append(button(e.name, () => selectItem(e.path, {show: true}), {class: 'link'}), el('span', shownDate(e.start.text), {class: 'when'}), age);
+      const cacheKey = `${p.path}|${p.version}|${e.path}|${e.version}`;
+      if (p.lo == null) age.textContent = '—';
+      else if (ages.has(cacheKey)) paintAge(age, ages.get(cacheKey));
+      else {
+        age.setAttribute('aria-busy', 'true');
+        jobs.push(async () => {
+          try { ages.set(cacheKey, await api('age', {item: ref(p), at: ref(e)})); age.removeAttribute('aria-busy'); paintAge(age, ages.get(cacheKey)); }
+          catch { age.removeAttribute('aria-busy'); age.textContent = 'unknown'; age.title = 'This age can’t be worked out from the dates given.'; }
+        });
       }
-      row.append(cell);
+      list.append(row);
     }
-    body.append(row);
+    card.append(head, list);
+    grid.append(card);
   }
-  box.append(table);
+  box.append(grid);
   view.append(box);
-  const more = [ranked.length > shown.length && `the ${shown.length} people with the most events (of ${ranked.length})`,
-    all.length > LIMIT && `the first ${LIMIT} of ${all.length} events`].filter(Boolean);
-  if (more.length) view.append(el('p', `Showing ${more.join(' and ')}. Filter people to see others.`, {class: 'hint'}));
+  if (ranked.length > shown.length) view.append(el('p', `Showing the ${shown.length} people with the most events (of ${ranked.length}). Filter by name to see others.`, {class: 'hint'}));
   // A small worker pool avoids flooding a large world's local server with age requests.
-  for (let n = 0; n < Math.min(4, jobs.length); n++) (async () => { while (jobs.length && body.isConnected) await jobs.shift()(); })();
+  for (let n = 0; n < Math.min(4, jobs.length); n++) (async () => { while (jobs.length && grid.isConnected) await jobs.shift()(); })();
 }
 function paintAge(cell, age) {
   cell.textContent = age.text;
