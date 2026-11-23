@@ -710,7 +710,8 @@ function renderLinks(panel, item) {
   section.append(el('h3', 'Connections', {id: 'links-title'}));
   const outgoing = graph.links.filter(l => l.from_path === item.path);
   const incoming = graph.links.filter(l => l.to_path === item.path && l.resolved);
-  if (!outgoing.length) section.append(el('p', saga ? 'No connections.' : 'None yet. Add one under Add a connection, further down.', {class: 'hint'}));
+  if (!outgoing.length && !incoming.length) section.append(el('p', saga ? 'No connections.' : 'None yet. Add one below.', {class: 'hint'}));
+  if (!outgoing.length && incoming.length) section.hidden = true;
   for (const [role, links] of groupBy(outgoing, l => l.role)) {
     section.append(el('h4', label(role), {class: 'role-name'}));
     const list = el('ul', null, {class: 'links'});
@@ -730,7 +731,7 @@ function renderLinks(panel, item) {
   panel.append(section);
   const back = el('section', null, {'aria-labelledby': 'backlinks-title'});
   back.append(el('h3', 'Linked from', {id: 'backlinks-title'}));
-  if (!incoming.length) back.append(el('p', 'Nothing links here yet.', {class: 'hint'}));
+  if (!incoming.length) back.hidden = true;
   for (const [role, links] of groupBy(incoming, l => l.role)) {
     const group = el('details', null, links.length <= 6 ? {open: ''} : {});
     group.append(el('summary', `${inverseLabel(role)} · ${links.length}`));
