@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from unittest.mock import patch
 from urllib.error import HTTPError, URLError
@@ -186,8 +187,12 @@ class ServerTests(AppTestCase):
         _, created = self.call("/api/create", {"name": "Brief", "template": None, "parent": str(self.tmp)})
         self.assertEqual(self.call("/api/quit", {}), (200, {"closed": True}))
         for url in (created["url"], self.url):
+            # quit replies first and stops the servers on a thread, so allow it a moment
+            deadline = time.monotonic() + 5
             with self.assertRaises((URLError, ConnectionError, OSError)):
-                urlopen(url + "api/stamp", timeout=3)
+                while time.monotonic() < deadline:
+                    urlopen(url + "api/stamp", timeout=3).close()
+                    time.sleep(0.05)
 
 
 class LaunchTests(AppTestCase):
