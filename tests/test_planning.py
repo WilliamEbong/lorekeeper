@@ -340,7 +340,9 @@ class LeakTests(unittest.TestCase):
         with self.assertRaises(LoreError):
             run("show", {"item": "Mirela"})   # a planning-only name is not an item
         out = os.path.join(tempfile.mkdtemp(), "x.md")
-        run("export", {"format": "md", "out": out})
+        with tempfile.TemporaryDirectory() as copy:   # export records what it wrote in the world's .lore folder
+            shutil.copytree(FIXTURE, os.path.join(copy, "planning"))
+            ops.run("export", {"format": "md", "out": out}, root=os.path.join(copy, "planning", "world"))
         with open(out, encoding="utf-8") as fh:
             self.assertNotIn(MARK, fh.read())
         self.assertIn(MARK, json.dumps(run("planning", {"item": "Sava"})))
