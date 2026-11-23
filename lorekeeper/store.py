@@ -208,6 +208,18 @@ class Item:
         return {"id": self.id, "type": self.type, "name": self.name, "path": self.path}
 
 
+def load_config(path):
+    """A project's lore.json, which must hold one JSON object."""
+    with open(path, encoding="utf-8") as fh:
+        try:
+            config = json.load(fh)
+        except (ValueError, RecursionError) as exc:   # RecursionError: very deeply nested JSON
+            raise LoreError("INVALID", f"{CONFIG} is not valid JSON: {exc}") from exc
+    if not isinstance(config, dict):
+        raise LoreError("INVALID", f"{CONFIG} must hold a JSON object")
+    return config
+
+
 class Project:
     def __init__(self, root, config=None):
         self.root = os.path.abspath(root)
@@ -215,11 +227,7 @@ class Project:
             cfg = os.path.join(self.root, CONFIG)
             config = {}
             if os.path.isfile(cfg):
-                with open(cfg, encoding="utf-8") as fh:
-                    try:
-                        config = json.load(fh)
-                    except ValueError as exc:
-                        raise LoreError("INVALID", f"{CONFIG} is not valid JSON: {exc}") from exc
+                config = load_config(cfg)
         if isinstance(config.get("paths"), str):   # "paths": "Wiki" means ["Wiki"]
             config["paths"] = [config["paths"]]
         self.config = config

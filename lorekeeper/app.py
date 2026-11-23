@@ -351,7 +351,7 @@ class App:
             if key not in self.worlds:
                 try:
                     server, url, _ = serve.make_server(folder, home=self.url)
-                except ValueError as exc:
+                except (ValueError, LoreError) as exc:   # LoreError: lore.json is not one JSON object
                     raise AppError(f"This world's settings file ({store.CONFIG}) can't be read, so it can't open. "
                                    "Restore it from a backup, or ask for help.") from exc
                 threading.Thread(target=server.serve_forever, daemon=True).start()

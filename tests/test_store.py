@@ -297,6 +297,18 @@ class AuditFixes(WorldCase):
         self.assertEqual(sorted(i.name for i in p.items), ["Ivo Brandt", "Mara Quell", "Tess Varga"])
         self.assertEqual(p.create("event", "Bob").path, "Characters/Events/Bob.md")
 
+    def test_settings_that_are_not_an_object_are_invalid(self):
+        from lorekeeper import serve
+        for text in ("[]\n", '"x"\n', "[" * 100000 + "\n"):
+            with open(os.path.join(self.root, "lore.json"), "w", encoding="utf-8") as fh:
+                fh.write(text)
+            with self.subTest(text=text[:5]):
+                with self.assertRaises(LoreError) as cm:
+                    Project(self.root)
+                self.assertEqual(cm.exception.code, "INVALID")
+                with self.assertRaises(LoreError):   # lore serve prints it; the app says the settings can't be read
+                    serve.make_server(self.root)
+
     def test_bad_key_message_matches_the_rule(self):
         with self.assertRaises(LoreError) as cm:
             store.clean_fields({"k2": "x"})

@@ -118,8 +118,7 @@ def make_server(root, port=0, saga=False, config=None, factory=None, config_path
         settings = {}
         path = os.path.join(root, "lore.json")
         if os.path.isfile(path):
-            with open(path, encoding="utf-8") as fh:
-                settings = json.load(fh)
+            settings = store.load_config(path)
     saga_mode = bool(saga or settings.get("mode") == "saga")
     token = secrets.token_urlsafe(32)
     assets = os.path.dirname(__file__)
