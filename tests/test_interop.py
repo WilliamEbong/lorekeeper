@@ -137,7 +137,7 @@ class InteropTests(unittest.TestCase):
                 self.assertEqual((Path(project.root) / "lore.json").read_bytes(), before)
 
     def test_csv_type_that_cannot_be_a_folder_is_refused_before_writing(self):
-        for n, type_ in enumerate(("CON", "x?", "a*", "Lpt1.x")):
+        for n, type_ in enumerate(("CON", "x?", "a*", "Lpt1.x", "lore.json")):
             with self.subTest(type_):
                 project = self.empty(f"folder{n}")
                 before = (Path(project.root) / "lore.json").read_bytes()

@@ -587,6 +587,12 @@ def import_into(project, data, into=None):
         if type_ not in schema["types"]:
             _invalid(f"import has undefined type: {type_}")
         path = planner.path_for(type_, name)
+        # A file where a folder must go (a type named "lore.json") would fail only after lore.json is written.
+        parent = os.path.dirname(path)
+        while store.inside(project.root, parent) and os.path.normcase(parent) != os.path.normcase(project.root):
+            if os.path.exists(parent) and not os.path.isdir(parent):
+                _invalid(f"import type {record['type']!r} needs the folder {project.rel(parent)}, which is a file")
+            parent = os.path.dirname(parent)
         # One file per name, case-insensitively: "Mr." and "Mr" are both Mr.md.
         while taken(path):
             n += 1
