@@ -154,7 +154,7 @@ def run(project):
             appearances.setdefault(person, set()).add(item)
             # a person's own max_age wins: "none" for the ageless (immortals, gods, AIs)
             own = str(person.fields.get("max_age", "")).strip().lower()
-            limit = own if own.isdigit() or own in AGELESS else settings.get("max_age", 130)
+            limit = own if own.isdecimal() or own in AGELESS else settings.get("max_age", 130)
             if start and birth and str(limit).strip().lower() not in AGELESS:
                 cal = calendar_of(p, birth)
                 count = len(cal.months) if cal.type == "months" else 12
@@ -177,7 +177,7 @@ def run(project):
     for person in people:
         birth, death = times[person]
         own = str(person.fields.get("max_age", "")).strip().lower()
-        limit = own if own.isdigit() or own in AGELESS else str(settings.get("max_age", 130))
+        limit = own if own.isdecimal() or own in AGELESS else str(settings.get("max_age", 130))
         if not last or not birth or death or limit.strip().lower() in AGELESS:
             continue
         cal = calendar_of(p, birth)

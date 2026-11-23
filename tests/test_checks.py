@@ -514,6 +514,7 @@ class AgelessPeople(unittest.TestCase):
         self.assertIn("AGE_LIMIT", world(None))
         self.assertNotIn("AGE_LIMIT", world("none"))
         self.assertNotIn("AGE_LIMIT", world("6000"))
+        self.assertIn("AGE_LIMIT", world("²"))   # a digit int() cannot read falls back to the project limit
 
     def test_probably_dead_by_the_story_end(self):
         """No recorded death, yet older than anyone could be by the latest date in the story."""
