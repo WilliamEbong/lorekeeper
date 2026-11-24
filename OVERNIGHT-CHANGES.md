@@ -2,7 +2,7 @@
 
 ## What changed for you, in plain words
 
-**Nothing is merged yet.** Everything is on one branch, waiting for you. Your sagas have not been touched. The upgrade was rehearsed on throwaway copies of them (see "Merge and upgrade" below).
+**This is merged and pushed.** On 2026-11-23 `main` was fast-forwarded to `99b13f1` and pushed to the private repo, and all three sagas were upgraded to engine `99b13f1`, changing only `_system/vendor/` in each. A later interface-only design pass (`f080dca`) also landed on `main`; the sagas were not re-vendored for it, which is optional (see "Merge and upgrade" below).
 
 **In the editor you will notice:**
 - It is calmer to read. Section headings are small Georgia titles instead of grey capitals, wiki and notes text keeps a comfortable line length, chart labels are a little larger and no longer crossed by gridlines, and dark mode shows its card edges.
@@ -28,10 +28,10 @@
 
 **Design scores:** after this pass, fresh reviewers score the screens between 6.5 and 8 out of 10, with no screen at 9. The Subway and the phone layout are lowest (6.5), and the reasons are listed under "Design pass 3". Nothing found should stop the merge: the full suite passes (397 tests), and the final Codex review's confirmed findings are fixed.
 
-**What you might decide:** three of the choices above were yours to make, and each is one commit you can undo: the export rule, keeping AI tools inside the world folder, and the import round-trip rules (see Round 2). Then merge, and upgrade the sagas if you want the new editor there.
+**What you might decide:** three of the choices above were yours to make, and each is one commit you can undo: the export rule, keeping AI tools inside the world folder, and the import round-trip rules (see Round 2). The merge and the saga upgrade are done (see above).
 
 
-This was a maintenance pass on branch `claude/overnight-fixes-77b916`, taken from main at `bec45dd`. Nothing was pushed or merged, and the sagas were not touched.
+This was a maintenance pass on branch `claude/overnight-fixes-77b916`, taken from main at `bec45dd`. At the time of writing nothing was pushed or merged and the sagas were untouched; both happened later the same day (see the top of this file).
 
 The pass fixed defects and added no features. Each fix began with a test that failed and passed once the fix was in. The full suite passed before every commit. Three read-only Opus agents audited the codebase in parallel; every lead they raised was confirmed in the code before it was acted on. Codex then reviewed the branch diff twice. Its confirmed findings are fixed below; the rest are listed under "Found, not changed".
 
